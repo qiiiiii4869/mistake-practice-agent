@@ -1,0 +1,33 @@
+[package]
+name = "mistake-agent-desktop"
+version = "0.1.0"
+description = "Local teacher practice agent — Zhixue login validation"
+edition = "2021"
+rust-version = "1.88"
+
+[lib]
+name = "mistake_agent_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["time", "sync"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
+
+[profile.dev]
+debug = 0
+incremental = false
+
+[profile.test]
+debug = 0
+incremental = false
+
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1

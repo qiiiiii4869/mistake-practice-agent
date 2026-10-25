@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "智学网自动导出验证",
+  "version": "0.3.3",
+  "description": "使用当前教师登录会话，自动导出任教班级每名学生的逐题得分与对错状态。",
+  "minimum_chrome_version": "102",
+  "permissions": ["activeTab", "scripting", "downloads"],
+  "background": { "service_worker": "launcher.mjs", "type": "module" },
+  "action": { "default_title": "打开全班对错验证" }
+}

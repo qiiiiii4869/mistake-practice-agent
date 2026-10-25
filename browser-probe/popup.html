@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>智学网自动导出验证</title>
+<link rel="stylesheet" href="popup.css">
+<body>
+  <header><span class="badge">全班对错验证 · 0.3.3</span><h1>自动读取全班答题结果</h1>
+  <p>沿用任教范围，读取每名学生的题号、得分、满分和对错状态。部分得分单独标记。</p></header>
+  <button id="connect">1　读取我的考试</button>
+  <p id="scope" hidden></p>
+  <section id="selection" hidden>
+    <label>考试<select id="exam"></select></label>
+    <label>学科<select id="subject" disabled></select></label>
+    <label>班级<select id="class" disabled></select></label>
+    <button id="export" disabled>2　自动读取并保存全班结果</button>
+  </section>
+  <p id="status" role="status">请先切到已登录的智学网页面，再点击“读取我的考试”。</p>
+  <pre id="result" hidden></pre>
+  <button id="diagnostic" class="secondary" hidden>保存错误诊断</button>
+  <footer>请保持此测试页和智学网页面打开。文件保存到下载目录的 zhixue-auto-export 文件夹。试卷由教师另行上传；此测试不获取答题卡图片。</footer>
+  <script type="module" src="popup.mjs"></script>
+</body></html>
