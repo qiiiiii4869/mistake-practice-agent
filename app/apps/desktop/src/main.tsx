@@ -1,3 +1,4 @@
+import { KnowledgeWorkspace } from './KnowledgeWorkspace';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { invoke } from '@tauri-apps/api/core';
@@ -75,6 +76,7 @@ function App() {
       {saved && <p className="saved">诊断已保存：{saved}</p>}
     </section>}
     <ScoreWorkspace report={report} loginOpen={login.open} parentBusy={busy} onBusy={setBusy}/>
+    <KnowledgeWorkspace/>
     <footer>每场考试单独处理，学生与得分只保存在本机。已支持试卷照片与手动题干核对，自动识别与出题待接入。<br/>本次只读取得分，不采集作答选项，暂不提供错误选项分布。</footer>
   </main>;
 }

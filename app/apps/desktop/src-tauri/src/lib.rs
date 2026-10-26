@@ -9,6 +9,7 @@ use tauri::{Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 mod remote;
 mod storage;
+mod knowledge;
 
 const PROBE: &str = include_str!(concat!(env!("OUT_DIR"), "/probe.js"));
 const LOGIN_URL: &str = "https://www.zhixue.com/wap_login.html";
@@ -286,6 +287,37 @@ fn database_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
         .join("workspace.sqlite"))
 }
 
+async fn with_knowledge<T, F>(app: tauri::AppHandle, action: F) -> Result<T, String>
+where T: Send + 'static, F: FnOnce(&mut rusqlite::Connection) -> Result<T, String> + Send + 'static {
+    let path = app.path().app_local_data_dir().map_err(|_| "storage_failed")?.join("knowledge.sqlite");
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut conn = storage::open(&path)?;
+        knowledge::init(&conn)?;
+        action(&mut conn)
+    }).await.map_err(|_| "storage_failed")?
+}
+
+#[tauri::command]
+async fn list_knowledge(window: WebviewWindow, app: tauri::AppHandle) -> Result<knowledge::Library, String> {
+    require_main(&window)?;
+    with_knowledge(app, |conn| knowledge::list(conn)).await
+}
+#[tauri::command]
+async fn import_knowledge(window: WebviewWindow, app: tauri::AppHandle, expected_revision: i64, document: knowledge::Document) -> Result<knowledge::Library, String> {
+    require_main(&window)?;
+    with_knowledge(app, move |conn| knowledge::import(conn, expected_revision, document)).await
+}
+#[tauri::command]
+async fn remove_knowledge(window: WebviewWindow, app: tauri::AppHandle, expected_revision: i64, document_id: String) -> Result<knowledge::Library, String> {
+    require_main(&window)?;
+    with_knowledge(app, move |conn| knowledge::remove(conn, expected_revision, &document_id)).await
+}
+#[tauri::command]
+async fn search_knowledge(window: WebviewWindow, app: tauri::AppHandle, query: String) -> Result<Vec<knowledge::Hit>, String> {
+    require_main(&window)?;
+    with_knowledge(app, move |conn| knowledge::search(conn, &query)).await
+}
+
 #[tauri::command]
 async fn load_workspace(
     window: WebviewWindow,
@@ -425,7 +457,11 @@ pub fn run() {
             read_class_scores,
             probe_progress,
             load_workspace,
-            save_workspace
+            save_workspace,
+            list_knowledge,
+            import_knowledge,
+            remove_knowledge,
+            search_knowledge
         ])
         .setup(|app| {
             if std::env::var("ZHIXUE_OPEN_LOGIN").as_deref() == Ok("1") {

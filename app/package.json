@@ -2,12 +2,15 @@
   "name": "mistake-practice-agent",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["apps/desktop", "packages/core"],
+  "workspaces": [
+    "apps/desktop",
+    "packages/core"
+  ],
   "scripts": {
     "dev": "npm run tauri --workspace @mistake-agent/desktop -- dev",
     "build": "npm run build --workspace @mistake-agent/desktop",
     "desktop:build": "npm run tauri --workspace @mistake-agent/desktop -- build --no-bundle",
     "desktop:build:debug": "npm run tauri --workspace @mistake-agent/desktop -- build --debug --no-bundle",
-    "test": "npm run typecheck --workspace @mistake-agent/desktop && node --test ../tests/test_core.mjs"
+    "test": "npm run typecheck --workspace @mistake-agent/desktop && node --test ../tests/test_core.mjs ../tests/test_knowledge.mjs"
   }
 }

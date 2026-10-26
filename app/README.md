@@ -77,3 +77,18 @@ node tools/audit_desktop_workspace.mjs
 读取或导入当前考试后，在“试卷与题号核对”添加 JPG、PNG 或 WebP 照片，选择成绩题号及来源照片，录入完整题干与选项，核对后点击保存。修改题干或来源会取消核对。最多 30 页，照片编码后总计不超过 8 MB；暂不支持自动识别。试卷随当前考试保存、恢复、替换及清除，未保存草稿退出后丢失。
 
 本次已通过前端构建、43 项核心测试及 12 组桌面模拟检查。Rust 新增的试卷持久化校验及测试尚待在具有 Rust 工具链的环境执行，尚未重新编译桌面可执行文件；真实试卷与自动识别未验收。
+
+## 本机 PDF 知识库（2026-10-26 第二批）
+
+在“PDF 知识库”选择带文字层的 PDF，核对逐页预览后确认导入。检索结果显示原文、文件名与页码。无文字页标为待识别，全空文档拒绝导入。中文 CMap、标准字体与 worker 都在本地，不使用 CDN。解析不会执行 PDF 的文档脚本。复杂公式、图表与多栏可能提取不完整，需对照原文件。
+
+库保存在应用本机目录 `knowledge.sqlite`，只存提取文字、分块与来源元数据；可复用课本，不随清除考试删除。删除库内文档需确认，原 PDF 不会删除。单份限制 40 MB/1000 页/20 MB 文字，库最多 100 份、约 100 MB 索引原文。相同内容文件按 SHA-256 去重。切块每段 800 字、重叠 80 字，不跨页；FTS5 trigram 支持中英文，短词以转义 LIKE 匹配。
+
+验证：52 项 TS 测试、12 组桌面检查、3 组知识库检查通过。可独立运行真实存储模块测试：
+
+```powershell
+cargo test --manifest-path tools/storage-check/Cargo.toml
+python tests/check_knowledge_ui.py
+```
+
+本机使用 `cargo +stable-x86_64-pc-windows-gnu test --manifest-path tools/storage-check/Cargo.toml` 与已有 MinGW，通过 8 项测试。该检查不包含 Tauri 外壳；完整 Windows 构建仍缺少 MSVC linker，安装 C++ Build Tools 被自动审批阻止。尚未验收真实教材、扫描识别或重新生成桌面安装包。

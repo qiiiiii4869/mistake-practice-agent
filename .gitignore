@@ -34,3 +34,7 @@ credentials.json
 storage-state*.json
 student-class*.json
 verification-full*.json
+
+app/apps/desktop/public/pdf-assets/
+
+tools/storage-check/target/
