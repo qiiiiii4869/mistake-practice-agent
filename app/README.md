@@ -165,3 +165,5 @@ cargo +stable-x86_64-pc-windows-gnu build --manifest-path app/apps/desktop/src-t
 上传支持 JPG/PNG/WebP、PDF 和 Word `.docx`，上传只保存原文件。点击生成时在本机将 PDF/Word 展开为图片页，再进入读取核对流程；不上传整份原始 Word/PDF 给模型。最多 30 个文件或页面、编码合计 8 MB，展开后最多 30 页。旧 `.doc`、外部资源、嵌入对象及暂不支持的旧式图形请先另存 PDF。Word 版式可能与 Office 有差别，真实 Word 样本尚待验收。渲染使用本地 PDF.js、[docx-preview](https://github.com/VolodymyrBaydalka/docxjs)、[html-to-image](https://github.com/bubkoo/html-to-image)。
 
 用户要求实际验收必须用其提供的 50 人考试及确认的空白扫描卷，模拟测试不能替代验收。实际只读核对为 46 人有得分、4 人无原卷、598 条逐题记录；4 页原始扫描 PDF 已用实际转换代码展开，未调用模型、未改原考试。卷面重复题号已由教师确认排除第二道第 5 题，其余题号不顺延。知识库为空；教师要求先不做全流程验证，当前已暂停，未调用模型，因此未记作端到端验收通过。真实资料与转换图片仅保存在应用本机目录，不进入仓库。
+
+空白卷重复上传按内容自动跳过，已保存文件直接显示在上传区；大小或格式限制会分别说明，不再笼统显示导入失败。真实扫描 PDF 的首次上传、重复跳过及刷新保留已验证，未发起模型调用。
