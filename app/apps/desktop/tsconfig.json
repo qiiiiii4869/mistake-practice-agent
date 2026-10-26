@@ -9,6 +9,7 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true
   },
   "include": ["src", "../../packages/zhixue/src", "../../packages/core/src", "vite.config.ts"]

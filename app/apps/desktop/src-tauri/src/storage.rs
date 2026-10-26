@@ -13,7 +13,18 @@ pub(crate) struct Snapshot {
     exam: Exam,
     students: Vec<Student>,
     settings: Settings,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    paper: Option<Paper>,
 }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Paper { pages: Vec<PaperPage>, questions: Vec<PaperQuestion> }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PaperPage { id: String, name: String, data: String }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PaperQuestion { number: String, page_id: String, stem: String, confirmed: bool }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Source {
@@ -167,6 +178,27 @@ impl Snapshot {
         if schema.is_none() {
             return Err(bad());
         }
+        if let Some(paper) = &self.paper {
+            let mut ids = HashSet::new();
+            let mut total = 0usize;
+            if paper.pages.len() > 30 { return Err(bad()); }
+            for page in &paper.pages {
+                if page.id.is_empty() || page.id.len() > 80 || !page.id.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-')
+                    || !ids.insert(&page.id) || page.name.trim().is_empty() || page.name.chars().count() > 300 { return Err(bad()); }
+                let data = ["data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,"]
+                    .iter().find_map(|prefix| page.data.strip_prefix(prefix)).ok_or_else(bad)?;
+                let body = data.trim_end_matches('=');
+                if body.is_empty() || data.len() - body.len() > 2 || !body.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'+' || c == b'/') { return Err(bad()); }
+                total += page.data.len();
+                if total > 8 * 1024 * 1024 { return Err(bad()); }
+            }
+            let mut used = HashSet::new();
+            let numbers = schema.as_ref().unwrap();
+            for q in &paper.questions {
+                if !numbers.contains_key(q.number.as_str()) || !used.insert(&q.number) || !ids.contains(&q.page_id)
+                    || q.stem.chars().count() > 20000 || (q.confirmed && q.stem.trim().is_empty()) { return Err(bad()); }
+            }
+        }
         Ok(())
     }
     pub(crate) fn anonymous_audit(&self) -> serde_json::Value {
@@ -261,6 +293,23 @@ mod tests {
           "students":[{"id":"s","name":"SYNTHETIC_STUDENT","availability":"scored","reasonSource":null,"rosterScore":null,"rankCode":null,
             "questions":[{"number":"1","label":"1","score":0,"fullScore":2,"result":"incorrect"}]}],
           "settings":{"variantsPerQuestion":1,"maxQuestionsPerStudent":5,"includePartialCredit":true,"partialCreditThreshold":100,"difficulty":"same"}})).unwrap()
+    }
+    #[test]
+    fn paper_roundtrip_validation_and_clear() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        init(&conn).unwrap();
+        let mut snapshot = sample();
+        snapshot.paper = Some(Paper {
+            pages: vec![PaperPage { id: "page-1".into(), name: "synthetic.png".into(), data: "data:image/png;base64,aGVsbG8=".into() }],
+            questions: vec![PaperQuestion { number: "1".into(), page_id: "page-1".into(), stem: "synthetic stem".into(), confirmed: true }],
+        });
+        save(&mut conn, 0, Some(snapshot.clone())).unwrap();
+        assert!(load(&conn).unwrap().snapshot.unwrap().paper.unwrap().questions[0].confirmed);
+        snapshot.paper.as_mut().unwrap().questions[0].number = "999".into();
+        assert!(save(&mut conn, 1, Some(snapshot)).is_err());
+        assert_eq!(load(&conn).unwrap().revision, 1);
+        save(&mut conn, 1, None).unwrap();
+        assert!(load(&conn).unwrap().snapshot.is_none());
     }
     #[test]
     fn single_exam_roundtrip_replace_clear_and_conflict() {

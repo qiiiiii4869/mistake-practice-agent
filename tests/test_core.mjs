@@ -89,3 +89,27 @@ test('local restored workspace is revalidated, settings bounds enforced',()=>{
   assert.throws(()=>validateSettings({...w.settings,maxQuestionsPerStudent:0}));
   assert.throws(()=>validateSettings({...w.settings,partialCreditThreshold:101}));
 });
+
+const paperFixture = () => ({pages:[{id:'page-1',name:'模拟试卷.png',data:'data:image/png;base64,aGVsbG8='}],
+  questions:[{number:'1',pageId:'page-1',stem:'模拟题干 A B C D',confirmed:true}]});
+test('paper survives validation, settings changes and old workspaces stay compatible', () => {
+  const w = workspaceFromExport(fixture(), 'chrome_extension');
+  assert.equal(validateWorkspace(w).paper, undefined);
+  w.paper = paperFixture();
+  assert.deepEqual(validateWorkspace(w).paper, w.paper);
+  w.settings.maxQuestionsPerStudent = 8;
+  assert.deepEqual(validateWorkspace(w).paper, w.paper);
+});
+for (const [name, mutate] of [
+  ['unknown question', p => p.questions[0].number='999'],
+  ['duplicate question', p => p.questions.push({...p.questions[0]})],
+  ['missing source', p => p.questions[0].pageId='missing'],
+  ['duplicate page', p => p.pages.push({...p.pages[0]})],
+  ['remote photo', p => p.pages[0].data='https://example.test/p.png'],
+  ['active image', p => p.pages[0].data='data:image/svg+xml;base64,aGVsbG8='],
+  ['empty confirmed stem', p => p.questions[0].stem='  '],
+  ['oversize photos', p => p.pages[0].data='data:image/png;base64,'+'A'.repeat(8*1024*1024)],
+]) test(`paper rejects ${name}`, () => {
+  const w = workspaceFromExport(fixture(), 'chrome_extension');
+  w.paper = paperFixture(); mutate(w.paper); assert.throws(() => validateWorkspace(w));
+});

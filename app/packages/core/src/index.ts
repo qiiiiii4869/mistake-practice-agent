@@ -1,3 +1,5 @@
+import { validatePaper, type Paper } from '../../paper/src/index.ts';
+export type { Paper } from '../../paper/src/index.ts';
 export type ResultLabel = 'correct' | 'incorrect' | 'partial_credit' | 'not_scored';
 export type Availability = 'scored' | 'not_scanned' | 'no_original_paper';
 export interface QuestionResult {
@@ -34,6 +36,7 @@ export interface Workspace {
   exam: ExamIdentity;
   students: Student[];
   settings: TeacherSettings;
+  paper?: Paper;
 }
 export interface StoredWorkspace { revision: number; snapshot: Workspace | null }
 export interface Audit {
@@ -207,7 +210,8 @@ export function validateWorkspace(value: unknown): Workspace {
   auditStudents(students);
   return { schemaVersion: 1, source: { kind: source.kind as Workspace['source']['kind'], finishedAt: id(source.finishedAt) },
     exam: { id: id(exam.id), name: text(exam.name), subjectId: id(exam.subjectId), subjectName: text(exam.subjectName),
-      classId: id(exam.classId), className: text(exam.className) }, students, settings: validateSettings(w.settings) };
+      classId: id(exam.classId), className: text(exam.className) }, students, settings: validateSettings(w.settings),
+    ...(w.paper === undefined ? {} : { paper: validatePaper(w.paper, students.find(s => s.availability === 'scored')!.questions.map(q => q.number)) }) };
 }
 
 export function analyze(workspace: Workspace) {

@@ -139,6 +139,28 @@ def main():
             assert page.evaluate("testStored.snapshot.settings.includePartialCredit") is False
             print("PASS: teacher settings persist and recompute the partial-credit selection.")
 
+            paper = page.get_by_role("region", name="试卷题干核对", exact=True)
+            import base64
+            png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=")
+            paper.get_by_label("添加试卷照片", exact=True).set_input_files({"name":"synthetic.png", "mimeType":"image/png", "buffer":png})
+            expect(paper.get_by_label("题干", exact=True)).to_be_enabled()
+            paper.get_by_label("题干", exact=True).fill("模拟题干及选项")
+            paper.get_by_label("已核对题干", exact=True).check()
+            paper.get_by_label("题干", exact=True).fill("修改后的模拟题干及选项")
+            expect(paper.get_by_label("已核对题干", exact=True)).not_to_be_checked()
+            paper.get_by_label("已核对题干", exact=True).check()
+            paper.get_by_role("button", name="保存试卷与核对结果", exact=True).click()
+            expect(page.get_by_test_id("workspace-message")).to_contain_text("已校验并保存")
+            assert page.evaluate("testStored.snapshot.paper.questions[0].confirmed") is True
+            page.reload()
+            expect(paper.get_by_label("题干", exact=True)).to_have_value("修改后的模拟题干及选项")
+            expect(paper.get_by_label("已核对题干", exact=True)).to_be_checked()
+            page.screenshot(path=str(ROOT / "tmp/desktop-paper-ui-mock.png"), full_page=True)
+            page.get_by_role("button", name="打开智学网登录", exact=True).click()
+            read.click()
+            expect(class_read).to_be_enabled()
+            print("PASS: paper import, confirmation invalidation, save and restart recovery.")
+
             old_revision = page.evaluate("testStored.revision")
             page.evaluate("testScenario = 'partial_export'")
             class_read.click()
@@ -171,6 +193,7 @@ def main():
             confirm.get_by_role("button", name="确认替换并保存").click()
             expect(current.get_by_text("Chrome 扩展导入", exact=False)).to_be_visible()
             assert page.evaluate("testStored.snapshot.source.kind") == "chrome_extension"
+            assert page.evaluate("testStored.snapshot.paper === undefined") is True
             print("PASS: import requires matching paired files; replacement waits for explicit confirmation.")
 
             page.reload()
