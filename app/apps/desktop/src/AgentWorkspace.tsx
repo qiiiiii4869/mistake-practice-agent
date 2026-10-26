@@ -6,15 +6,15 @@ import { demoProvider } from '../../../packages/agent/src/mock';
 import type { KnowledgeHit } from '../../../packages/knowledge/src';
 
 const labels: Record<QuestionKind,string> = {choice:'选择题',text:'纯文字题',diagram:'依赖图形',shared_material:'共用材料',listening:'听力',writing:'作文',practical:'实验操作'};
-interface Props { workspace: Workspace; locked: boolean; onBusy: (busy: boolean) => void }
-export function AgentWorkspace({ workspace, locked, onBusy }: Props) {
-  const [batch,setBatch]=React.useState<AgentBatch|null>(null);
-  const [keyword,setKeyword]=React.useState('');
+interface Props { workspace: Workspace; locked: boolean; onBusy: (busy: boolean) => void; save: (batch: AgentBatch) => Promise<boolean> }
+export function AgentWorkspace({ workspace, locked, onBusy, save }: Props) {
+  const [batch,setBatch]=React.useState<AgentBatch|null>(workspace.practice??null);
+  const [keyword,setKeyword]=React.useState(workspace.practice?.annotations[0]?.annotation.keywords[0]??'');
   const [rules,setRules]=React.useState<Record<string,{kind:QuestionKind;group:string}>>({});
   const [working,setWorking]=React.useState(false);
   const [message,setMessage]=React.useState('真实模型尚未接入。可用离线演示验证检索、出题、自检与审核。');
   const controller=React.useRef<AbortController|null>(null);
-  React.useEffect(()=>{setBatch(null);setRules({});setMessage('当前考试、题干或设置已更新，演示结果已重置。');},[workspace]);
+  React.useEffect(()=>{setBatch(workspace.practice??null);setRules({});setMessage(workspace.practice?'已恢复本场已保存的出题与审核；演示题仍不可正式导出。':'真实模型尚未接入，可运行离线演示。');},[workspace]);
   React.useEffect(()=>()=>controller.current?.abort(),[]);
   const analysis=React.useMemo(()=>analyze(workspace),[workspace]);
   const confirmed=workspace.paper?.questions.filter(q=>q.confirmed) ?? [];
@@ -48,7 +48,7 @@ export function AgentWorkspace({ workspace, locked, onBusy }: Props) {
   }
   return <section className="card" aria-label="出题流程演示">
     <div className="card-heading"><h2>Agent 出题与审核</h2><span className="badge">离线演示</span></div>
-    <div className="notice error">当前使用固定假接口，不调用付费模型。演示题和答案仅用于验证流程，不能作为正式补练导出。结果为临时草稿，退出后丢失。</div>
+    <div className="notice error">当前使用固定假接口，不调用付费模型。演示题和答案仅用于验证流程，不能作为正式补练导出。点击下方保存可在本机恢复本场结果；未保存修改退出后丢失。</div>
     <p className="help">先核对试卷题干并导入知识库。演示将以你填写的知识点检索本机资料；按薄弱题生成，每题数量沿用本场设置。改动当前考试、已保存题干或设置会重置结果。</p>
     <label className="agent-keyword">演示知识点与检索词<input aria-label="演示知识点与检索词" maxLength={100} disabled={disabled} value={keyword} onChange={e=>setKeyword(e.target.value)}/></label>
     {confirmed.length>0 && <details><summary>题型规则（已核对 {confirmed.length} 题）</summary><div className="table-scroll"><table><thead><tr><th>题号</th><th>题型</th><th>共用材料组</th></tr></thead><tbody>{confirmed.map(q=><tr key={q.number}><td>{q.number}</td><td><select aria-label={`第 ${q.number} 题题型`} disabled={disabled} value={rules[q.number]?.kind??'text'} onChange={e=>setRules({...rules,[q.number]:{kind:e.target.value as QuestionKind,group:rules[q.number]?.group??''}})}>{Object.entries(labels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></td><td><input aria-label={`第 ${q.number} 题材料组`} maxLength={100} disabled={disabled||rules[q.number]?.kind!=='shared_material'} value={rules[q.number]?.group??''} onChange={e=>setRules({...rules,[q.number]:{kind:'shared_material',group:e.target.value}})}/></td></tr>)}</tbody></table></div><p className="help">同一阅读材料的小题使用相同组名，题干中需包含完整共用材料。图形题仅尝试纯文字变式；听力、作文、实验操作不自动出题。</p></details>}
@@ -71,7 +71,10 @@ export function AgentWorkspace({ workspace, locked, onBusy }: Props) {
         <label>教师审核<select aria-label={`教师审核 ${v.id}`} value={v.review} disabled={disabled} onChange={e=>review(v.id,e.target.value as 'approved'|'rejected'|'pending')}><option value="pending">待审核</option><option value="approved" disabled={!v.passed}>采用（仅演示）</option><option value="rejected">不采用</option></select></label>
       </article>)}
       <details><summary>本机组卷预览（演示，不可导出）</summary><p className="help">只使用教师采用且比对通过的题；同一知识点不重复，遵守每人上限。未覆盖的失分题单独列出。</p><div className="table-scroll"><table><thead><tr><th>学生</th><th>演示题数</th><th>未覆盖题号</th></tr></thead><tbody>{preview.map((s,i)=><tr key={s.id}><td>{s.name||`学生 ${i+1}`}</td><td>{s.availability==='scored'?s.variants.length:'没扫/无原卷，不判对错'}</td><td>{s.uncoveredNumbers.join('、')||'—'}</td></tr>)}</tbody></table></div></details>
-      <p className="help">本场纳入分析 {analysis.audit.exportedCount} 人；正式模型、审核结果持久化和正式 PDF 导出仍待接入。</p>
+      <div className="actions"><button disabled={disabled} onClick={async()=>{
+        const saved=await save(batch);if(!saved)setMessage('本次未能保存，请查看上方提示。当前未保存草稿仍保留。');
+      }}>保存本场出题与审核</button></div>
+      <p className="help">本场纳入分析 {analysis.audit.exportedCount} 人；正式模型和正式 PDF 导出仍待接入。</p>
     </>}
   </section>;
 }

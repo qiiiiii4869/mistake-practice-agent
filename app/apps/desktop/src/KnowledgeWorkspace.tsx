@@ -48,7 +48,7 @@ export function KnowledgeWorkspace() {
     setBusy(true);
     try {
       const saved = await invoke<KnowledgeLibrary>('remove_knowledge', { expectedRevision: library.revision, documentId: deleting });
-      setLibrary(saved); setDeleting(null); setHits(null); setMessage('已删除文档文字及检索索引。原 PDF 文件保留。');
+      setLibrary(saved); setDeleting(null); setHits(null); setMessage('已从知识库删除文档文字及检索索引。原 PDF 与当前考试中已保存的引用片段保留。');
     } catch (error) { setMessage(knowledgeError(error)); }
     finally { setBusy(false); }
   }

@@ -36,7 +36,8 @@ def main():
             browser=playwright.chromium.launch(channel='msedge',headless=True)
             page=browser.new_page(viewport={'width':1060,'height':900});errors=[]
             page.on('pageerror',lambda e:errors.append(str(e)))
-            page.add_init_script(MOCK+'\nwindow.testStored='+json.dumps({'revision':1,'snapshot':workspace()})+';'+EXTRA)
+            initial=json.dumps({'revision':1,'snapshot':workspace()})
+            page.add_init_script(MOCK+'\nwindow.testStored=JSON.parse(sessionStorage.getItem("synthetic-workspace")??'+json.dumps(initial)+');'+EXTRA)
             page.goto(f'http://127.0.0.1:{server.server_port}/')
             agent=page.get_by_role('region',name='出题流程演示',exact=True)
             expect(agent).to_be_visible()
@@ -66,6 +67,21 @@ def main():
             agent.get_by_label('教师审核 q1-v1',exact=True).select_option('approved')
             page.screenshot(path=str(ROOT/'tmp/desktop-agent-ui-mock.png'),full_page=True)
             print('PASS: demo watermark, local retrieval source, separate self-check count, teacher approval and concept-deduplicated assignment.')
+            agent.get_by_role('button',name='保存本场出题与审核',exact=True).click()
+            expect(page.get_by_test_id('workspace-message')).to_contain_text('已校验并保存')
+            assert page.evaluate('testStored.snapshot.practice.variants[0].review')=='approved'
+            page.reload()
+            expect(agent.get_by_role('article')).to_have_count(2)
+            expect(agent.get_by_label('教师审核 q1-v1',exact=True)).to_have_value('approved')
+            first.get_by_text('修改演示题（修改后需重新自检与审核）',exact=True).click()
+            first.get_by_label('修改解析 q1-v1',exact=True).fill('保存失败时应保留此草稿')
+            page.evaluate('testSaveFailure=true')
+            agent.get_by_role('button',name='保存本场出题与审核',exact=True).click()
+            expect(agent.get_by_test_id('agent-message')).to_contain_text('本次未能保存')
+            expect(first.get_by_label('修改解析 q1-v1',exact=True)).to_have_value('保存失败时应保留此草稿')
+            assert page.evaluate('testStored.snapshot.practice.variants[0].review')=='approved'
+            page.evaluate('testSaveFailure=false')
+            print('PASS: approved batches restore after reload; failed saves preserve old stored review and current unsaved draft.')
             keyword.fill('模拟学生甲');run.click()
             expect(agent.get_by_test_id('agent-message')).to_contain_text('名单姓名，已拦截')
             expect(first).to_be_visible()
@@ -85,6 +101,15 @@ def main():
             current.get_by_label('每人题数上限',exact=True).fill('1')
             current.get_by_role('button',name='保存设置并重算',exact=True).click()
             expect(agent.get_by_role('article')).to_have_count(0)
+            assert page.evaluate('testStored.snapshot.practice===undefined') is True
+            keyword.fill('光合作用');run.click()
+            expect(agent.get_by_role('article')).to_have_count(2)
+            agent.get_by_role('button',name='保存本场出题与审核',exact=True).click()
+            expect(page.get_by_test_id('workspace-message')).to_contain_text('已校验并保存')
+            current.get_by_role('button',name='清除当前考试',exact=True).click()
+            page.get_by_role('button',name='确认清除',exact=True).click()
+            expect(agent).to_have_count(0)
+            assert page.evaluate('testStored.snapshot') is None
             assert not errors,errors
             browser.close()
             print('PASS: persisted teacher setting changes invalidate all generated demo review results.')

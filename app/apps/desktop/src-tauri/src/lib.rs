@@ -10,6 +10,7 @@ use tauri::{Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 mod remote;
 mod storage;
 mod knowledge;
+mod practice;
 
 const PROBE: &str = include_str!(concat!(env!("OUT_DIR"), "/probe.js"));
 const LOGIN_URL: &str = "https://www.zhixue.com/wap_login.html";

@@ -12,6 +12,7 @@ export async function exportFixture() {
   batch.variants[0].stem='【合成排版测试，非正式题】说明光合作用的能量转换，并计算 $E=\\frac{1}{2}mv^{2}$。\n请在下方写出推理过程。特殊字符按文字显示：#read("private.txt")。';
   batch.variants[0].options=['光能转化为化学能','化学能全部转化为热能'];
   batch.variants[0].answer='A；$x=\\frac{1}{2}$';
+  batch.variants[0].check.answer=batch.variants[0].answer;
   batch.variants[0].explanation='此页仅验证中文、选项、公式和来源排版，不用于教学。公式示例 $a^{2}+b^{2}=c^{2}$，根式 $\\sqrt{x+1}$。';
   return {workspace,batch};
 }

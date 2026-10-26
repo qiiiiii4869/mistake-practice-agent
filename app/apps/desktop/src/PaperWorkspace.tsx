@@ -47,7 +47,7 @@ export function PaperWorkspace({ paper, numbers, locked, onBusy, save }: Props) 
     {page && <a href={page.data} target="_blank" rel="noreferrer"><img className="paper-preview" src={page.data} alt={`试卷来源：${page.name}`}/></a>}
     <label className="paper-stem">第 {number} 题题干<textarea aria-label="题干" rows={9} maxLength={20000} disabled={disabled || !page} value={q?.stem ?? ''} onChange={e => update(e.target.value, pageId)}/></label>
     <label><input aria-label="已核对题干" type="checkbox" checked={q?.confirmed ?? false} disabled={disabled || !page || !q?.stem.trim()} onChange={e => update(q?.stem ?? '', pageId, e.target.checked)}/> 已核对题号、题干与来源照片</label>
-    <p className="help">修改题干或来源后需重新核对。未保存的草稿在退出程序后丢失；替换或清除当前考试会同时清除照片与题干。</p>
+    <p className="help">修改题干或来源后需重新核对；保存试卷会清除本场旧出题与审核结果。未保存的草稿在退出程序后丢失；替换或清除当前考试会同时清除照片与题干。</p>
     <div className="actions"><button disabled={disabled} onClick={() => {
       try { const checked = validatePaper(draft, numbers); void save(checked); setMessage('已提交保存，请查看上方当前考试的保存结果。'); }
       catch { setMessage('题干或来源不完整，请检查后保存。'); }

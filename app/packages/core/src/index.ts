@@ -1,3 +1,5 @@
+import { validateBatch } from '../../agent/src/storage.ts';
+import type { AgentBatch } from '../../agent/src/index.ts';
 import { validatePaper, type Paper } from '../../paper/src/index.ts';
 export type { Paper } from '../../paper/src/index.ts';
 export type ResultLabel = 'correct' | 'incorrect' | 'partial_credit' | 'not_scored';
@@ -37,6 +39,7 @@ export interface Workspace {
   students: Student[];
   settings: TeacherSettings;
   paper?: Paper;
+  practice?: AgentBatch;
 }
 export interface StoredWorkspace { revision: number; snapshot: Workspace | null }
 export interface Audit {
@@ -76,14 +79,14 @@ const same = (a: unknown, b: unknown): boolean => {
   }
   return false;
 };
-function rejectSecrets(value: unknown): void {
-  if (typeof value === 'string' && /https?:\/\//i.test(value)) fail('unexpected_credentials_or_remote_media');
-  if (Array.isArray(value)) { value.forEach(rejectSecrets); return; }
+function rejectSecrets(value: unknown, allowTextUrls = false): void {
+  if (!allowTextUrls && typeof value === 'string' && /https?:\/\//i.test(value)) fail('unexpected_credentials_or_remote_media');
+  if (Array.isArray(value)) { value.forEach(v => rejectSecrets(v, allowTextUrls)); return; }
   if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) {
     if (/^(token|cookie|authorization|password|image_url|student_answer|subjective_answer_present)$/i.test(key)) {
       fail('unexpected_credentials_or_remote_media');
     }
-    rejectSecrets(item);
+    rejectSecrets(item, allowTextUrls);
   }
 }
 export function parseExportText(raw: string): unknown {
@@ -193,8 +196,9 @@ export function workspaceFromExport(value: unknown, kind: Workspace['source']['k
 
 // Revalidate and project local persisted data before using it, including after upgrades.
 export function validateWorkspace(value: unknown): Workspace {
-  rejectSecrets(value);
+  rejectSecrets(value, true);
   const w = object(value), source = object(w.source), exam = object(w.exam);
+  rejectSecrets({source,exam,students:w.students,settings:w.settings});
   if (w.schemaVersion !== 1 || !['zhixue_webview', 'chrome_extension'].includes(String(source.kind))) fail('unsupported_workspace');
   const students = array(w.students).map(value => {
     const s = object(value);
@@ -208,10 +212,12 @@ export function validateWorkspace(value: unknown): Workspace {
       })}, s.availability !== 'scored');
   });
   auditStudents(students);
-  return { schemaVersion: 1, source: { kind: source.kind as Workspace['source']['kind'], finishedAt: id(source.finishedAt) },
+  const normalized: Workspace = { schemaVersion: 1, source: { kind: source.kind as Workspace['source']['kind'], finishedAt: id(source.finishedAt) },
     exam: { id: id(exam.id), name: text(exam.name), subjectId: id(exam.subjectId), subjectName: text(exam.subjectName),
       classId: id(exam.classId), className: text(exam.className) }, students, settings: validateSettings(w.settings),
     ...(w.paper === undefined ? {} : { paper: validatePaper(w.paper, students.find(s => s.availability === 'scored')!.questions.map(q => q.number)) }) };
+  if (w.practice !== undefined) normalized.practice = validateBatch(w.practice, normalized);
+  return normalized;
 }
 
 export function analyze(workspace: Workspace) {
@@ -243,6 +249,7 @@ export function analyze(workspace: Workspace) {
 export const dataErrorMessage = (error: unknown): string => {
   const code = error instanceof Error ? error.message : String(error);
   const messages: Record<string, string> = {
+    invalid_practice: '本场出题或审核结果与当前资料不一致，请重新生成并核对。',
     invalid_json: '文件不是有效的 JSON。', file_too_large: '文件超过 16 MB，请检查是否选择了正确文件。',
     export_reported_failure: '导出记录包含失败，不能保存为完整班级。', not_a_full_class_export: '请选择全班逐题导出文件，样本文件不能作为全班数据。',
     teacher_session_not_verified: '源数据没有确认教师会话。', verification_summary_mismatch: '验证文件与成绩文件不是同一次导出。',

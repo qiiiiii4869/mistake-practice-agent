@@ -15,6 +15,8 @@ pub(crate) struct Snapshot {
     settings: Settings,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     paper: Option<Paper>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    practice: Option<crate::practice::Batch>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -199,7 +201,26 @@ impl Snapshot {
                     || q.stem.chars().count() > 20000 || (q.confirmed && q.stem.trim().is_empty()) { return Err(bad()); }
             }
         }
+        if let Some(practice) = &self.practice {
+            let numbers=schema.as_ref().unwrap().keys().copied().collect();
+            let confirmed=self.paper.as_ref().map(|paper|paper.questions.iter().filter(|q|q.confirmed).map(|q|(q.number.as_str(),q.stem.as_str())).collect()).unwrap_or_default();
+            practice.validate(&self.exam.subject_name,&self.practice_key()?,&numbers,&confirmed)?;
+        }
         Ok(())
+    }
+    fn practice_key(&self)->Result<String,String> {
+        #[derive(Serialize)]
+        struct InputKey<'a> {
+            exam:Vec<&'a str>, source:Vec<&'a str>, settings:Vec<serde_json::Value>,
+            paper:Vec<(&'a str,&'a str,&'a str,bool)>, students:Vec<(&'a str,&'a str,Vec<&'a str>)>,
+        }
+        let e=&self.exam;let s=&self.settings;
+        let value=InputKey {exam:vec![&e.id,&e.name,&e.subject_id,&e.subject_name,&e.class_id,&e.class_name],source:vec![&self.source.kind,&self.source.finished_at],
+            settings:vec![s.variants_per_question.into(),s.max_questions_per_student.into(),s.include_partial_credit.into(),s.partial_credit_threshold.into(),s.difficulty.clone().into()],
+            paper:self.paper.as_ref().map(|p|p.questions.iter().map(|q|(q.number.as_str(),q.page_id.as_str(),q.stem.as_str(),q.confirmed)).collect()).unwrap_or_default(),
+            students:self.students.iter().map(|student|(student.id.as_str(),student.availability.as_str(),student.questions.iter().filter(|q|q.result=="incorrect"||(q.result=="partial_credit"&&s.include_partial_credit&&q.score/q.full_score*100.0<(s.partial_credit_threshold as f64))).map(|q|q.number.as_str()).collect())).collect(),
+        };
+        serde_json::to_string(&value).map_err(|_|"invalid_practice".into())
     }
     pub(crate) fn anonymous_audit(&self) -> serde_json::Value {
         let mut results = HashMap::from([
@@ -293,6 +314,38 @@ mod tests {
           "students":[{"id":"s","name":"SYNTHETIC_STUDENT","availability":"scored","reasonSource":null,"rosterScore":null,"rankCode":null,
             "questions":[{"number":"1","label":"1","score":0,"fullScore":2,"result":"incorrect"}]}],
           "settings":{"variantsPerQuestion":1,"maxQuestionsPerStudent":5,"includePartialCredit":true,"partialCreditThreshold":100,"difficulty":"same"}})).unwrap()
+    }
+    #[test]
+    fn practice_js_fixture_roundtrip_and_stale_validation() {
+        let raw=include_str!("../../../../../tests/fixtures/practice-workspace-synthetic.json");
+        let snapshot:Snapshot=serde_json::from_str(raw).unwrap();
+        let mut conn=Connection::open_in_memory().unwrap();init(&conn).unwrap();
+        save(&mut conn,0,Some(snapshot.clone())).unwrap();
+        assert!(load(&conn).unwrap().snapshot.unwrap().practice.is_some());
+        let mut changed=snapshot.clone();changed.settings.variants_per_question=3;
+        assert_eq!(save(&mut conn,1,Some(changed)).unwrap_err(),"invalid_practice");
+        let mut changed=snapshot;changed.paper.as_mut().unwrap().questions[0].stem.push_str("条件变更");
+        assert_eq!(save(&mut conn,1,Some(changed)).unwrap_err(),"invalid_practice");
+        assert_eq!(load(&conn).unwrap().revision,1);
+        save(&mut conn,1,None).unwrap();assert!(load(&conn).unwrap().snapshot.is_none());
+    }
+    #[test]
+    fn persisted_practice_reopens_and_clear_removes_generated_text() {
+        let snapshot:Snapshot=serde_json::from_str(include_str!("../../../../../tests/fixtures/practice-workspace-synthetic.json")).unwrap();
+        let path=std::env::temp_dir().join(format!("synthetic-practice-{}-{}.sqlite",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        {let mut conn=open(&path).unwrap();save(&mut conn,0,Some(snapshot)).unwrap();}
+        {let mut conn=open(&path).unwrap();assert!(load(&conn).unwrap().snapshot.unwrap().practice.is_some());save(&mut conn,1,None).unwrap();}
+        let bytes=std::fs::read(&path).unwrap();
+        for needle in ["演示答案","模拟学生甲","合成课本.pdf"] {assert!(!bytes.windows(needle.len()).any(|w|w==needle.as_bytes()),"{needle}");}
+        std::fs::remove_file(path).unwrap();
+    }
+    #[test]
+    fn practice_rejects_forged_passes_citations_and_sources() {
+        let original:serde_json::Value=serde_json::from_str(include_str!("../../../../../tests/fixtures/practice-workspace-synthetic.json")).unwrap();
+        for (field,value) in [("answer",serde_json::json!("wrong answer")),("passed",serde_json::json!(false)),("sourceIndexes",serde_json::json!([99])),("sourceNumbers",serde_json::json!(["999"]))] {
+            let mut raw=original.clone();raw["practice"]["variants"][0][field]=value;
+            let snapshot:Snapshot=serde_json::from_value(raw).unwrap();assert!(snapshot.validate().is_err(),"{field}");
+        }
     }
     #[test]
     fn paper_roundtrip_validation_and_clear() {

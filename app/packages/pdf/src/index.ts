@@ -1,4 +1,5 @@
 import { assemble, type AgentBatch, type StudentPractice } from '../../agent/src/index.ts';
+import { validateBatch } from '../../agent/src/storage.ts';
 import type { Workspace } from '../../core/src/index.ts';
 import { typstContent } from './math.ts';
 export { latexToTypst, typstContent } from './math.ts';
@@ -43,6 +44,7 @@ function document(workspace:Workspace,students:StudentPractice[],options:ExportO
 export function buildPdfSources(workspace:Workspace,batch:AgentBatch,options:ExportOptions):PdfSource[] {
   if(batch.variants.some(v=>v.review==='pending'))throw new Error('pdf_unreviewed');
   if(batch.variants.some(v=>v.review==='approved'&&!v.passed))throw new Error('pdf_failed_self_check');
+  validateBatch(batch,workspace);
   const students=assemble(workspace,batch,options.demoPreview===true);
   if(!students.length)throw new Error('pdf_no_students');
   if(!students.some(s=>s.variants.length))throw new Error('pdf_no_approved_exercises');

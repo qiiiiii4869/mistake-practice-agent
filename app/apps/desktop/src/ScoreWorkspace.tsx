@@ -80,7 +80,8 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props)
       setStored({ revision: saved.revision, snapshot: restored }); setSettings(restored?.settings ?? null);
       setCandidate(null); setConfirmClear(false);
       setMessage(restored ? '当前考试已校验并保存到本机。' : '本机当前考试已清除，扩展原始下载文件和智学网登录态仍保留。');
-    } catch (error) { setMessage(`${dataErrorMessage(error)} 请核对本机状态后再试。`); }
+      return true;
+    } catch (error) { setMessage(`${dataErrorMessage(error)} 请核对本机状态后再试。`); return false; }
     finally { setWorking(false); onBusy(false); }
   }
 
@@ -152,7 +153,7 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props)
       <label className={`file-input ${locked ? 'disabled' : ''}`}>导入扩展导出文件<input type="file" accept=".json,application/json" multiple disabled={locked} aria-label="导入扩展导出文件" onChange={e => void importFiles(e)} /></label>
       <p className="help">同时选择 student-class 与同次导出的 verification-full 文件。只接受完整全班得分，不接收答案图片或作答原文。</p>
       <p className="notice" aria-live="polite" data-testid="workspace-message">{message}</p>
-      {candidate && <div className="confirm-panel" role="region" aria-label="确认替换考试"><b>替换本机当前考试？</b><p>当前：{snapshot?.exam.name}；新数据：{candidate.exam.name}，共 {candidate.students.length} 人。当前考试、试卷照片、题干及设置将被替换，不建立历史记录。</p><div className="actions"><button disabled={working} onClick={() => void persist(candidate)}>确认替换并保存</button><button className="secondary" disabled={working} onClick={() => { setCandidate(null); setMessage('已取消替换，当前考试保留。'); }}>保留当前考试</button></div></div>}
+      {candidate && <div className="confirm-panel" role="region" aria-label="确认替换考试"><b>替换本机当前考试？</b><p>当前：{snapshot?.exam.name}；新数据：{candidate.exam.name}，共 {candidate.students.length} 人。当前考试、试卷照片、题干、出题审核及设置将被替换，不建立历史记录。</p><div className="actions"><button disabled={working} onClick={() => void persist(candidate)}>确认替换并保存</button><button className="secondary" disabled={working} onClick={() => { setCandidate(null); setMessage('已取消替换，当前考试保留。'); }}>保留当前考试</button></div></div>}
     </section>
     {snapshot && analysis && <section className="card" aria-label="本机当前考试">
       <div className="card-heading"><h2>{snapshot.exam.name}</h2><span className="badge success">已保存到本机</span></div>
@@ -165,17 +166,17 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props)
         <label>部分得分纳入<select aria-label="部分得分纳入" value={String(settings.includePartialCredit)} disabled={locked} onChange={e => setSettings({ ...settings, includePartialCredit: e.target.value === 'true' })}><option value="true">纳入</option><option value="false">不纳入</option></select></label>
         <label>得分率低于此百分比<input aria-label="得分率低于此百分比" type="number" min="0" max="100" value={settings.partialCreditThreshold} disabled={locked || !settings.includePartialCredit} onChange={e => setSettings({ ...settings, partialCreditThreshold: Number(e.target.value) })}/></label>
         <label>补练难度<select aria-label="补练难度" value={settings.difficulty} disabled={locked} onChange={e => setSettings({ ...settings, difficulty: e.target.value as TeacherSettings['difficulty'] })}><option value="basic">基础</option><option value="same">同级</option><option value="advanced">提高</option></select></label>
-      </div><p className="help">全错始终计入；部分得分仅在“纳入”且得分率严格低于阈值时计入。变式数、上限与难度用于后续出题和组卷。</p><button className="secondary small" disabled={locked} onClick={() => {
-        try { const checked = validateSettings(settings); void persist({ ...snapshot, settings: checked }); }
+      </div><p className="help">全错始终计入；部分得分仅在“纳入”且得分率严格低于阈值时计入。保存设置会清除本场旧出题与审核结果，之后需重新生成。</p><button className="secondary small" disabled={locked} onClick={() => {
+        try { const checked = validateSettings(settings); void persist({ ...snapshot, settings: checked, practice: undefined }); }
         catch (error) { setMessage(dataErrorMessage(error)); }
       }}>保存设置并重算</button></details>}
       <h3>按题统计</h3><div className="table-scroll"><table><thead><tr><th>题号</th><th>满分</th><th>失分率</th><th>全错</th><th>部分得分</th><th>纳入补练人数</th></tr></thead><tbody>{analysis.questions.map(q => <tr key={q.number}><td>{q.number}</td><td>{q.fullScore}</td><td>{q.fullScore ? `${(q.lostRate * 100).toFixed(1)}%` : '不计分'}</td><td>{q.incorrectStudents}</td><td>{q.partialStudents}</td><td>{q.weakStudents}</td></tr>)}</tbody></table></div>
       <details><summary>按学生查看薄弱题（{analysis.students.length} 人）</summary><div className="table-scroll"><table><thead><tr><th>学生</th><th>状态</th><th>失分</th><th>纳入补练题号</th></tr></thead><tbody>{analysis.students.map((s, i) => <tr key={s.id}><td>{s.name || `学生 ${i + 1}`}</td><td>{s.availability === 'scored' ? '已读取' : s.availability === 'not_scanned' ? '没扫' : '无原卷'}</td><td>{s.availability === 'scored' ? Number(s.lostPoints.toFixed(2)) : '—'}</td><td>{s.availability === 'scored' ? s.weakQuestions.join('、') || '暂无' : '不判对错'}</td></tr>)}</tbody></table></div></details>
       <div className="actions"><button className="secondary small danger" disabled={locked} onClick={() => setConfirmClear(true)}>清除当前考试</button></div>
-      {confirmClear && <div className="confirm-panel" role="region" aria-label="确认清除考试"><b>清除本机当前考试及教师设置？</b><p>这会清除程序保存的本场学生、得分、试卷照片和题干。下载目录中的扩展文件和智学网登录态仍保留。</p><div className="actions"><button className="danger" disabled={working} onClick={() => void persist(null)}>确认清除</button><button className="secondary" disabled={working} onClick={() => setConfirmClear(false)}>取消清除</button></div></div>}
+      {confirmClear && <div className="confirm-panel" role="region" aria-label="确认清除考试"><b>清除本机当前考试及教师设置？</b><p>这会清除程序保存的本场学生、得分、试卷照片、题干及出题审核结果。下载目录中的扩展文件和智学网登录态仍保留。</p><div className="actions"><button className="danger" disabled={working} onClick={() => void persist(null)}>确认清除</button><button className="secondary" disabled={working} onClick={() => setConfirmClear(false)}>取消清除</button></div></div>}
     </section>}
     {snapshot && analysis && <PaperWorkspace paper={snapshot.paper} numbers={analysis.audit.questionNumbers} locked={locked} onBusy={onBusy}
-      save={paper => persist({ ...snapshot, paper })}/>}
-    {snapshot && <AgentWorkspace key={stored.revision} workspace={snapshot} locked={locked} onBusy={onBusy}/>}
+      save={async paper => { await persist({ ...snapshot, paper, practice: undefined }); }}/>}
+    {snapshot && <AgentWorkspace key={stored.revision} workspace={snapshot} locked={locked} onBusy={onBusy} save={practice=>persist({...snapshot,practice})}/>}
   </>;
 }

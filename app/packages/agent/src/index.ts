@@ -1,3 +1,5 @@
+import { practiceKey } from './storage.ts';
+export { validateBatch } from './storage.ts';
 import { analyze, validateWorkspace, type Workspace, type TeacherSettings } from '../../core/src/index.ts';
 import type { KnowledgeHit } from '../../knowledge/src/index.ts';
 
@@ -74,20 +76,13 @@ export function assertAnonymous(value: unknown, names: string[]): void {
   visit(value);
 }
 const equivalent = (a: string, b: string) => a.normalize('NFKC').replace(/\s/g,'').toUpperCase() === b.normalize('NFKC').replace(/\s/g,'').toUpperCase();
-function inputKey(workspace: Workspace): string {
-  const analysis = analyze(workspace);
-  const e=workspace.exam,s=workspace.settings;
-  return JSON.stringify({exam:[e.id,e.name,e.subjectId,e.subjectName,e.classId,e.className],source:[workspace.source.kind,workspace.source.finishedAt],
-    settings:[s.variantsPerQuestion,s.maxQuestionsPerStudent,s.includePartialCredit,s.partialCreditThreshold,s.difficulty],
-    paper:(workspace.paper?.questions??[]).map(q=>[q.number,q.pageId,q.stem,q.confirmed]),students:analysis.students.map(s=>[s.id,s.availability,s.weakQuestions])});
-}
 
 export async function runPipeline(options: PipelineOptions): Promise<AgentBatch> {
   const workspace = validateWorkspace(options.workspace);
   const analysis = analyze(workspace);
   const names = workspace.students.map(s => s.name);
   const config = subjectConfig(workspace.exam.subjectName);
-  const batch: AgentBatch = { schemaVersion:1, mode:options.provider.mode, subject:config,inputKey:inputKey(workspace),annotations:[],variants:[],skipped:[],calls:{annotate:0,generate:0,solve:0} };
+  const batch: AgentBatch = { schemaVersion:1, mode:options.provider.mode, subject:config,inputKey:practiceKey(workspace),annotations:[],variants:[],skipped:[],calls:{annotate:0,generate:0,solve:0} };
   const checkCancelled = () => { if (options.signal?.aborted) fail('agent_cancelled'); };
   const invoke = async (stage: ModelRequest['stage'], data: Record<string,unknown>): Promise<unknown> => {
     checkCancelled();
@@ -168,7 +163,7 @@ export async function recheckVariant(workspace: Workspace, provider: ModelProvid
 }
 export function assemble(workspace: Workspace, batch: AgentBatch, preview = false): StudentPractice[] {
   validateWorkspace(workspace);
-  if (batch.inputKey !== inputKey(workspace)) return fail('stale_agent_batch');
+  if (batch.inputKey !== practiceKey(workspace)) return fail('stale_agent_batch');
   if (batch.mode === 'mock' && !preview) return fail('mock_not_exportable');
   const approved = batch.variants.filter(v => v.review === 'approved' && v.passed);
   const analysis = analyze(workspace);

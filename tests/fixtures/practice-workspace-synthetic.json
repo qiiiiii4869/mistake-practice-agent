@@ -1,0 +1,175 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "kind": "chrome_extension",
+    "finishedAt": "SYNTHETIC_TEST_TIME"
+  },
+  "exam": {
+    "id": "synthetic-exam",
+    "subjectId": "synthetic-paper",
+    "classId": "synthetic-class",
+    "name": "导入考试",
+    "subjectName": "生物",
+    "className": "导入班级"
+  },
+  "students": [
+    {
+      "id": "SYNTHETIC_1",
+      "name": "模拟学生甲",
+      "availability": "scored",
+      "reasonSource": null,
+      "rosterScore": null,
+      "rankCode": null,
+      "questions": [
+        {
+          "number": "1",
+          "label": "1",
+          "score": 2,
+          "fullScore": 2,
+          "result": "correct"
+        },
+        {
+          "number": "2",
+          "label": "2",
+          "score": 1,
+          "fullScore": 3,
+          "result": "partial_credit"
+        }
+      ]
+    },
+    {
+      "id": "SYNTHETIC_2",
+      "name": "模拟学生乙",
+      "availability": "scored",
+      "reasonSource": null,
+      "rosterScore": null,
+      "rankCode": null,
+      "questions": [
+        {
+          "number": "1",
+          "label": "1",
+          "score": 2,
+          "fullScore": 2,
+          "result": "correct"
+        },
+        {
+          "number": "2",
+          "label": "2",
+          "score": 1,
+          "fullScore": 3,
+          "result": "partial_credit"
+        }
+      ]
+    },
+    {
+      "id": "SYNTHETIC_3",
+      "name": "模拟学生丙",
+      "availability": "not_scanned",
+      "reasonSource": "roster_score_column",
+      "rosterScore": 12,
+      "rankCode": -1,
+      "questions": []
+    }
+  ],
+  "settings": {
+    "variantsPerQuestion": 1,
+    "maxQuestionsPerStudent": 5,
+    "includePartialCredit": true,
+    "partialCreditThreshold": 100,
+    "difficulty": "same"
+  },
+  "paper": {
+    "pages": [
+      {
+        "id": "p",
+        "name": "synthetic.png",
+        "data": "data:image/png;base64,aGVsbG8="
+      }
+    ],
+    "questions": [
+      {
+        "number": "2",
+        "pageId": "p",
+        "stem": "说明光合作用。",
+        "confirmed": true
+      }
+    ]
+  },
+  "practice": {
+    "schemaVersion": 1,
+    "mode": "mock",
+    "subject": {
+      "id": "biology",
+      "subject": "生物",
+      "formula": "latex",
+      "commonDiagrams": true,
+      "commonMaterials": false,
+      "unsupported": [
+        "listening",
+        "writing",
+        "practical"
+      ],
+      "diagram": "text_only",
+      "sharedMaterial": "whole_group"
+    },
+    "inputKey": "{\"exam\":[\"synthetic-exam\",\"导入考试\",\"synthetic-paper\",\"生物\",\"synthetic-class\",\"导入班级\"],\"source\":[\"chrome_extension\",\"SYNTHETIC_TEST_TIME\"],\"settings\":[1,5,true,100,\"same\"],\"paper\":[[\"2\",\"p\",\"说明光合作用。\",true]],\"students\":[[\"SYNTHETIC_1\",\"scored\",[\"2\"]],[\"SYNTHETIC_2\",\"scored\",[\"2\"]],[\"SYNTHETIC_3\",\"not_scanned\",[]]]}",
+    "annotations": [
+      {
+        "number": "2",
+        "annotation": {
+          "knowledgePoints": [
+            "光合作用"
+          ],
+          "keywords": [
+            "光合作用"
+          ],
+          "kind": "text",
+          "materialGroup": null
+        }
+      }
+    ],
+    "variants": [
+      {
+        "stem": "【离线演示 1】请对照知识库，说明“光合作用”的主要内容。",
+        "options": [],
+        "answer": "演示答案，须接入真实模型后重新生成",
+        "explanation": "此内容用于验证流程，不是可分发的补练题。",
+        "knowledgePoints": [
+          "光合作用"
+        ],
+        "sourceIndexes": [
+          0
+        ],
+        "id": "q2-v1",
+        "sourceNumbers": [
+          "2"
+        ],
+        "evidence": [
+          {
+            "documentId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "name": "合成课本.pdf",
+            "page": 12,
+            "ordinal": 1,
+            "text": "光合作用的合成资料。参考 https://example.test/book"
+          }
+        ],
+        "check": {
+          "answer": "演示答案，须接入真实模型后重新生成",
+          "complete": true,
+          "inScope": true,
+          "tooSimilar": false,
+          "explanation": "离线固定返回，只验证独立调用和比对流程，不证明题目质量。"
+        },
+        "passed": true,
+        "attempts": 1,
+        "review": "approved"
+      }
+    ],
+    "skipped": [],
+    "calls": {
+      "annotate": 1,
+      "generate": 1,
+      "solve": 1
+    }
+  }
+}
