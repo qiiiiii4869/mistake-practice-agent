@@ -13,6 +13,42 @@ mod knowledge;
 mod practice;
 mod model;
 mod model_http;
+mod pdf_export;
+
+#[derive(Default)]struct ExportState(AtomicBool);
+#[derive(Serialize)]#[serde(rename_all="camelCase")]
+struct ExportReport{folder:String,file_count:usize,complete:bool}
+#[tauri::command]
+async fn export_practice_pdf(window:WebviewWindow,app:tauri::AppHandle,state:tauri::State<'_,ExportState>,expected_revision:i64,layout:String,include_answers:bool)->Result<Option<ExportReport>,String>{
+    require_main(&window)?;
+    if state.0.swap(true,Ordering::SeqCst){return Err("pdf_busy".into());}
+    struct Guard<'a>(&'a AtomicBool);impl Drop for Guard<'_>{fn drop(&mut self){self.0.store(false,Ordering::SeqCst);}}
+    let _guard=Guard(&state.0);
+    let database=database_path(&app)?;
+    let compiler=app.path().resource_dir().map_err(|_|"pdf_compiler_missing")?.join("resources").join("typst").join(if cfg!(windows){"typst.exe"}else{"typst"});
+    let work=app.path().app_local_data_dir().map_err(|_|"storage_failed")?.join("export-work");
+    tauri::async_runtime::spawn_blocking(move||{
+        use tauri_plugin_dialog::DialogExt;
+        use std::io::Write;
+        let documents=pdf_export::plan(storage::export_snapshot(&storage::open(&database)?,expected_revision)?,&layout,include_answers)?;
+        if !compiler.is_file(){return Err("pdf_compiler_missing".into());}
+        let Some(folder)=app.dialog().file().set_title("选择 PDF 保存位置，将创建新的错题补练文件夹").blocking_pick_folder()else{return Ok(None);};
+        let folder=folder.into_path().map_err(|_|"pdf_write_failed")?;
+        storage::export_snapshot(&storage::open(&database)?,expected_revision)?;
+        std::fs::create_dir_all(&work).map_err(|_|"pdf_write_failed")?;
+        let temporary=tempfile::Builder::new().prefix("practice-").tempdir_in(&work).map_err(|_|"pdf_write_failed")?;
+        let compiled=pdf_export::compile(&compiler,temporary.path(),&documents)?;
+        storage::export_snapshot(&storage::open(&database)?,expected_revision)?;
+        let mut destination=None;
+        for index in 1..=10000{let path=folder.join(if index==1{"错题补练".into()}else{format!("错题补练-{index}")});match std::fs::create_dir(&path){Ok(())=>{destination=Some(path);break;},Err(e)if e.kind()==std::io::ErrorKind::AlreadyExists=>continue,Err(_)=>return Err("pdf_write_failed".into())}}
+        let destination=destination.ok_or("pdf_write_failed")?;let mut count=0;
+        for (source,document) in compiled.iter().zip(&documents){
+            let result=(||{let bytes=std::fs::read(source)?;let mut file=std::fs::OpenOptions::new().write(true).create_new(true).open(destination.join(&document.filename))?;file.write_all(&bytes)?;file.sync_all()})().map_err(|_:std::io::Error|"pdf_write_failed");
+            if result.is_err(){return Ok(Some(ExportReport{folder:destination.to_string_lossy().into_owned(),file_count:count,complete:false}));}count+=1;
+        }
+        Ok(Some(ExportReport{folder:destination.to_string_lossy().into_owned(),file_count:count,complete:true}))
+    }).await.map_err(|_|"pdf_compile_failed")?
+}
 
 #[derive(Default)]
 struct DeepseekState {
@@ -500,6 +536,8 @@ pub fn run() {
     tauri::Builder::default()
         .manage(ProbeState::default())
         .manage(DeepseekState::default())
+        .manage(ExportState::default())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             open_login,
             login_status,
@@ -516,7 +554,8 @@ pub fn run() {
             search_knowledge,
             deepseek_status,
             configure_deepseek,
-            call_deepseek
+            call_deepseek,
+            export_practice_pdf
         ])
         .setup(|app| {
             if std::env::var("ZHIXUE_OPEN_LOGIN").as_deref() == Ok("1") {

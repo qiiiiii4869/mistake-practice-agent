@@ -25,6 +25,9 @@ tokio = { version = "1", features = ["time", "sync"] }
 rusqlite = { version = "0.41", features = ["bundled"] }
 unicode-normalization = "0.1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tauri-plugin-dialog = "2"
+tempfile = "3"
+regex = "1"
 
 [profile.dev]
 debug = 0

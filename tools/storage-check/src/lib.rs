@@ -10,3 +10,5 @@ mod practice;
 mod model;
 #[path = "../../../app/apps/desktop/src-tauri/src/model_http.rs"]
 mod model_http;
+#[path = "../../../app/apps/desktop/src-tauri/src/pdf_export.rs"]
+mod pdf_export;

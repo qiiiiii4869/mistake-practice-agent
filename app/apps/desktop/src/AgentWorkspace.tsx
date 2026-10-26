@@ -7,8 +7,8 @@ import { demoProvider } from '../../../packages/agent/src/mock';
 import type { KnowledgeHit } from '../../../packages/knowledge/src';
 
 const labels: Record<QuestionKind,string> = {choice:'选择题',text:'纯文字题',diagram:'依赖图形',shared_material:'共用材料',listening:'听力',writing:'作文',practical:'实验操作'};
-interface Props { workspace: Workspace; locked: boolean; onBusy: (busy: boolean) => void; save: (batch: AgentBatch) => Promise<boolean> }
-export function AgentWorkspace({ workspace, locked, onBusy, save }: Props) {
+interface Props { workspace: Workspace; revision:number; locked: boolean; onBusy: (busy: boolean) => void; save: (batch: AgentBatch) => Promise<boolean> }
+export function AgentWorkspace({ workspace, revision, locked, onBusy, save }: Props) {
   const [batch,setBatch]=React.useState<AgentBatch|null>(workspace.practice??null);
   const [keyword,setKeyword]=React.useState(workspace.practice?.annotations[0]?.annotation.keywords[0]??'');
   const [rules,setRules]=React.useState<Record<string,{kind:QuestionKind;group:string}>>({});
@@ -17,6 +17,9 @@ export function AgentWorkspace({ workspace, locked, onBusy, save }: Props) {
   const [status,setStatus]=React.useState<DeepseekStatus|null>(null);
   const [configuring,setConfiguring]=React.useState(false);
   const [working,setWorking]=React.useState(false);
+  const [layout,setLayout]=React.useState<'class'|'individual'>('class');
+  const [includeAnswers,setIncludeAnswers]=React.useState(true);
+  const [exportFolder,setExportFolder]=React.useState('');
   const [message,setMessage]=React.useState('真实模型尚未接入。可用离线演示验证检索、出题、自检与审核。');
   const controller=React.useRef<AbortController|null>(null);
   React.useEffect(()=>{setBatch(workspace.practice??null);setRules({});setMessage(workspace.practice?(workspace.practice.mode==='mock'?'已恢复本场演示出题与审核，仍不可正式导出。':'已恢复本场 DeepSeek 出题与审核。密钥只在当前程序会话可用，重启需重填。'):'可配置 DeepSeek，或先运行离线演示。');},[workspace]);
@@ -72,6 +75,20 @@ export function AgentWorkspace({ workspace, locked, onBusy, save }: Props) {
     try{const next=await regenerateVariant(workspace,batch,id,batch.mode==='real'?realProvider():demoProvider(keyword.trim(),rules),query=>invoke<KnowledgeHit[]>('search_knowledge',{query}));setBatch(next);setMessage('已替换为新题，需重新审核采用并保存。');}
     catch(error){setMessage(agentError(error));}finally{setWorking(false);onBusy(false);void refreshStatus();}
   }
+  const saved=!!batch&&!!workspace.practice&&JSON.stringify(batch)===JSON.stringify(workspace.practice);
+  const exportReady=!!batch&&batch.mode==='real'&&saved&&!batch.variants.some(v=>v.review==='pending')&&batch.variants.some(v=>v.review==='approved'&&v.passed);
+  async function exportPdf(){
+    if(!exportReady)return;setWorking(true);onBusy(true);setMessage('请选择保存位置，随后在本机编译 PDF，不调用模型。');
+    try{
+      const result=await invoke<{folder:string;fileCount:number;complete:boolean}|null>('export_practice_pdf',{expectedRevision:revision,layout,includeAnswers});
+      if(!result)setMessage('已取消导出，考试和审核结果保留。');
+      else{setExportFolder(result.folder);setMessage(result.complete?`已导出 ${result.fileCount} 份 PDF。`:`只成功保存 ${result.fileCount} 份，请检查文件夹和磁盘空间。`);}
+    }catch(error){
+      const code=error instanceof Error?error.message:String(error);
+      const messages:Record<string,string>={pdf_compiler_missing:'程序缺少 PDF 组件，请使用完整安装包或重新准备构建资源。',pdf_unsupported_formula:'题目中存在尚未支持的公式，请修改后重新自检、审核和保存。',pdf_compile_failed:'PDF 编译未完成，请核对公式与题干；没有发布本次文件。',pdf_write_failed:'无法写入所选文件夹，请检查权限和磁盘空间。',pdf_export_timeout:'PDF 生成超时，请减少一次导出的题量。',pdf_unreviewed:'仍有待审核题目，请先审核并保存。',pdf_export_too_large:'本次导出内容过多，请减少题量。',storage_conflict:'本机考试已经变化，请重新打开并核对当前考试。'};
+      setMessage(messages[code]??'PDF 导出未完成，请核对本场保存与审核状态。');
+    }finally{setWorking(false);onBusy(false);}
+  }
   return <section className="card" id="agent-review" aria-label="出题流程演示">
     <div className="card-heading"><h2>Agent 出题与审核</h2><span className="badge">{mode==='real'?'DeepSeek V4.1 Flash':'离线演示'}</span></div>
     <details><summary>DeepSeek 模型设置</summary><p className="help">官方接口 · deepseek-flash（V4.1 Flash）。密钥只保存在当前程序内存，重启需重新填写，不写入考试、日志或仓库。</p>
@@ -84,7 +101,7 @@ export function AgentWorkspace({ workspace, locked, onBusy, save }: Props) {
     <p className="help">先核对试卷题干并导入知识库。演示将以你填写的知识点检索本机资料；按薄弱题生成，每题数量沿用本场设置。改动当前考试、已保存题干或设置会重置结果。</p>
     {mode==='mock'&&<label className="agent-keyword">演示知识点与检索词<input aria-label="演示知识点与检索词" maxLength={100} disabled={disabled} value={keyword} onChange={e=>setKeyword(e.target.value)}/></label>}
     {confirmed.length>0 && <details><summary>题型规则（已核对 {confirmed.length} 题）</summary><div className="table-scroll"><table><thead><tr><th>题号</th><th>题型</th><th>共用材料组</th></tr></thead><tbody>{confirmed.map(q=><tr key={q.number}><td>{q.number}</td><td><select aria-label={`第 ${q.number} 题题型`} disabled={disabled} value={rules[q.number]?.kind??'text'} onChange={e=>setRules({...rules,[q.number]:{kind:e.target.value as QuestionKind,group:rules[q.number]?.group??''}})}>{Object.entries(labels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></td><td><input aria-label={`第 ${q.number} 题材料组`} maxLength={100} disabled={disabled||rules[q.number]?.kind!=='shared_material'} value={rules[q.number]?.group??''} onChange={e=>setRules({...rules,[q.number]:{kind:'shared_material',group:e.target.value}})}/></td></tr>)}</tbody></table></div><p className="help">同一阅读材料的小题使用相同组名，题干中需包含完整共用材料。图形题仅尝试纯文字变式；听力、作文、实验操作不自动出题。</p></details>}
-    <div className="actions"><button disabled={disabled||(mode==='mock'&&!keyword.trim())||!confirmed.length||(mode==='real'&&(!status?.configured||status.quotaExhausted))} onClick={()=>void run()}>{mode==='real'?'使用 DeepSeek 生成补练':'运行离线出题演示'}</button>{working&&<button className="secondary" onClick={()=>controller.current?.abort()}>停止生成</button>}</div>
+    <div className="actions"><button disabled={disabled||(mode==='mock'&&!keyword.trim())||!confirmed.length||(mode==='real'&&(!status?.configured||status.quotaExhausted))} onClick={()=>void run()}>{mode==='real'?'使用 DeepSeek 生成补练':'运行离线出题演示'}</button>{working&&controller.current&&<button className="secondary" onClick={()=>controller.current?.abort()}>停止生成</button>}</div>
     <p className="notice" aria-live="polite" data-testid="agent-message">{message}</p>
     {batch&&<>
       <p className="help">{batch.mode==='mock'?'假接口':'DeepSeek'}调用：标注 {batch.calls.annotate} 次 · 出题 {batch.calls.generate} 次 · 独立解题 {batch.calls.solve} 次。姓名只在下方本机组卷预览中显示。</p>
@@ -106,7 +123,12 @@ export function AgentWorkspace({ workspace, locked, onBusy, save }: Props) {
       <div className="actions"><button disabled={disabled} onClick={async()=>{
         const saved=await save(batch);if(!saved)setMessage('本次未能保存，请查看上方提示。当前未保存草稿仍保留。');
       }}>保存本场出题与审核</button></div>
-      <p className="help">本场纳入分析 {analysis.audit.exportedCount} 人；真实接口尚待密钥实测；正式 PDF 下载未接入。</p>
+      <div aria-label="PDF 导出"><h3>导出补练 PDF</h3><div className="fields"><label>文件组织<select aria-label="PDF 文件组织" value={layout} disabled={disabled} onChange={e=>setLayout(e.target.value as 'class'|'individual')}><option value="class">全班合订</option><option value="individual">每人一份</option></select></label></div>
+        <label><input type="checkbox" aria-label="PDF 包含答案解析" checked={includeAnswers} disabled={disabled} onChange={e=>setIncludeAnswers(e.target.checked)}/> 附答案解析（另起一页）</label>
+        <p className="help">先逐题审核，再保存本场结果。仅真实模型批次可导出，演示题不能导出。程序会在你选择的位置新建“错题补练”文件夹，不覆盖已有文件。</p>
+        <button disabled={disabled||!exportReady} onClick={()=>void exportPdf()}>导出 PDF</button>{!saved&&<p className="help">当前修改尚未保存。</p>}{exportFolder&&<p className="saved">保存位置：{exportFolder}</p>}
+      </div>
+      <p className="help">本场纳入分析 {analysis.audit.exportedCount} 人；真实模型质量仍须教师验收。</p>
     </>}
   </section>;
 }

@@ -280,6 +280,10 @@ pub(crate) fn load(conn: &Connection) -> Result<Stored, String> {
 pub(crate) fn model_names(conn:&Connection)->Result<Vec<String>,String>{
     Ok(load(conn)?.snapshot.ok_or("model_no_workspace")?.students.into_iter().map(|s|s.name).collect())
 }
+pub(crate) fn export_snapshot(conn:&Connection,expected:i64)->Result<serde_json::Value,String>{
+    let stored=load(conn)?;if stored.revision!=expected{return Err("storage_conflict".into());}
+    serde_json::to_value(stored.snapshot.ok_or("pdf_no_batch")?).map_err(|_|"pdf_invalid_data".into())
+}
 pub(crate) fn vision_context(conn:&Connection,page_id:&str)->Result<(String,Vec<String>,Vec<String>),String>{
     let snapshot=load(conn)?.snapshot.ok_or("model_no_workspace")?;
     let image=snapshot.paper.as_ref().and_then(|p|p.pages.iter().find(|p|p.id==page_id)).ok_or("paper_page_not_saved")?.data.clone();

@@ -38,3 +38,4 @@ verification-full*.json
 app/apps/desktop/public/pdf-assets/
 
 tools/storage-check/target/
+app/apps/desktop/src-tauri/resources/

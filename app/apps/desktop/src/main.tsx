@@ -11,7 +11,7 @@ function App() {
   const [login, setLogin] = React.useState<LoginStatus>({ open: false, host: null, captcha_60500: false });
   const [busy, setBusy] = React.useState(false);
   const [opening, setOpening] = React.useState(false);
-  const [message, setMessage] = React.useState('打开智学网窗口，使用教师账号手动登录。');
+  const [message, setMessage] = React.useState('点击“登录智学网”，在弹出的官方页面使用教师账号登录。');
   const [saved, setSaved] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -63,8 +63,8 @@ function App() {
     <section className="steps" aria-label="验证步骤"><div><b>01</b><span>教师登录智学网</span></div><div><b>02</b><span>选择考试、学科与班级</span></div><div><b>03</b><span>读取学生与逐题得分</span></div></section>
     <section className="card">
       <div className="card-heading"><h2>教师账号连接</h2><span className={`badge ${verified ? 'success' : ''}`}>{verified ? '验证通过' : busy ? '读取中' : '待验证'}</span></div>
-      <p>登录在独立的智学网窗口完成。密码无需填写在本程序中。</p>
-      <div className="actions"><button onClick={() => void openLogin()} disabled={opening || busy} className="secondary">{opening ? '正在打开…' : login.open ? '返回智学网窗口' : '打开智学网登录'}</button><button onClick={() => void connect()} disabled={busy || opening || !login.open}>{busy ? '正在读取…' : '读取考试列表'}</button></div>
+      <p>点击登录按钮会弹出智学网官方登录页面，请在那里填写账号密码。登录完成后回到这里读取考试列表。</p>
+      <div className="actions"><button onClick={() => void openLogin()} disabled={opening || busy} className="secondary">{opening ? '正在打开…' : login.open ? '返回智学网登录页' : '登录智学网'}</button><button onClick={() => void connect()} disabled={busy || opening || !login.open}>{busy ? '正在读取…' : '读取考试列表'}</button></div>
       <div className={`notice ${report && !report.ok ? 'error' : verified ? 'passed' : ''}`} role="status">{message}</div>
       <div className="window-status">登录窗口：{login.open ? `已打开 · ${login.host ?? '等待页面加载'}` : '未打开'}</div>
       {login.captcha_60500 && <div className="notice error">页面检测到 60500 提示。请保留此状态，内置登录尚未通过验证；可回退到 Chrome 扩展导入。</div>}

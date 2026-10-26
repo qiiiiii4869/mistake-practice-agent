@@ -177,6 +177,6 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props)
     </section>}
     {snapshot && analysis && <PaperWorkspace paper={snapshot.paper} numbers={analysis.audit.questionNumbers} locked={locked} onBusy={onBusy}
       save={async paper => { await persist({ ...snapshot, paper, practice: undefined }); }}/>}
-    {snapshot && <AgentWorkspace key={stored.revision} workspace={snapshot} locked={locked} onBusy={onBusy} save={practice=>persist({...snapshot,practice})}/>}
+    {snapshot && <AgentWorkspace key={stored.revision} workspace={snapshot} revision={stored.revision} locked={locked} onBusy={onBusy} save={practice=>persist({...snapshot,practice})}/>}
   </>;
 }

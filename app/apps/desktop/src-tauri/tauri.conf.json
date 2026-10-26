@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "错题智能推送 · 智学网接入验证",
+        "title": "错题智能推送 Agent",
         "width": 1060,
         "height": 860,
         "minWidth": 700,
@@ -29,6 +29,9 @@
     }
   },
   "bundle": {
-    "active": false
+    "active": false,
+    "resources": {
+      "resources/typst/": "resources/typst/"
+    }
   }
 }
