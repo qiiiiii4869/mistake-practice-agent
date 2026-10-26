@@ -152,6 +152,8 @@ def main():
             import base64
             png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=")
             paper.get_by_label("添加试卷照片", exact=True).set_input_files({"name":"synthetic.png", "mimeType":"image/png", "buffer":png})
+            expect(page.get_by_test_id("workspace-message")).to_contain_text("已校验并保存")
+            paper.get_by_text("手动查看或修正题干（可选）", exact=True).click()
             expect(paper.get_by_label("题干", exact=True)).to_be_enabled()
             paper.get_by_label("题干", exact=True).fill("模拟题干及选项")
             paper.get_by_label("已核对题干", exact=True).check()
@@ -162,6 +164,7 @@ def main():
             expect(page.get_by_test_id("workspace-message")).to_contain_text("已校验并保存")
             assert page.evaluate("testStored.snapshot.paper.questions[0].confirmed") is True
             page.reload()
+            paper.get_by_text("手动查看或修正题干（可选）", exact=True).click()
             expect(paper.get_by_label("题干", exact=True)).to_have_value("修改后的模拟题干及选项")
             expect(paper.get_by_label("已核对题干", exact=True)).to_be_checked()
             page.screenshot(path=str(ROOT / "tmp/desktop-paper-ui-mock.png"), full_page=True)

@@ -202,6 +202,7 @@ export function agentError(error: unknown): string {
     model_quota_exhausted:'模型 token 或调用额度已耗尽，已停止，不会自动重试或切换服务。',agent_cancelled:'已停止本次生成，已有结果保留。',
     stale_agent_batch:'当前考试、题干或设置已变更，请重新生成并审核。',
     model_key_required:'请先在本机填写 DeepSeek API Key。',model_invalid_key:'密钥格式不正确，请重新填写。',model_auth_failed:'DeepSeek 密钥无效或没有权限，请更换密钥。',
+    paper_required:'请先上传空白试卷。',paper_blank_required:'请确认上传的是不含学生姓名的空白卷。',paper_save_failed:'核对后的题干未能保存，已停止出题。',invalid_paper_recognition:'卷面识别结果不完整，已停止出题。',paper_check_required:'空白卷识别不清或两次核对不一致，请检查照片清晰度、跨页内容后重新上传。',paper_questions_missing:'未找到部分失分题的完整题干，请补齐空白卷后重新生成。',
     paper_page_not_saved:'这张照片尚未保存到当前考试，请先保存照片。',
     model_mode_mismatch:'重新生成必须沿用原批次的真实或演示模式。',agent_regeneration_unavailable:'本题未找到可重新生成的依据或题型不支持，原结果保留。',
     model_rate_limited:'DeepSeek 请求达到速率限制，本次已停止，不会自动重试。',model_busy:'已有模型请求正在运行，请等待完成。',

@@ -1,18 +1,21 @@
+import { practiceKey } from '../../../packages/agent/src/storage';
+import { preparePaper } from '../../../packages/agent/src/preparePaper';
 import { deepseekProvider, type DeepseekStatus } from '../../../packages/agent/src/deepseek';
 import React from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { analyze, type Workspace } from '../../../packages/core/src';
+import { analyze, type Workspace, type Paper } from '../../../packages/core/src';
 import { runPipeline, assemble, agentError, editVariant, recheckVariant, regenerateVariant, type AgentBatch, type QuestionKind, type Exercise } from '../../../packages/agent/src';
 import { demoProvider } from '../../../packages/agent/src/mock';
 import type { KnowledgeHit } from '../../../packages/knowledge/src';
 
 const labels: Record<QuestionKind,string> = {choice:'选择题',text:'纯文字题',diagram:'依赖图形',shared_material:'共用材料',listening:'听力',writing:'作文',practical:'实验操作'};
-interface Props { workspace: Workspace; revision:number; locked: boolean; onBusy: (busy: boolean) => void; save: (batch: AgentBatch) => Promise<boolean> }
-export function AgentWorkspace({ workspace, revision, locked, onBusy, save }: Props) {
+interface Props { workspace: Workspace; revision:number; locked: boolean; onBusy: (busy: boolean) => void; prepare: (paper: Paper) => Promise<Workspace|null>; save: (batch: AgentBatch) => Promise<boolean> }
+export function AgentWorkspace({ workspace, revision, locked, onBusy, prepare, save }: Props) {
   const [batch,setBatch]=React.useState<AgentBatch|null>(workspace.practice??null);
   const [keyword,setKeyword]=React.useState(workspace.practice?.annotations[0]?.annotation.keywords[0]??'');
   const [rules,setRules]=React.useState<Record<string,{kind:QuestionKind;group:string}>>({});
   const [mode,setMode]=React.useState<'mock'|'real'>(workspace.practice?.mode??'mock');
+  const [blank,setBlank]=React.useState(false);
   const [key,setKey]=React.useState('');
   const [status,setStatus]=React.useState<DeepseekStatus|null>(null);
   const [configuring,setConfiguring]=React.useState(false);
@@ -22,7 +25,7 @@ export function AgentWorkspace({ workspace, revision, locked, onBusy, save }: Pr
   const [exportFolder,setExportFolder]=React.useState('');
   const [message,setMessage]=React.useState('真实模型尚未接入。可用离线演示验证检索、出题、自检与审核。');
   const controller=React.useRef<AbortController|null>(null);
-  React.useEffect(()=>{setBatch(workspace.practice??null);setRules({});setMessage(workspace.practice?(workspace.practice.mode==='mock'?'已恢复本场演示出题与审核，仍不可正式导出。':'已恢复本场 DeepSeek 出题与审核。密钥只在当前程序会话可用，重启需重填。'):'可配置 DeepSeek，或先运行离线演示。');},[workspace]);
+  React.useEffect(()=>{if(controller.current)return;setBlank(false);setBatch(workspace.practice??null);setRules({});setMessage(workspace.practice?(workspace.practice.mode==='mock'?'已恢复本场演示出题与审核，仍不可正式导出。':'已恢复本场 DeepSeek 出题与审核。密钥只在当前程序会话可用，重启需重填。'):'可配置 DeepSeek，或先运行离线演示。');},[workspace]);
   React.useEffect(()=>()=>controller.current?.abort(),[]);
   async function refreshStatus(){try{setStatus(await invoke<DeepseekStatus>('deepseek_status'));}catch{/* Older shells cannot enable real calls. */}}
   React.useEffect(()=>{void refreshStatus();},[]);
@@ -41,14 +44,25 @@ export function AgentWorkspace({ workspace, revision, locked, onBusy, save }: Pr
   }
   const analysis=React.useMemo(()=>analyze(workspace),[workspace]);
   const confirmed=workspace.paper?.questions.filter(q=>q.confirmed) ?? [];
-  const preview=React.useMemo(()=>batch ? assemble(workspace,batch,true) : [],[workspace,batch]);
+  const preview=React.useMemo(()=>batch && batch.inputKey===practiceKey(workspace) ? assemble(workspace,batch,true) : [],[workspace,batch]);
   const disabled=locked||working||configuring;
   async function run() {
     if (mode==='mock'&&!keyword.trim()) return;
     if(mode==='real'&&(!status?.configured||status.quotaExhausted)){setMessage(agentError(status?.quotaExhausted?'model_quota_exhausted':'model_key_required'));return;}
     setWorking(true);onBusy(true);controller.current=new AbortController();
     try {
-      const next=await runPipeline({workspace,provider:mode==='real'?realProvider():demoProvider(keyword.trim(),rules),
+      let input=workspace;
+      if(mode==='real'&&workspace.paper?.pages.length){
+        if(!blank)throw new Error('paper_blank_required');
+        const paper=await preparePaper(workspace,pageId=>invoke('call_deepseek',{request:{stage:'recognize_paper',instruction:'',data:{pageId}}}),setMessage,controller.current.signal);
+        if(JSON.stringify(paper)!==JSON.stringify(workspace.paper)){
+          setBatch(null);
+          const prepared=await prepare(paper);
+          if(!prepared){setBatch(batch);throw new Error('paper_save_failed');}
+          input=prepared;
+        }
+      }
+      const next=await runPipeline({workspace:input,provider:mode==='real'?realProvider():demoProvider(keyword.trim(),rules),
         retrieve:query=>invoke<KnowledgeHit[]>('search_knowledge',{query}),progress:setMessage,signal:controller.current.signal});
       setBatch(next);setMessage(`${next.mode==='mock'?'演示完成':'生成完成'}：${next.variants.length} 道题，${next.skipped.length} 组跳过。请逐题查看并审核。`);
     } catch(error){setMessage(agentError(error));}
@@ -98,12 +112,14 @@ export function AgentWorkspace({ workspace, revision, locked, onBusy, save }: Pr
     </details>
     <label>运行模式<select aria-label="出题运行模式" value={mode} disabled={disabled} onChange={e=>setMode(e.target.value as 'mock'|'real')}><option value="mock">离线演示</option><option value="real" disabled={!status?.configured||status?.quotaExhausted}>DeepSeek V4.1 Flash</option></select></label>
     <div className="notice error">{mode==='real'?'使用真实 DeepSeek API，将按所选题目调用并消耗额度；学生姓名在请求前拦截。生成结果仍需教师审核。':'当前使用固定假接口，不调用付费模型。演示题和答案仅用于验证流程，不能作为正式补练导出。'}点击下方保存可在本机恢复本场结果；未保存修改退出后丢失。</div>
-    <p className="help">先核对试卷题干并导入知识库。演示将以你填写的知识点检索本机资料；按薄弱题生成，每题数量沿用本场设置。改动当前考试、已保存题干或设置会重置结果。</p>
+    <p className="help">上传空白卷并准备知识库后点击“生成结果”。Agent 将依次读取卷面、核对题号与完整内容、分析知识点、检索知识库、生成补练并独立自检。识别不清或核对不一致会停止提示，不编造题干。离线演示仍使用手动核对题干。</p>
     {mode==='mock'&&<label className="agent-keyword">演示知识点与检索词<input aria-label="演示知识点与检索词" maxLength={100} disabled={disabled} value={keyword} onChange={e=>setKeyword(e.target.value)}/></label>}
     {confirmed.length>0 && <details><summary>题型规则（已核对 {confirmed.length} 题）</summary><div className="table-scroll"><table><thead><tr><th>题号</th><th>题型</th><th>共用材料组</th></tr></thead><tbody>{confirmed.map(q=><tr key={q.number}><td>{q.number}</td><td><select aria-label={`第 ${q.number} 题题型`} disabled={disabled} value={rules[q.number]?.kind??'text'} onChange={e=>setRules({...rules,[q.number]:{kind:e.target.value as QuestionKind,group:rules[q.number]?.group??''}})}>{Object.entries(labels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></td><td><input aria-label={`第 ${q.number} 题材料组`} maxLength={100} disabled={disabled||rules[q.number]?.kind!=='shared_material'} value={rules[q.number]?.group??''} onChange={e=>setRules({...rules,[q.number]:{kind:'shared_material',group:e.target.value}})}/></td></tr>)}</tbody></table></div><p className="help">同一阅读材料的小题使用相同组名，题干中需包含完整共用材料。图形题仅尝试纯文字变式；听力、作文、实验操作不自动出题。</p></details>}
-    <div className="actions"><button disabled={disabled||(mode==='mock'&&!keyword.trim())||!confirmed.length||(mode==='real'&&(!status?.configured||status.quotaExhausted))} onClick={()=>void run()}>{mode==='real'?'使用 DeepSeek 生成补练':'运行离线出题演示'}</button>{working&&controller.current&&<button className="secondary" onClick={()=>controller.current?.abort()}>停止生成</button>}</div>
+    {mode==='real'&&!!workspace.paper?.pages.length&&<label><input type="checkbox" aria-label="确认空白卷不含学生姓名" checked={blank} disabled={disabled} onChange={e=>setBlank(e.target.checked)}/> 已上传空白试卷，不含学生姓名；点击生成后才发送给模型读取和核对</label>}
+    <div className="actions"><button disabled={disabled||(mode==='mock'&&(!keyword.trim()||!confirmed.length))||(mode==='real'&&(!status?.configured||status.quotaExhausted||(!workspace.paper?.pages.length&&!confirmed.length)||(!!workspace.paper?.pages.length&&!blank)))} onClick={()=>void run()}>{mode==='real'?'生成结果':'运行离线出题演示'}</button>{working&&controller.current&&<button className="secondary" onClick={()=>controller.current?.abort()}>停止生成</button>}</div>
     <p className="notice" aria-live="polite" data-testid="agent-message">{message}</p>
     {batch&&<>
+      <details><summary>知识点分析</summary><ul>{batch.annotations.map(item=><li key={item.number}>第 {item.number} 题：{item.annotation.knowledgePoints.join('、')}；检索词：{item.annotation.keywords.join('、')}</li>)}</ul></details>
       <p className="help">{batch.mode==='mock'?'假接口':'DeepSeek'}调用：标注 {batch.calls.annotate} 次 · 出题 {batch.calls.generate} 次 · 独立解题 {batch.calls.solve} 次。姓名只在下方本机组卷预览中显示。</p>
       {batch.skipped.length>0&&<ul>{batch.skipped.map((s,i)=><li key={i}>第 {s.numbers.join('、')} 题：{s.reason}</li>)}</ul>}
       {batch.variants.map(v=><article className={`agent-variant ${v.passed?'':'flagged'}`} key={v.id} aria-label={`审核 ${v.id}`}>

@@ -11,7 +11,7 @@
     "build": "npm run build --workspace @mistake-agent/desktop",
     "desktop:build": "npm run prepare:runtime && npm run tauri --workspace @mistake-agent/desktop -- build --no-bundle",
     "desktop:build:debug": "npm run prepare:runtime && npm run tauri --workspace @mistake-agent/desktop -- build --debug --no-bundle",
-    "test": "npm run typecheck --workspace @mistake-agent/desktop && node --test ../tests/test_core.mjs ../tests/test_knowledge.mjs ../tests/test_agent.mjs ../tests/test_pdf.mjs ../tests/test_practice_storage.mjs ../tests/test_deepseek.mjs ../tests/test_paper_recognition.mjs",
+    "test": "npm run typecheck --workspace @mistake-agent/desktop && node --test ../tests/test_core.mjs ../tests/test_knowledge.mjs ../tests/test_agent.mjs ../tests/test_pdf.mjs ../tests/test_practice_storage.mjs ../tests/test_deepseek.mjs ../tests/test_paper_recognition.mjs ../tests/test_prepare_paper.mjs",
     "prepare:runtime": "powershell -NoProfile -File apps/desktop/scripts/prepare-runtime.ps1"
   }
 }

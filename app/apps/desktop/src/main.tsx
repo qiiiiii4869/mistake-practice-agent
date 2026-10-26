@@ -58,7 +58,7 @@ function App() {
   const verified = report?.ok === true && report.summary.authentication === 'verified_teacher_session' && report.options.length > 0;
   return <main>
     <header><div className="brand">错题智能推送 <span>AGENT</span></div><div className="stage">阶段 4 · 离线出题与审核</div></header>
-    <nav className="section-nav" aria-label="功能入口"><a href="#exam-students">考试与学生信息</a><a href="#paper-review">试卷核对</a><a href="#agent-review">出题与审核</a><a href="#knowledge-library">知识库</a></nav>
+    <nav className="section-nav" aria-label="功能入口"><a href="#exam-students">考试与学生信息</a><a href="#paper-review">上传空白卷</a><a href="#agent-review">出题与审核</a><a href="#knowledge-library">知识库</a></nav>
     <section className="intro"><span className="eyebrow">数据接入 / 智学网</span><h1>先读取考试与学生，再安排补练。</h1><p>登录智学网后，选择某次考试、学科和班级，读取全班学生名单及逐题得分。</p></section>
     <section className="steps" aria-label="验证步骤"><div><b>01</b><span>教师登录智学网</span></div><div><b>02</b><span>选择考试、学科与班级</span></div><div><b>03</b><span>读取学生与逐题得分</span></div></section>
     <section className="card">
@@ -77,7 +77,7 @@ function App() {
     </section>}
     <ScoreWorkspace report={report} loginOpen={login.open} parentBusy={busy} onBusy={setBusy}/>
     <KnowledgeWorkspace/>
-    <footer>每场考试单独处理，学生与得分只保存在本机。已支持试卷照片与手动题干核对，已提供离线出题演示，真实识别与出题待接入。<br/>本次只读取得分，不采集作答选项，暂不提供错误选项分布。</footer>
+    <footer>每场考试单独处理，学生与得分只保存在本机。上传空白卷后，点击“生成结果”启动 Agent 读取、核对、知识库检索和出题；最终结果需教师审核。<br/>本次只读取得分，不采集作答选项，暂不提供错误选项分布。</footer>
   </main>;
 }
 

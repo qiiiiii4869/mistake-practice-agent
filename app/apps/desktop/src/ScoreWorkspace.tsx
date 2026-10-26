@@ -176,7 +176,7 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props)
       {confirmClear && <div className="confirm-panel" role="region" aria-label="确认清除考试"><b>清除本机当前考试及教师设置？</b><p>这会清除程序保存的本场学生、得分、试卷照片、题干及出题审核结果。下载目录中的扩展文件和智学网登录态仍保留。</p><div className="actions"><button className="danger" disabled={working} onClick={() => void persist(null)}>确认清除</button><button className="secondary" disabled={working} onClick={() => setConfirmClear(false)}>取消清除</button></div></div>}
     </section>}
     {snapshot && analysis && <PaperWorkspace paper={snapshot.paper} numbers={analysis.audit.questionNumbers} locked={locked} onBusy={onBusy}
-      save={async paper => { await persist({ ...snapshot, paper, practice: undefined }); }}/>}
-    {snapshot && <AgentWorkspace key={stored.revision} workspace={snapshot} revision={stored.revision} locked={locked} onBusy={onBusy} save={practice=>persist({...snapshot,practice})}/>}
+      save={paper => persist({ ...snapshot, paper, practice: undefined })}/>}
+    {snapshot && <AgentWorkspace workspace={snapshot} revision={stored.revision} locked={locked} onBusy={onBusy} prepare={async paper=>{const next={...snapshot,paper,practice:undefined};const ok=await persist(next);onBusy(true);return ok?next:null;}} save={practice=>persist({...snapshot,practice})}/>}
   </>;
 }

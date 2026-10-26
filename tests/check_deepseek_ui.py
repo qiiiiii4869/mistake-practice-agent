@@ -19,6 +19,7 @@ window.__TAURI_INTERNALS__.invoke=async(command,args)=>{
  testDeepseekCalls.push(structuredClone(args.request));
  if(testQuota){testDeepseek.quotaExhausted=true;throw 'model_quota_exhausted';}
  testDeepseek.usage.totalTokens+=10;
+ if(args.request.stage==='recognize_paper')return {questions:[{number:'1',stem:'说明光合作用的意义。',confidence:'high'}],warnings:[]};
  if(args.request.stage==='annotate')return {knowledgePoints:['光合作用'],keywords:['光合作用'],kind:'text',materialGroup:null};
  if(args.request.stage==='generate')return {exercises:Array.from({length:args.request.data.count},(_,i)=>({stem:'接口协议模拟变式'+i,options:[],answer:'正确答案',explanation:'协议模拟解析',knowledgePoints:['光合作用'],sourceIndexes:[0]}))};
  return {answer:'正确答案',complete:true,inScope:true,tooSimilar:false,explanation:'协议模拟独立解答'};
@@ -43,10 +44,11 @@ def main():
             agent.get_by_role('button',name='启用 DeepSeek',exact=True).click()
             expect(key).to_have_value('')
             expect(agent.get_by_label('出题运行模式',exact=True)).to_have_value('real')
-            run=agent.get_by_role('button',name='使用 DeepSeek 生成补练',exact=True)
+            run=agent.get_by_role('button',name='生成结果',exact=True)
+            agent.get_by_label('确认空白卷不含学生姓名',exact=True).check()
             run.click()
             expect(agent.get_by_test_id('agent-message')).to_contain_text('生成完成：2 道题')
-            assert page.evaluate('testDeepseekCalls.map(r=>r.stage)')==['annotate','generate','solve','solve']
+            assert page.evaluate('testDeepseekCalls.map(r=>r.stage)')==['recognize_paper','recognize_paper','annotate','generate','solve','solve']
             assert '模拟学生甲' not in page.evaluate('JSON.stringify(testDeepseekCalls)')
             assert 'sk-synthetic' not in page.evaluate('JSON.stringify(testStored)+JSON.stringify(sessionStorage)')
             agent.get_by_role('button',name='保存本场出题与审核',exact=True).click()
@@ -54,13 +56,14 @@ def main():
             assert page.evaluate('testStored.snapshot.practice.mode')=='real'
             expect(agent.get_by_text('修改题目（修改后需重新自检与审核）',exact=True).first).to_be_visible()
             print('PASS: password input, session-only key IPC, real-provider pipeline, anonymous requests and correctly marked stored batch.')
+            agent.get_by_label('确认空白卷不含学生姓名',exact=True).check()
             page.evaluate('testQuota=true')
             run.click()
             expect(agent.get_by_test_id('agent-message')).to_contain_text('额度已耗尽')
             expect(run).to_be_disabled()
             count=page.evaluate('testDeepseekCalls.length')
-            assert count==5
-            agent.get_by_text('DeepSeek 模型设置',exact=True).click()
+            assert count==7
+            agent.locator('details').first.evaluate("el=>el.open=true")
             agent.get_by_role('button',name='清除会话密钥',exact=True).click()
             expect(agent.get_by_label('出题运行模式',exact=True)).to_have_value('mock')
             assert page.evaluate('testDeepseekCalls.length')==count
