@@ -121,3 +121,13 @@ python tests/check_pdf_layout.py
 TS 与 Rust 独立校验答案比对、审核状态、来源下标、题号及输入签名；过期资料、伪造通过状态、错误引用不能保存。知识库原文中的网址只作为普通文本，不会自动访问。删除知识库文档不会删除当前考试已保存的引用片段，清除考试才移除本场片段。
 
 本批验证：90 项 TS 测试、11 项 Rust 存储测试、12 组原桌面/3 组知识库/4 组出题界面检查通过。Rust 测试包括共享 JS 合成夹具的校验、SQLite 重开和清除后内容移除。完整 Tauri 外壳仍未在本机编译通过，MSVC 安装被自动审批阻止；真实模型待提供接口信息。
+
+## DeepSeek V4.1 Flash（2026-10-26 第六批）
+
+负责人已选择 DeepSeek，使用官方 `https://api.deepseek.com/chat/completions` 与 `deepseek-flash`（当前为 V4.1 Flash），协议依据[官方入门](https://api-docs.deepseek.com/quick_start/agent_integrations/)与[Chat Completions 文档](https://api-docs.deepseek.com/api/create-chat-completion/)。在出题面板展开“DeepSeek 模型设置”，填写 API Key 后启用。密钥只保存在本次程序内存，重启后需重填；不会写入当前考试、日志或仓库。浏览器合成预览不支持填写真实密钥。
+
+真实出题调用由 Rust 完成，固定官方地址，禁用代理/重定向/重试；JSON 输出经结构校验及原自检/审核流程。学生姓名在 TS/Rust 两层拦截，独立解题不接收生成答案。余额/额度不足后停止后续调用，不切换模型；输出截断、限流、网络/鉴权失败也停止。显示用量只涵盖解析到的成功响应，不等同余额，失败请求可能仍计费。
+
+本批未提供密钥，未真实调用或验证题目质量。官方 Flash 支持图像，但照片识别接线尚未完成。94 项 TS 测试、16 项独立 Rust 模块测试及 2 组 DeepSeek UI 模拟检查通过，运行 `python tests/check_deepseek_ui.py` 可复查，不会调用付费 API。完整 GNU Tauri 代码检查通过；Windows/Mac 当前只构建 rlib/可执行程序，Android 接入时再配置共享库目标。
+
+本机 GNU 完整桌面代码检查及 Windows 调试版编译通过（约 63.5 MB），但桌面测试可执行程序运行报 `STATUS_ENTRYPOINT_NOT_FOUND`，运行时依赖仍需排查，未宣称原生实机验收。当前用户预览使用本机合成数据浏览器界面，未提供正式安装包。

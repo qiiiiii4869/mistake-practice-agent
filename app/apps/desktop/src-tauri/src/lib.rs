@@ -11,6 +11,49 @@ mod remote;
 mod storage;
 mod knowledge;
 mod practice;
+mod model;
+mod model_http;
+
+#[derive(Default)]
+struct DeepseekState {
+    key:Mutex<Option<String>>,quota:AtomicBool,running:AtomicBool,usage:Mutex<model::Usage>,
+}
+#[tauri::command]
+fn deepseek_status(window:WebviewWindow,state:tauri::State<'_,DeepseekState>)->Result<Value,String>{
+    require_main(&window)?;
+    Ok(json!({"configured":state.key.lock().map_err(|_|"state_unavailable")?.is_some(),"quotaExhausted":state.quota.load(Ordering::SeqCst),
+        "model":model::MODEL,"usage":&*state.usage.lock().map_err(|_|"state_unavailable")?}))
+}
+#[tauri::command]
+fn configure_deepseek(window:WebviewWindow,state:tauri::State<'_,DeepseekState>,key:String)->Result<(),String>{
+    require_main(&window)?;
+    if state.running.swap(true,Ordering::SeqCst){return Err("model_busy".into());}
+    struct Guard<'a>(&'a AtomicBool);impl Drop for Guard<'_>{fn drop(&mut self){self.0.store(false,Ordering::SeqCst);}}
+    let _guard=Guard(&state.running);
+    let key=key.trim();
+    if !key.is_empty()&&(!(16..=256).contains(&key.len())||!key.bytes().all(|b|b.is_ascii_alphanumeric()||b==b'-'||b==b'_')){return Err("model_invalid_key".into());}
+    *state.key.lock().map_err(|_|"state_unavailable")?=if key.is_empty(){None}else{Some(key.into())};
+    state.quota.store(false,Ordering::SeqCst);
+    *state.usage.lock().map_err(|_|"state_unavailable")?=model::Usage::default();Ok(())
+}
+#[tauri::command]
+async fn call_deepseek(window:WebviewWindow,app:tauri::AppHandle,state:tauri::State<'_,DeepseekState>,request:model::Request)->Result<Value,String>{
+    require_main(&window)?;
+    if state.quota.load(Ordering::SeqCst){return Err("model_quota_exhausted".into());}
+    if state.running.swap(true,Ordering::SeqCst){return Err("model_busy".into());}
+    struct Guard<'a>(&'a AtomicBool);impl Drop for Guard<'_>{fn drop(&mut self){self.0.store(false,Ordering::SeqCst);}}
+    let _guard=Guard(&state.running);
+    let key={state.key.lock().map_err(|_|"state_unavailable")?.clone().ok_or("model_key_required")?};
+    let names=storage::model_names(&storage::open(&database_path(&app)?)?)?;
+    let payload=model::payload(&request,&names)?;
+    let body=match model_http::call(&key,&payload).await{
+        Ok(body)=>body,Err(error)=>{if error=="model_quota_exhausted"{state.quota.store(true,Ordering::SeqCst);}return Err(error);}
+    };
+    let (value,usage)=model::response(body,&names)?;
+    let mut total=state.usage.lock().map_err(|_|"state_unavailable")?;
+    total.prompt_tokens=total.prompt_tokens.saturating_add(usage.prompt_tokens);total.completion_tokens=total.completion_tokens.saturating_add(usage.completion_tokens);total.total_tokens=total.total_tokens.saturating_add(usage.total_tokens);
+    Ok(value)
+}
 
 const PROBE: &str = include_str!(concat!(env!("OUT_DIR"), "/probe.js"));
 const LOGIN_URL: &str = "https://www.zhixue.com/wap_login.html";
@@ -449,6 +492,7 @@ async fn save_diagnostic(
 pub fn run() {
     tauri::Builder::default()
         .manage(ProbeState::default())
+        .manage(DeepseekState::default())
         .invoke_handler(tauri::generate_handler![
             open_login,
             login_status,
@@ -462,7 +506,10 @@ pub fn run() {
             list_knowledge,
             import_knowledge,
             remove_knowledge,
-            search_knowledge
+            search_knowledge,
+            deepseek_status,
+            configure_deepseek,
+            call_deepseek
         ])
         .setup(|app| {
             if std::env::var("ZHIXUE_OPEN_LOGIN").as_deref() == Ok("1") {

@@ -187,5 +187,9 @@ export function agentError(error: unknown): string {
     invalid_model_output:'模型结果结构不完整，未采用本次生成结果。', invalid_evidence:'知识库来源格式异常，已停止生成。',
     model_quota_exhausted:'模型 token 或调用额度已耗尽，已停止，不会自动重试或切换服务。',agent_cancelled:'已停止本次生成，已有结果保留。',
     stale_agent_batch:'当前考试、题干或设置已变更，请重新生成并审核。',
+    model_key_required:'请先在本机填写 DeepSeek API Key。',model_invalid_key:'密钥格式不正确，请重新填写。',model_auth_failed:'DeepSeek 密钥无效或没有权限，请更换密钥。',
+    model_rate_limited:'DeepSeek 请求达到速率限制，本次已停止，不会自动重试。',model_busy:'已有模型请求正在运行，请等待完成。',
+    model_network_failed:'DeepSeek 连接失败或超时，本次已停止。',model_service_failed:'DeepSeek 服务未能完成请求，本次已停止。',
+    model_output_truncated:'本次输出达到 token 上限或未完整结束，已停止，请减少单次变式数。',invalid_model_request:'请求格式或大小不符合模型限制，已停止。',
     mock_not_exportable:'演示结果不能作为正式补练导出，请先接入真实模型。'} as Record<string,string>)[code] ?? '本次出题未完成，已有结果保留，请检查题干、知识库或模型接口。';
 }

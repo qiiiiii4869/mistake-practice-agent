@@ -277,6 +277,9 @@ pub(crate) fn load(conn: &Connection) -> Result<Stored, String> {
     }
     Ok(Stored { revision, snapshot })
 }
+pub(crate) fn model_names(conn:&Connection)->Result<Vec<String>,String>{
+    Ok(load(conn)?.snapshot.ok_or("model_no_workspace")?.students.into_iter().map(|s|s.name).collect())
+}
 pub(crate) fn save(
     conn: &mut Connection,
     expected: i64,

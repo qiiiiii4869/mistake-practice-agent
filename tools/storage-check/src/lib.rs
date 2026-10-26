@@ -6,3 +6,7 @@ mod storage;
 mod knowledge;
 #[path = "../../../app/apps/desktop/src-tauri/src/practice.rs"]
 mod practice;
+#[path = "../../../app/apps/desktop/src-tauri/src/model.rs"]
+mod model;
+#[path = "../../../app/apps/desktop/src-tauri/src/model_http.rs"]
+mod model_http;

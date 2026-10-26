@@ -7,7 +7,9 @@ rust-version = "1.88"
 
 [lib]
 name = "mistake_agent_desktop_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# Windows/Mac desktop binary links this Rust library directly. Mobile packaging
+# will add its staticlib/cdylib targets when the mobile shell is implemented.
+crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -19,6 +21,7 @@ serde_json = "1"
 tokio = { version = "1", features = ["time", "sync"] }
 rusqlite = { version = "0.41", features = ["bundled"] }
 unicode-normalization = "0.1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 [profile.dev]
 debug = 0
