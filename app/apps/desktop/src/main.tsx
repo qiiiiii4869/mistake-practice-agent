@@ -69,9 +69,8 @@ function App() {
       <div className="window-status">登录窗口：{login.open ? `已打开 · ${login.host ?? '等待页面加载'}` : '未打开'}</div>
       {login.captcha_60500 && <div className="notice error">页面检测到 60500 提示。请保留此状态，内置登录尚未通过验证；可回退到 Chrome 扩展导入。</div>}
     </section>
-    {report && <section className="card" aria-label="读取结果">
-      <div className="card-heading"><h2>{report.ok ? '当前学期考试' : '本次读取结果'}</h2><span className="muted">{report.options.length} 场考试 · {report.teachingClasses.length} 个任教班级</span></div>
-      {report.options.length > 0 ? <ul className="exam-list">{report.options.map(exam => <li key={exam.id}><span className="exam-icon">卷</span><span>{exam.name}</span><span className="list-tag">已读取</span></li>)}</ul> : <p>本次未读取到可展示的考试。</p>}
+    {report && !report.ok && <section className="card" aria-label="读取结果">
+      <div className="card-heading"><h2>本次读取结果</h2><span className="muted">{report.options.length} 场考试 · {report.teachingClasses.length} 个任教班级</span></div>
       <details><summary>接口诊断（不含密码、Cookie 或会话令牌）</summary><div className="diagnostics">{report.summary.endpoints.map((endpoint, index) => <div key={index}><code>{endpoint.path}</code><span>{endpoint.http_status ?? '—'} · {endpoint.error ?? endpoint.status}</span></div>)}</div></details>
       <div className="actions"><button className="secondary small" onClick={() => void saveDiagnostic()}>保存匿名诊断</button></div>
       {saved && <p className="saved">诊断已保存：{saved}</p>}
