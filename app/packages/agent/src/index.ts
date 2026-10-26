@@ -24,6 +24,8 @@ export interface PipelineOptions {
   workspace: Workspace; provider: ModelProvider; retrieve: (keyword: string) => Promise<KnowledgeHit[]>;
   overrides?: Record<string, Annotation>; progress?: (message: string) => void;
   signal?: AbortSignal;
+  targetNumbers?: string[];
+  variantCount?: number;
 }
 
 const fail = (code: string): never => { throw new Error(code); };
@@ -91,7 +93,9 @@ export async function runPipeline(options: PipelineOptions): Promise<AgentBatch>
     const result = await options.provider.call(request); checkCancelled(); assertAnonymous(result,names); return result;
   };
   const units = new Map<string,{ numbers:string[]; originals:{number:string;stem:string}[]; annotations:Annotation[] }>();
-  for (const q of analysis.questions.filter(q => q.weakStudents > 0)) {
+  const variantCount=options.variantCount??workspace.settings.variantsPerQuestion;
+  if(!Number.isSafeInteger(variantCount)||variantCount<1||variantCount>10)fail('invalid_model_request');
+  for (const q of analysis.questions.filter(q => q.weakStudents > 0&&(!options.targetNumbers||options.targetNumbers.includes(q.number)))) {
     options.progress?.(`标注第 ${q.number} 题…`);
     const original = workspace.paper?.questions.find(p => p.number === q.number && p.confirmed);
     if (!original) { batch.skipped.push({numbers:[q.number],reason:'题干未核对'}); continue; }
@@ -131,7 +135,7 @@ export async function runPipeline(options: PipelineOptions): Promise<AgentBatch>
       // Deliberately omit generated answer, explanation and selected source indexes.
     }));
     options.progress?.(`为第 ${unit.numbers.join('、')} 题生成并独立自检…`);
-    const exercises = await generate(workspace.settings.variantsPerQuestion);
+    const exercises = await generate(variantCount);
     for (let i=0;i<exercises.length;i++) {
       let exercise = exercises[i], check = await solve(exercise), attempts = 1;
       const passed = () => equivalent(exercise.answer,check.answer) && check.complete && check.inScope && !check.tooSimilar
@@ -144,6 +148,16 @@ export async function runPipeline(options: PipelineOptions): Promise<AgentBatch>
 }
 
 export interface StudentPractice { id:string; name:string; availability:string; variants:Variant[]; uncoveredNumbers:string[] }
+export async function regenerateVariant(workspace:Workspace,batch:AgentBatch,id:string,provider:ModelProvider,retrieve:PipelineOptions['retrieve']):Promise<AgentBatch> {
+  if(batch.inputKey!==practiceKey(workspace))return fail('stale_agent_batch');
+  if(provider.mode!==batch.mode)return fail('model_mode_mismatch');
+  const old=batch.variants.find(v=>v.id===id);if(!old)return fail('invalid_model_request');
+  const next=await runPipeline({workspace,provider,retrieve,targetNumbers:old.sourceNumbers,variantCount:1});
+  if(next.variants.length!==1)return fail('agent_regeneration_unavailable');
+  const replacement={...next.variants[0],id:old.id,review:'pending' as const};
+  return {...batch,variants:batch.variants.map(v=>v.id===id?replacement:v),annotations:[...batch.annotations.filter(a=>!next.annotations.some(n=>n.number===a.number)),...next.annotations],
+    calls:{annotate:batch.calls.annotate+next.calls.annotate,generate:batch.calls.generate+next.calls.generate,solve:batch.calls.solve+next.calls.solve}};
+}
 export function editVariant(variant: Variant, patch: Partial<Pick<Exercise,'stem'|'options'|'answer'|'explanation'>>): Variant {
   return {...variant,...patch,passed:false,review:'pending',check:{answer:'待重新自检',complete:false,inScope:false,tooSimilar:false,explanation:'题目或答案已修改，原自检与审核失效。'}};
 }
@@ -188,6 +202,8 @@ export function agentError(error: unknown): string {
     model_quota_exhausted:'模型 token 或调用额度已耗尽，已停止，不会自动重试或切换服务。',agent_cancelled:'已停止本次生成，已有结果保留。',
     stale_agent_batch:'当前考试、题干或设置已变更，请重新生成并审核。',
     model_key_required:'请先在本机填写 DeepSeek API Key。',model_invalid_key:'密钥格式不正确，请重新填写。',model_auth_failed:'DeepSeek 密钥无效或没有权限，请更换密钥。',
+    paper_page_not_saved:'这张照片尚未保存到当前考试，请先保存照片。',
+    model_mode_mismatch:'重新生成必须沿用原批次的真实或演示模式。',agent_regeneration_unavailable:'本题未找到可重新生成的依据或题型不支持，原结果保留。',
     model_rate_limited:'DeepSeek 请求达到速率限制，本次已停止，不会自动重试。',model_busy:'已有模型请求正在运行，请等待完成。',
     model_network_failed:'DeepSeek 连接失败或超时，本次已停止。',model_service_failed:'DeepSeek 服务未能完成请求，本次已停止。',
     model_output_truncated:'本次输出达到 token 上限或未完整结束，已停止，请减少单次变式数。',invalid_model_request:'请求格式或大小不符合模型限制，已停止。',

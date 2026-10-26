@@ -44,8 +44,15 @@ async fn call_deepseek(window:WebviewWindow,app:tauri::AppHandle,state:tauri::St
     struct Guard<'a>(&'a AtomicBool);impl Drop for Guard<'_>{fn drop(&mut self){self.0.store(false,Ordering::SeqCst);}}
     let _guard=Guard(&state.running);
     let key={state.key.lock().map_err(|_|"state_unavailable")?.clone().ok_or("model_key_required")?};
-    let names=storage::model_names(&storage::open(&database_path(&app)?)?)?;
-    let payload=model::payload(&request,&names)?;
+    let conn=storage::open(&database_path(&app)?)?;
+    let (payload,names)=if request.stage=="recognize_paper" {
+        let data=request.data.as_object().ok_or("invalid_model_request")?;
+        if data.len()!=1{return Err("invalid_model_request".into());}
+        let id=data.get("pageId").and_then(Value::as_str).filter(|s|s.len()<=80).ok_or("invalid_model_request")?;
+        let (image,numbers,names)=storage::vision_context(&conn,id)?;
+        (model::vision_payload(&image,&numbers)?,names)
+    }else{let names=storage::model_names(&conn)?;(model::payload(&request,&names)?,names)};
+    drop(conn);
     let body=match model_http::call(&key,&payload).await{
         Ok(body)=>body,Err(error)=>{if error=="model_quota_exhausted"{state.quota.store(true,Ordering::SeqCst);}return Err(error);}
     };

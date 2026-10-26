@@ -1,6 +1,21 @@
 export interface PaperPage { id: string; name: string; data: string }
 export interface PaperQuestion { number: string; pageId: string; stem: string; confirmed: boolean }
 export interface Paper { pages: PaperPage[]; questions: PaperQuestion[] }
+export interface Recognition {questions:{number:string;stem:string;confidence:'high'|'low'}[];warnings:string[]}
+export function validateRecognition(value:unknown,numbers:string[]):Recognition {
+  const fail=():never=>{throw new Error('invalid_paper_recognition');};
+  if(!value||typeof value!=='object')return fail();const v=value as Recognition;
+  if(!Array.isArray(v.questions)||v.questions.length>numbers.length||!Array.isArray(v.warnings)||v.warnings.length>100)return fail();
+  const used=new Set<string>();
+  const questions=v.questions.map(q=>{if(!q||!numbers.includes(q.number)||used.has(q.number)||typeof q.stem!=='string'||!q.stem.trim()||q.stem.length>20000||!['high','low'].includes(q.confidence))return fail();used.add(q.number);return {number:q.number,stem:q.stem,confidence:q.confidence};});
+  const warnings=v.warnings.map(w=>typeof w==='string'&&w.length<=2000?w:fail());return {questions,warnings};
+}
+export function applyRecognition(paper:Paper,pageId:string,recognition:Recognition,numbers:string[]):Paper {
+  const result=validateRecognition(recognition,numbers);
+  if(!paper.pages.some(p=>p.id===pageId))throw new Error('invalid_paper');
+  const replaced=new Set(result.questions.map(q=>q.number));
+  return validatePaper({...paper,questions:[...paper.questions.filter(q=>!replaced.has(q.number)),...result.questions.map(q=>({number:q.number,stem:q.stem,pageId,confirmed:false}))]},numbers);
+}
 
 // Only local raster images; no active SVG or remote resources.
 export function validatePaper(value: unknown, numbers: string[]): Paper {

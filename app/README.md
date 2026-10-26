@@ -131,3 +131,19 @@ TS 与 Rust 独立校验答案比对、审核状态、来源下标、题号及�
 本批未提供密钥，未真实调用或验证题目质量。官方 Flash 支持图像，但照片识别接线尚未完成。94 项 TS 测试、16 项独立 Rust 模块测试及 2 组 DeepSeek UI 模拟检查通过，运行 `python tests/check_deepseek_ui.py` 可复查，不会调用付费 API。完整 GNU Tauri 代码检查通过；Windows/Mac 当前只构建 rlib/可执行程序，Android 接入时再配置共享库目标。
 
 本机 GNU 完整桌面代码检查及 Windows 调试版编译通过（约 63.5 MB），但桌面测试可执行程序运行报 `STATUS_ENTRYPOINT_NOT_FOUND`，运行时依赖仍需排查，未宣称原生实机验收。当前用户预览使用本机合成数据浏览器界面，未提供正式安装包。
+
+## 最新桌面启动与试卷识别（2026-10-26 第七批）
+
+原始 `cargo build` 的 debug 模式默认寻找 1420 开发服务器；独立桌面程序需启用 `custom-protocol`：
+
+```powershell
+cargo +stable-x86_64-pc-windows-gnu build --manifest-path app/apps/desktop/src-tauri/Cargo.toml --features custom-protocol --bin mistake-agent-desktop
+```
+
+实际桌面窗口已确认能加载起始页和考试/学生入口，不是仅浏览器预览。完整测试 harness 的 `STATUS_ENTRYPOINT_NOT_FOUND` 尚未排查完成，不影响已验证的应用窗口启动。
+
+首屏点击“打开智学网登录”，手动登录后回到程序读取考试列表，再选择考试/学科/班级读取学生和逐题得分。学生名单默认展开，可看逐题合计和每题明细；不是只提供出题面板。
+
+保存试卷照片后，展开“DeepSeek 识别当前照片”。只使用不含学生姓名的空白试卷并先裁掉姓名；图片上传前程序无法判断像素中的姓名。后端只按已保存 pageId 读取图片，使用本机会话密钥。识别结果可预览/放弃/采用为未核对草稿，必须再核对与保存。单道变式也可重新生成，其他题审核保留，新题需重审。
+
+本批 102 项 TS 测试、17 项独立 Rust 测试，13/4/2 组桌面/出题/照片识别界面检查通过。真实试卷识别效果尚待密钥与教师资料验证。

@@ -61,7 +61,7 @@ export function KnowledgeWorkspace() {
     finally { setBusy(false); }
   }
   const emptyPages = candidate?.pages.filter(p => !p.text).map(p => p.number) ?? [];
-  return <section className="card" aria-label="本机知识库">
+  return <section className="card" id="knowledge-library" aria-label="本机知识库">
     <div className="card-heading"><h2>PDF 知识库</h2><span className="muted">{library?.documents.length ?? 0} 份文档 · 本机检索</span></div>
     <p className="help">课本与试卷可重复使用，知识库独立于当前考试。清除考试不会删除知识库。仅保存提取文字和来源页码，原 PDF 留在原位置。扫描页识别待接入。</p>
     <div className="actions"><label className="file-input">导入 PDF<input aria-label="导入知识库 PDF" type="file" accept=".pdf,application/pdf" disabled={locked || !library} onChange={e => void prepare(e)}/></label><button className="secondary small" disabled={locked} onClick={() => void refresh()}>刷新知识库</button></div>

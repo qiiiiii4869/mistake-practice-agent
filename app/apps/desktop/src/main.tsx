@@ -58,8 +58,9 @@ function App() {
   const verified = report?.ok === true && report.summary.authentication === 'verified_teacher_session' && report.options.length > 0;
   return <main>
     <header><div className="brand">错题智能推送 <span>AGENT</span></div><div className="stage">阶段 4 · 离线出题与审核</div></header>
-    <section className="intro"><span className="eyebrow">数据接入 / 智学网</span><h1>先连接课堂，再安排补练。</h1><p>验证内置窗口能否正常登录，并读取你任教班级的考试列表。</p></section>
-    <section className="steps" aria-label="验证步骤"><div><b>01</b><span>打开智学网</span></div><div><b>02</b><span>教师手动登录</span></div><div><b>03</b><span>读取考试列表</span></div></section>
+    <nav className="section-nav" aria-label="功能入口"><a href="#exam-students">考试与学生信息</a><a href="#paper-review">试卷核对</a><a href="#agent-review">出题与审核</a><a href="#knowledge-library">知识库</a></nav>
+    <section className="intro"><span className="eyebrow">数据接入 / 智学网</span><h1>先读取考试与学生，再安排补练。</h1><p>登录智学网后，选择某次考试、学科和班级，读取全班学生名单及逐题得分。</p></section>
+    <section className="steps" aria-label="验证步骤"><div><b>01</b><span>教师登录智学网</span></div><div><b>02</b><span>选择考试、学科与班级</span></div><div><b>03</b><span>读取学生与逐题得分</span></div></section>
     <section className="card">
       <div className="card-heading"><h2>教师账号连接</h2><span className={`badge ${verified ? 'success' : ''}`}>{verified ? '验证通过' : busy ? '读取中' : '待验证'}</span></div>
       <p>登录在独立的智学网窗口完成。密码无需填写在本程序中。</p>

@@ -2,7 +2,7 @@ import { deepseekProvider, type DeepseekStatus } from '../../../packages/agent/s
 import React from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { analyze, type Workspace } from '../../../packages/core/src';
-import { runPipeline, assemble, agentError, editVariant, recheckVariant, type AgentBatch, type QuestionKind, type Exercise } from '../../../packages/agent/src';
+import { runPipeline, assemble, agentError, editVariant, recheckVariant, regenerateVariant, type AgentBatch, type QuestionKind, type Exercise } from '../../../packages/agent/src';
 import { demoProvider } from '../../../packages/agent/src/mock';
 import type { KnowledgeHit } from '../../../packages/knowledge/src';
 
@@ -67,7 +67,12 @@ export function AgentWorkspace({ workspace, locked, onBusy, save }: Props) {
     }catch(error){setMessage(agentError(error));}
     finally{setWorking(false);onBusy(false);void refreshStatus();}
   }
-  return <section className="card" aria-label="出题流程演示">
+  async function regenerate(id:string){
+    if(!batch)return;setWorking(true);onBusy(true);setMessage('正在为这道题重新生成并独立自检…');
+    try{const next=await regenerateVariant(workspace,batch,id,batch.mode==='real'?realProvider():demoProvider(keyword.trim(),rules),query=>invoke<KnowledgeHit[]>('search_knowledge',{query}));setBatch(next);setMessage('已替换为新题，需重新审核采用并保存。');}
+    catch(error){setMessage(agentError(error));}finally{setWorking(false);onBusy(false);void refreshStatus();}
+  }
+  return <section className="card" id="agent-review" aria-label="出题流程演示">
     <div className="card-heading"><h2>Agent 出题与审核</h2><span className="badge">{mode==='real'?'DeepSeek V4.1 Flash':'离线演示'}</span></div>
     <details><summary>DeepSeek 模型设置</summary><p className="help">官方接口 · deepseek-flash（V4.1 Flash）。密钥只保存在当前程序内存，重启需重新填写，不写入考试、日志或仓库。</p>
       <label>DeepSeek API Key<input aria-label="DeepSeek API Key" type="password" autoComplete="off" value={key} disabled={disabled} onChange={e=>setKey(e.target.value)}/></label>
@@ -93,7 +98,7 @@ export function AgentWorkspace({ workspace, locked, onBusy, save }: Props) {
           {v.options.map((option,i)=><label key={i}>选项 {i+1}<input aria-label={`修改选项 ${v.id}-${i+1}`} maxLength={3000} disabled={disabled} value={option} onChange={e=>edit(v.id,{options:v.options.map((o,j)=>j===i?e.target.value:o)})}/></label>)}
           <label>答案<textarea aria-label={`修改答案 ${v.id}`} rows={2} maxLength={10000} disabled={disabled} value={v.answer} onChange={e=>edit(v.id,{answer:e.target.value})}/></label>
           <label>解析<textarea aria-label={`修改解析 ${v.id}`} rows={3} maxLength={20000} disabled={disabled} value={v.explanation} onChange={e=>edit(v.id,{explanation:e.target.value})}/></label>
-          <div className="actions"><button className="secondary small" disabled={disabled} onClick={()=>void recheck(v.id)}>重新自检 {v.id}</button><button className="secondary small danger" disabled={disabled} onClick={()=>setBatch({...batch,variants:batch.variants.filter(item=>item.id!==v.id)})}>删除此题 {v.id}</button></div>
+          <div className="actions"><button className="secondary small" disabled={disabled} onClick={()=>void recheck(v.id)}>重新自检 {v.id}</button><button className="secondary small" disabled={disabled} onClick={()=>void regenerate(v.id)}>重新生成 {v.id}</button><button className="secondary small danger" disabled={disabled} onClick={()=>setBatch({...batch,variants:batch.variants.filter(item=>item.id!==v.id)})}>删除此题 {v.id}</button></div>
         </details>
         <label>教师审核<select aria-label={`教师审核 ${v.id}`} value={v.review} disabled={disabled} onChange={e=>review(v.id,e.target.value as 'approved'|'rejected'|'pending')}><option value="pending">待审核</option><option value="approved" disabled={!v.passed}>{batch.mode==='mock'?'采用（仅演示）':'采用'}</option><option value="rejected">不采用</option></select></label>
       </article>)}

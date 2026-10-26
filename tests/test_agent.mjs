@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { runPipeline, assemble, assertAnonymous, subjectConfig, editVariant, recheckVariant } from '../app/packages/agent/src/index.ts';
+import { runPipeline, assemble, assertAnonymous, subjectConfig, editVariant, recheckVariant, regenerateVariant } from '../app/packages/agent/src/index.ts';
 import { workspaceFromExport } from '../app/packages/core/src/index.ts';
 import { fixture, addUnavailable } from './core_fixture.mjs';
 
@@ -117,4 +117,16 @@ test('teacher edits revoke approval and require fresh independent solution',asyn
   const p=provider();const checked=await recheckVariant(w,p,edited);assert.equal(checked.passed,true);assert.equal(checked.review,'pending');
   assert.equal(p.calls[0].data.question.answer,undefined);
   const wrong=await recheckVariant(w,p,editVariant(approved,{answer:'不一致的答案'}));assert.equal(wrong.passed,false);
+});
+test('single-question regeneration replaces only target and revokes approval',async()=>{
+ const w=workspace(),batch=await run(w);batch.variants.forEach(v=>v.review='approved');const p=provider();
+ const next=await regenerateVariant(w,batch,batch.variants[0].id,p,async()=>[evidence]);
+ assert.equal(next.variants[0].id,batch.variants[0].id);assert.equal(next.variants[0].review,'pending');assert.equal(next.variants[1].review,'approved');
+ assert.deepEqual(next.calls,{annotate:2,generate:2,solve:3});assert.equal(batch.variants[0].review,'approved');
+});
+test('regeneration quota and missing evidence preserve previous reviewed batch',async()=>{
+ const w=workspace(),batch=await run(w);batch.variants[0].review='approved';
+ await assert.rejects(regenerateVariant(w,batch,batch.variants[0].id,provider({quota:true}),async()=>[evidence]),/model_quota_exhausted/);
+ await assert.rejects(regenerateVariant(w,batch,batch.variants[0].id,provider(),async()=>[]),/agent_regeneration_unavailable/);
+ assert.equal(batch.variants[0].review,'approved');
 });

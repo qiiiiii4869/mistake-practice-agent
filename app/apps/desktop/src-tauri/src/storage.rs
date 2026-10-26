@@ -280,6 +280,12 @@ pub(crate) fn load(conn: &Connection) -> Result<Stored, String> {
 pub(crate) fn model_names(conn:&Connection)->Result<Vec<String>,String>{
     Ok(load(conn)?.snapshot.ok_or("model_no_workspace")?.students.into_iter().map(|s|s.name).collect())
 }
+pub(crate) fn vision_context(conn:&Connection,page_id:&str)->Result<(String,Vec<String>,Vec<String>),String>{
+    let snapshot=load(conn)?.snapshot.ok_or("model_no_workspace")?;
+    let image=snapshot.paper.as_ref().and_then(|p|p.pages.iter().find(|p|p.id==page_id)).ok_or("paper_page_not_saved")?.data.clone();
+    let numbers=snapshot.students.iter().find(|s|s.availability=="scored").ok_or("invalid_workspace")?.questions.iter().map(|q|q.number.clone()).collect();
+    Ok((image,numbers,snapshot.students.into_iter().map(|s|s.name).collect()))
+}
 pub(crate) fn save(
     conn: &mut Connection,
     expected: i64,

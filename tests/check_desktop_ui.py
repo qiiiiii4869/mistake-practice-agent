@@ -131,6 +131,13 @@ def main():
             expect(current.get_by_text("模拟三班 · 模拟生物", exact=False)).to_be_visible()
             expect(current.locator("table").first.locator("tbody tr").nth(1).locator("td").last).to_have_text("2")
             print("PASS: live-class command is audited, saved and analyzed with unavailable student excluded.")
+            roster=current.get_by_label("学生名单与逐题得分",exact=True)
+            expect(roster).to_be_visible()
+            expect(roster.locator("tbody tr").first.locator("td").nth(2)).to_have_text("3")
+            roster.get_by_text("查看逐题得分",exact=True).first.click()
+            expect(roster).to_contain_text("第 1 题：2 / 2")
+            expect(roster.locator("tbody tr").last).to_contain_text("无逐题记录")
+            print("PASS: student roster is visible by default, per-question sums and score details are available, unavailable pupils remain unjudged.")
 
             current.get_by_text("本场教师设置", exact=True).click()
             current.get_by_label("部分得分纳入", exact=True).select_option("false")

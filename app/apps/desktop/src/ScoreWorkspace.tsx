@@ -140,8 +140,8 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props)
   const subjectCode = subjects.find(s => s.id === subjectId)?.code;
   const matchingClasses = classes.filter(c => c.subjects.some(s => s.code === subjectCode));
   return <>
-    <section className="card" aria-label="全班成绩接入">
-      <div className="card-heading"><h2>全班逐题得分</h2><span className="muted">仅处理当前一场考试</span></div>
+    <section className="card" id="exam-students" aria-label="全班成绩接入">
+      <div className="card-heading"><h2>选择考试，读取学生信息</h2><span className="muted">仅处理当前一场考试</span></div>
       {report?.ok && report.options.length > 0 ? <>
         <div className="fields">
           <label>选择考试<select aria-label="选择考试" value={examId} disabled={locked} onChange={e => void chooseExam(e.target.value)}><option value="">请选择考试</option>{report.options.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select></label>
@@ -149,7 +149,7 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props)
           <label>选择班级<select aria-label="选择班级" value={classId} disabled={locked || !matchingClasses.length} onChange={e => setClassId(e.target.value)}><option value="">请选择班级</option>{matchingClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
         </div>
         <div className="actions"><button disabled={locked || !loginOpen || !classId || !subjectId || !examId} onClick={() => void readClass()}>读取全班逐题得分</button></div>
-      </> : <p>先连接教师账号并读取考试列表，或使用下面的扩展文件导入。</p>}
+      </> : <p>请先在上方登录智学网并点击“读取考试列表”，然后在这里选择考试、学科与班级。学生姓名、名单和逐题得分会一起读取；也可使用下方扩展文件导入。</p>}
       <label className={`file-input ${locked ? 'disabled' : ''}`}>导入扩展导出文件<input type="file" accept=".json,application/json" multiple disabled={locked} aria-label="导入扩展导出文件" onChange={e => void importFiles(e)} /></label>
       <p className="help">同时选择 student-class 与同次导出的 verification-full 文件。只接受完整全班得分，不接收答案图片或作答原文。</p>
       <p className="notice" aria-live="polite" data-testid="workspace-message">{message}</p>
@@ -171,7 +171,7 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props)
         catch (error) { setMessage(dataErrorMessage(error)); }
       }}>保存设置并重算</button></details>}
       <h3>按题统计</h3><div className="table-scroll"><table><thead><tr><th>题号</th><th>满分</th><th>失分率</th><th>全错</th><th>部分得分</th><th>纳入补练人数</th></tr></thead><tbody>{analysis.questions.map(q => <tr key={q.number}><td>{q.number}</td><td>{q.fullScore}</td><td>{q.fullScore ? `${(q.lostRate * 100).toFixed(1)}%` : '不计分'}</td><td>{q.incorrectStudents}</td><td>{q.partialStudents}</td><td>{q.weakStudents}</td></tr>)}</tbody></table></div>
-      <details><summary>按学生查看薄弱题（{analysis.students.length} 人）</summary><div className="table-scroll"><table><thead><tr><th>学生</th><th>状态</th><th>失分</th><th>纳入补练题号</th></tr></thead><tbody>{analysis.students.map((s, i) => <tr key={s.id}><td>{s.name || `学生 ${i + 1}`}</td><td>{s.availability === 'scored' ? '已读取' : s.availability === 'not_scanned' ? '没扫' : '无原卷'}</td><td>{s.availability === 'scored' ? Number(s.lostPoints.toFixed(2)) : '—'}</td><td>{s.availability === 'scored' ? s.weakQuestions.join('、') || '暂无' : '不判对错'}</td></tr>)}</tbody></table></div></details>
+      <details open aria-label="学生名单与逐题得分"><summary>学生名单与逐题得分（{analysis.students.length} 人）</summary><div className="table-scroll"><table><thead><tr><th>学生</th><th>状态</th><th>逐题得分合计</th><th>失分</th><th>纳入补练题号</th><th>逐题明细</th></tr></thead><tbody>{analysis.students.map((s, i) => <tr key={s.id}><td>{s.name || `学生 ${i + 1}`}</td><td>{s.availability === 'scored' ? '已读取' : s.availability === 'not_scanned' ? '没扫' : '无原卷'}</td><td>{s.availability === 'scored' ? Number(snapshot.students.find(student=>student.id===s.id)!.questions.reduce((total,q)=>total+q.score,0).toFixed(2)) : '—'}</td><td>{s.availability === 'scored' ? Number(s.lostPoints.toFixed(2)) : '—'}</td><td>{s.availability === 'scored' ? s.weakQuestions.join('、') || '暂无' : '不判对错'}</td><td>{s.availability === 'scored' ? <details><summary>查看逐题得分</summary><ul>{snapshot.students.find(student=>student.id===s.id)!.questions.map(q=><li key={q.number}>第 {q.number} 题：{q.score} / {q.fullScore} · {q.result==='correct'?'全对':q.result==='incorrect'?'全错':q.result==='partial_credit'?'部分得分':'不计分'}</li>)}</ul></details> : '无逐题记录'}</td></tr>)}</tbody></table></div></details>
       <div className="actions"><button className="secondary small danger" disabled={locked} onClick={() => setConfirmClear(true)}>清除当前考试</button></div>
       {confirmClear && <div className="confirm-panel" role="region" aria-label="确认清除考试"><b>清除本机当前考试及教师设置？</b><p>这会清除程序保存的本场学生、得分、试卷照片、题干及出题审核结果。下载目录中的扩展文件和智学网登录态仍保留。</p><div className="actions"><button className="danger" disabled={working} onClick={() => void persist(null)}>确认清除</button><button className="secondary" disabled={working} onClick={() => setConfirmClear(false)}>取消清除</button></div></div>}
     </section>}

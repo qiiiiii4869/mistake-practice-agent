@@ -11,6 +11,9 @@ name = "mistake_agent_desktop_lib"
 # will add its staticlib/cdylib targets when the mobile shell is implemented.
 crate-type = ["rlib"]
 
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

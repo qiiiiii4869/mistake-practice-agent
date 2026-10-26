@@ -8,3 +8,5 @@
 .agent-keyword{display:block;margin:20px 0}.agent-keyword input,.agent-variant input{display:block;width:100%;padding:10px;border:1px solid #cbd8cf;border-radius:7px;font:inherit}.agent-variant{padding:20px;border:1px solid #dce3dc;border-radius:10px;margin:18px 0}.agent-variant.flagged{border-color:#c57855;background:#fff3ed}.agent-question,.agent-variant pre{white-space:pre-wrap;overflow-wrap:anywhere}.agent-variant pre{font:inherit}.agent-variant label{display:block;margin-top:16px}
 .agent-variant textarea{display:block;width:100%;font:inherit;padding:10px;border:1px solid #cbd8cf;border-radius:7px;resize:vertical}
 input[type=password]{display:block;width:100%;padding:10px;border:1px solid #cbd8cf;border-radius:7px;font:inherit}
+.section-nav{display:flex;gap:18px;flex-wrap:wrap;margin-top:20px}.section-nav a{font-size:13px;color:#175d50;text-decoration:none;border-bottom:1px solid #b4cbbd}.card{scroll-margin-top:20px}
+.recognition-text{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}
