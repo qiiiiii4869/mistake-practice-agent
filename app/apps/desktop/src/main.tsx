@@ -57,7 +57,7 @@ function App() {
 
   const verified = report?.ok === true && report.summary.authentication === 'verified_teacher_session' && report.options.length > 0;
   return <main>
-    <header><div className="brand">错题智能推送 <span>AGENT</span></div><div className="stage">阶段 3 · 试卷题干核对</div></header>
+    <header><div className="brand">错题智能推送 <span>AGENT</span></div><div className="stage">阶段 4 · 离线出题与审核</div></header>
     <section className="intro"><span className="eyebrow">数据接入 / 智学网</span><h1>先连接课堂，再安排补练。</h1><p>验证内置窗口能否正常登录，并读取你任教班级的考试列表。</p></section>
     <section className="steps" aria-label="验证步骤"><div><b>01</b><span>打开智学网</span></div><div><b>02</b><span>教师手动登录</span></div><div><b>03</b><span>读取考试列表</span></div></section>
     <section className="card">
@@ -77,7 +77,7 @@ function App() {
     </section>}
     <ScoreWorkspace report={report} loginOpen={login.open} parentBusy={busy} onBusy={setBusy}/>
     <KnowledgeWorkspace/>
-    <footer>每场考试单独处理，学生与得分只保存在本机。已支持试卷照片与手动题干核对，自动识别与出题待接入。<br/>本次只读取得分，不采集作答选项，暂不提供错误选项分布。</footer>
+    <footer>每场考试单独处理，学生与得分只保存在本机。已支持试卷照片与手动题干核对，已提供离线出题演示，真实识别与出题待接入。<br/>本次只读取得分，不采集作答选项，暂不提供错误选项分布。</footer>
   </main>;
 }
 

@@ -1,3 +1,4 @@
+import { AgentWorkspace } from './AgentWorkspace';
 import { PaperWorkspace } from './PaperWorkspace';
 import React from 'react';
 import { invoke } from '@tauri-apps/api/core';
@@ -175,5 +176,6 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props)
     </section>}
     {snapshot && analysis && <PaperWorkspace paper={snapshot.paper} numbers={analysis.audit.questionNumbers} locked={locked} onBusy={onBusy}
       save={paper => persist({ ...snapshot, paper })}/>}
+    {snapshot && <AgentWorkspace key={stored.revision} workspace={snapshot} locked={locked} onBusy={onBusy}/>}
   </>;
 }
