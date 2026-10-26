@@ -187,7 +187,7 @@ impl Snapshot {
             for page in &paper.pages {
                 if page.id.is_empty() || page.id.len() > 80 || !page.id.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-')
                     || !ids.insert(&page.id) || page.name.trim().is_empty() || page.name.chars().count() > 300 { return Err(bad()); }
-                let data = ["data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,"]
+                let data = ["data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,", "data:application/pdf;base64,", "data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,"]
                     .iter().find_map(|prefix| page.data.strip_prefix(prefix)).ok_or_else(bad)?;
                 let body = data.trim_end_matches('=');
                 if body.is_empty() || data.len() - body.len() > 2 || !body.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'+' || c == b'/') { return Err(bad()); }
@@ -358,6 +358,16 @@ mod tests {
         for (field,value) in [("answer",serde_json::json!("wrong answer")),("passed",serde_json::json!(false)),("sourceIndexes",serde_json::json!([99])),("sourceNumbers",serde_json::json!(["999"]))] {
             let mut raw=original.clone();raw["practice"]["variants"][0][field]=value;
             let snapshot:Snapshot=serde_json::from_value(raw).unwrap();assert!(snapshot.validate().is_err(),"{field}");
+        }
+    }
+    #[test]
+    fn uploaded_documents_roundtrip_without_recognition() {
+        for mime in ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"] {
+            let mut conn=Connection::open_in_memory().unwrap();init(&conn).unwrap();
+            let mut snapshot=sample();snapshot.paper=Some(Paper{pages:vec![PaperPage{id:"file-1".into(),name:"synthetic document".into(),data:format!("data:{mime};base64,aGVsbG8=")}],questions:vec![]});
+            save(&mut conn,0,Some(snapshot)).unwrap();let restored=load(&conn).unwrap().snapshot.unwrap().paper.unwrap();
+            assert!(restored.pages[0].data.contains(mime));assert!(restored.questions.is_empty());
+            save(&mut conn,1,None).unwrap();assert!(load(&conn).unwrap().snapshot.is_none());
         }
     }
     #[test]

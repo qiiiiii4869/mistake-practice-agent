@@ -1,3 +1,4 @@
+import { renderPaperFiles } from './renderPaperFiles';
 import { practiceKey } from '../../../packages/agent/src/storage';
 import { preparePaper } from '../../../packages/agent/src/preparePaper';
 import { deepseekProvider, type DeepseekStatus } from '../../../packages/agent/src/deepseek';
@@ -9,7 +10,7 @@ import { demoProvider } from '../../../packages/agent/src/mock';
 import type { KnowledgeHit } from '../../../packages/knowledge/src';
 
 const labels: Record<QuestionKind,string> = {choice:'选择题',text:'纯文字题',diagram:'依赖图形',shared_material:'共用材料',listening:'听力',writing:'作文',practical:'实验操作'};
-interface Props { workspace: Workspace; revision:number; locked: boolean; onBusy: (busy: boolean) => void; prepare: (paper: Paper) => Promise<Workspace|null>; save: (batch: AgentBatch) => Promise<boolean> }
+interface Props { workspace: Workspace; revision:number; locked: boolean; onBusy: (busy: boolean) => void; prepare: (paper: Paper, expectedRevision:number) => Promise<{workspace:Workspace;revision:number}>; save: (batch: AgentBatch) => Promise<boolean> }
 export function AgentWorkspace({ workspace, revision, locked, onBusy, prepare, save }: Props) {
   const [batch,setBatch]=React.useState<AgentBatch|null>(workspace.practice??null);
   const [keyword,setKeyword]=React.useState(workspace.practice?.annotations[0]?.annotation.keywords[0]??'');
@@ -25,7 +26,8 @@ export function AgentWorkspace({ workspace, revision, locked, onBusy, prepare, s
   const [exportFolder,setExportFolder]=React.useState('');
   const [message,setMessage]=React.useState('真实模型尚未接入。可用离线演示验证检索、出题、自检与审核。');
   const controller=React.useRef<AbortController|null>(null);
-  React.useEffect(()=>{if(controller.current)return;setBlank(false);setBatch(workspace.practice??null);setRules({});setMessage(workspace.practice?(workspace.practice.mode==='mock'?'已恢复本场演示出题与审核，仍不可正式导出。':'已恢复本场 DeepSeek 出题与审核。密钥只在当前程序会话可用，重启需重填。'):'可配置 DeepSeek，或先运行离线演示。');},[workspace]);
+  const ownPaperUpdate=React.useRef<string|null>(null);
+  React.useEffect(()=>{if(ownPaperUpdate.current===JSON.stringify(workspace.paper)){ownPaperUpdate.current=null;return;}if(controller.current)return;setBlank(false);setBatch(workspace.practice??null);setRules({});setMessage(workspace.practice?(workspace.practice.mode==='mock'?'已恢复本场演示出题与审核，仍不可正式导出。':'已恢复本场 DeepSeek 出题与审核。密钥只在当前程序会话可用，重启需重填。'):'可配置 DeepSeek，或先运行离线演示。');},[workspace]);
   React.useEffect(()=>()=>controller.current?.abort(),[]);
   async function refreshStatus(){try{setStatus(await invoke<DeepseekStatus>('deepseek_status'));}catch{/* Older shells cannot enable real calls. */}}
   React.useEffect(()=>{void refreshStatus();},[]);
@@ -51,15 +53,18 @@ export function AgentWorkspace({ workspace, revision, locked, onBusy, prepare, s
     if(mode==='real'&&(!status?.configured||status.quotaExhausted)){setMessage(agentError(status?.quotaExhausted?'model_quota_exhausted':'model_key_required'));return;}
     setWorking(true);onBusy(true);controller.current=new AbortController();
     try {
-      let input=workspace;
+      let input=workspace;let inputRevision=revision;
       if(mode==='real'&&workspace.paper?.pages.length){
         if(!blank)throw new Error('paper_blank_required');
-        const paper=await preparePaper(workspace,pageId=>invoke('call_deepseek',{request:{stage:'recognize_paper',instruction:'',data:{pageId}}}),setMessage,controller.current.signal);
-        if(JSON.stringify(paper)!==JSON.stringify(workspace.paper)){
+        const rendered=await renderPaperFiles(input.paper!,analysis.audit.questionNumbers,setMessage,controller.current.signal);
+        if(JSON.stringify(rendered)!==JSON.stringify(input.paper)){
+          setBatch(null);ownPaperUpdate.current=JSON.stringify(rendered);const saved=await prepare(rendered,inputRevision);input=saved.workspace;inputRevision=saved.revision;
+        }
+        const paper=await preparePaper(input,pageId=>invoke('call_deepseek',{request:{stage:'recognize_paper',instruction:'',data:{pageId}}}),setMessage,controller.current.signal);
+        if(JSON.stringify(paper)!==JSON.stringify(input.paper)){
           setBatch(null);
-          const prepared=await prepare(paper);
-          if(!prepared){setBatch(batch);throw new Error('paper_save_failed');}
-          input=prepared;
+          try{ownPaperUpdate.current=JSON.stringify(paper);const saved=await prepare(paper,inputRevision);input=saved.workspace;inputRevision=saved.revision;}
+          catch{ownPaperUpdate.current=null;if(input===workspace)setBatch(batch);throw new Error('paper_save_failed');}
         }
       }
       const next=await runPipeline({workspace:input,provider:mode==='real'?realProvider():demoProvider(keyword.trim(),rules),

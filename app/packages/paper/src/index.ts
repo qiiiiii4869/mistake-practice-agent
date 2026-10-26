@@ -28,7 +28,7 @@ export function validatePaper(value: unknown, numbers: string[]): Paper {
   const pages = p.pages.map(page => {
     if (!page || typeof page.id !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(page.id) || ids.has(page.id)
       || typeof page.name !== 'string' || !page.name.trim() || page.name.length > 300 || typeof page.data !== 'string'
-      || !/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(page.data)) return bad();
+      || !/^data:(?:image\/(?:png|jpeg|webp)|application\/(?:pdf|vnd\.openxmlformats-officedocument\.wordprocessingml\.document));base64,[A-Za-z0-9+/]+={0,2}$/.test(page.data)) return bad();
     total += page.data.length;
     if (total > 8 * 1024 * 1024) return bad();
     ids.add(page.id);

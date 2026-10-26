@@ -177,6 +177,13 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props)
     </section>}
     {snapshot && analysis && <PaperWorkspace paper={snapshot.paper} numbers={analysis.audit.questionNumbers} locked={locked} onBusy={onBusy}
       save={paper => persist({ ...snapshot, paper, practice: undefined })}/>}
-    {snapshot && <AgentWorkspace workspace={snapshot} revision={stored.revision} locked={locked} onBusy={onBusy} prepare={async paper=>{const next={...snapshot,paper,practice:undefined};const ok=await persist(next);onBusy(true);return ok?next:null;}} save={practice=>persist({...snapshot,practice})}/>}
+    {snapshot && <AgentWorkspace workspace={snapshot} revision={stored.revision} locked={locked} onBusy={onBusy} prepare={async (paper,expectedRevision)=>{
+      const next=validateWorkspace({...snapshot,paper,practice:undefined});
+      const result=await invoke<StoredWorkspace>('save_workspace',{expectedRevision,snapshot:next});
+      const restored=result.snapshot?validateWorkspace(result.snapshot):null;
+      if(!restored)throw new Error('paper_save_failed');
+      setStored({revision:result.revision,snapshot:restored});setSettings(restored.settings);
+      return {workspace:restored,revision:result.revision};
+    }} save={practice=>persist({...snapshot,practice})}/>}
   </>;
 }

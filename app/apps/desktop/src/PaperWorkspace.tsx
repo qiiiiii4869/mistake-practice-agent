@@ -19,34 +19,42 @@ export function PaperWorkspace({ paper, numbers, locked, onBusy, save }: Props) 
   async function importPages(event: React.ChangeEvent<HTMLInputElement>) {
     const files = [...(event.target.files ?? [])]; event.target.value = '';
     if (!files.length) return;
-    setLoading(true); onBusy(true); setMessage('正在检查照片…');
+    setLoading(true); onBusy(true); setMessage('正在保存空白卷文件…');
     try {
-      if (files.length + draft.pages.length > 30 || files.some(f => !['image/jpeg', 'image/png', 'image/webp'].includes(f.type))
+      if (files.length + draft.pages.length > 30 || files.some(f => !/\.(jpe?g|png|webp|pdf|docx)$/i.test(f.name))
         || files.reduce((sum, f) => sum + f.size, 0) > 6 * 1024 * 1024) throw new Error();
       const pages = [];
       for (const file of files) {
         const data = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file);
         });
-        const image = new Image(); image.src = data; await image.decode();
-        pages.push({ id: crypto.randomUUID(), name: file.name, data });
+        const extension=file.name.split('.').pop()!.toLowerCase();
+        const encoded=data.slice(data.indexOf(',')+1);
+        const mime=extension==='pdf'?'application/pdf':extension==='docx'?'application/vnd.openxmlformats-officedocument.wordprocessingml.document':extension==='jpg'||extension==='jpeg'?'image/jpeg':`image/${extension}`;
+        const normalized=`data:${mime};base64,${encoded}`;
+        if(['pdf','docx'].includes(extension)){
+          const header=new Uint8Array(await file.slice(0,8).arrayBuffer());
+          if(extension==='pdf'?!new TextDecoder().decode(header).startsWith('%PDF-'):!(header[0]===80&&header[1]===75&&header[2]===3&&header[3]===4))throw new Error();
+        }else{const image=new Image();image.src=normalized;await image.decode();}
+        pages.push({ id: crypto.randomUUID(), name: file.name, data:normalized });
       }
       const next=validatePaper({ ...draft, pages: [...draft.pages, ...pages] }, numbers);
       if(await save(next)){setDraft(next);setMessage('空白卷已保存到本机。点击“生成结果”后，Agent 才会读取、核对并出题。');}
       else setMessage('空白卷未能保存，请检查上方提示后重新上传。');
-    } catch { setMessage('导入失败。请选择有效的 JPG、PNG 或 WebP；最多 30 页，所有照片编码后合计不超过 8 MB。可先压缩照片。原草稿保留。'); }
+    } catch { setMessage('导入失败。请选择有效照片、PDF 或 Word（.docx）；最多 30 个文件、展开后最多 30 页，总编码不超过 8 MB。旧版 .doc 请另存为 .docx 或 PDF。原内容保留。'); }
     finally { setLoading(false); onBusy(false); }
   }
   return <section className="card" id="paper-review" aria-label="试卷题干核对">
-    <div className="card-heading"><h2>上传空白卷</h2><span className="muted">已保存 {paper?.pages.length ?? 0} 页</span></div>
-    <p className="help">上传时只保存到本机，不识别、不调用模型。请上传无学生姓名的空白试卷；点击“生成结果”后统一读取、核对、检索知识库并出题。</p>
-    <label className="file-input">添加试卷照片<input aria-label="添加试卷照片" type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={disabled} onChange={e => void importPages(e)}/></label>
+    <div className="card-heading"><h2>上传空白卷</h2><span className="muted">已保存 {paper?.pages.length ?? 0} 个文件或页面</span></div>
+    <p className="help">上传时只保存到本机，不识别、不调用模型。支持照片、Word（.docx）和 PDF；文档在点击生成时才在本机展开为页面。请上传无学生姓名的空白试卷；点击“生成结果”后统一读取、核对、检索知识库并出题。</p>
+    <label className="file-input">添加照片、Word 或 PDF<input aria-label="添加试卷照片" type="file" multiple accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp,.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={disabled} onChange={e => void importPages(e)}/></label>
     <details><summary>手动查看或修正题干（可选）</summary>
     <div className="fields">
       <label>成绩题号<select aria-label="成绩题号" value={number} disabled={disabled} onChange={e => setNumber(e.target.value)}>{numbers.map(n => <option key={n}>{n}</option>)}</select></label>
       <label>来源照片<select aria-label="来源照片" value={pageId} disabled={disabled || !draft.pages.length} onChange={e => update(q?.stem ?? '', e.target.value)}>{draft.pages.length ? draft.pages.map((p,i) => <option key={p.id} value={p.id}>第 {i+1} 页 · {p.name}</option>) : <option value="">请先添加照片</option>}</select></label>
     </div>
-    {page && <a href={page.data} target="_blank" rel="noreferrer"><img className="paper-preview" src={page.data} alt={`试卷来源：${page.name}`}/></a>}
+    {page?.data.startsWith('data:image/') && <a href={page.data} target="_blank" rel="noreferrer"><img className="paper-preview" src={page.data} alt={`试卷来源：${page.name}`}/></a>}
+    {page&&!page.data.startsWith('data:image/')&&<p className="help">{page.name}：文件已保存，点击“生成结果”时才展开页面。</p>}
     <label className="paper-stem">第 {number} 题题干<textarea aria-label="题干" rows={9} maxLength={20000} disabled={disabled || !page} value={q?.stem ?? ''} onChange={e => update(e.target.value, pageId)}/></label>
     <label><input aria-label="已核对题干" type="checkbox" checked={q?.confirmed ?? false} disabled={disabled || !page || !q?.stem.trim()} onChange={e => update(q?.stem ?? '', pageId, e.target.checked)}/> 已核对题号、题干与来源照片</label>
     <p className="help">修改题干或来源后需重新核对；保存试卷会清除本场旧出题与审核结果。未保存的草稿在退出程序后丢失；替换或清除当前考试会同时清除照片与题干。</p>
