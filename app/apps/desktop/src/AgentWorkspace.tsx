@@ -8,10 +8,14 @@ import { analyze, type Workspace, type Paper } from '../../../packages/core/src'
 import { runPipeline, assemble, agentError, editVariant, recheckVariant, regenerateVariant, type AgentBatch, type QuestionKind, type Exercise } from '../../../packages/agent/src';
 import { demoProvider } from '../../../packages/agent/src/mock';
 import type { KnowledgeHit } from '../../../packages/knowledge/src';
+import { useAccount, accountError } from './AccountGate';
 
 const labels: Record<QuestionKind,string> = {choice:'选择题',text:'纯文字题',diagram:'依赖图形',shared_material:'共用材料',listening:'听力',writing:'作文',practical:'实验操作'};
 interface Props { workspace: Workspace; revision:number; locked: boolean; onBusy: (busy: boolean) => void; prepare: (paper: Paper, expectedRevision:number) => Promise<{workspace:Workspace;revision:number}>; save: (batch: AgentBatch) => Promise<boolean> }
 export function AgentWorkspace({ workspace, revision, locked, onBusy, prepare, save }: Props) {
+  const account=useAccount();
+  const [pendingGeneration,setPendingGeneration]=React.useState<{jobId:string;batch:AgentBatch|null}|null>(null);
+  const requestKey=React.useRef<string|null>(null);
   const [batch,setBatch]=React.useState<AgentBatch|null>(workspace.practice??null);
   const [keyword,setKeyword]=React.useState(workspace.practice?.annotations[0]?.annotation.keywords[0]??'');
   const [rules,setRules]=React.useState<Record<string,{kind:QuestionKind;group:string}>>({});
@@ -31,6 +35,7 @@ export function AgentWorkspace({ workspace, revision, locked, onBusy, prepare, s
   React.useEffect(()=>()=>controller.current?.abort(),[]);
   async function refreshStatus(){try{setStatus(await invoke<DeepseekStatus>('deepseek_status'));}catch{/* Older shells cannot enable real calls. */}}
   React.useEffect(()=>{void refreshStatus();},[]);
+  React.useEffect(()=>{void invoke<{jobId:string;batch:AgentBatch|null}|null>('account_pending_generation').then(setPendingGeneration).catch(()=>{});},[]);
   function realProvider(){
     const base=deepseekProvider(request=>invoke('call_deepseek',{request}));
     return {...base,async call(request:Parameters<typeof base.call>[0]){
@@ -52,7 +57,12 @@ export function AgentWorkspace({ workspace, revision, locked, onBusy, prepare, s
     if (mode==='mock'&&!keyword.trim()) return;
     if(mode==='real'&&(!status?.configured||status.quotaExhausted)){setMessage(agentError(status?.quotaExhausted?'model_quota_exhausted':'model_key_required'));return;}
     setWorking(true);onBusy(true);controller.current=new AbortController();
+    let jobId:string|null=null;let generated:AgentBatch|null=null;
     try {
+      if(mode==='real'){
+        requestKey.current??=crypto.randomUUID();
+        const job=await invoke<{jobId:string}>('account_generation_begin',{requestKey:requestKey.current});jobId=job.jobId;
+      }
       let input=workspace;let inputRevision=revision;
       if(mode==='real'&&workspace.paper?.pages.length){
         if(!blank)throw new Error('paper_blank_required');
@@ -69,9 +79,36 @@ export function AgentWorkspace({ workspace, revision, locked, onBusy, prepare, s
       }
       const next=await runPipeline({workspace:input,provider:mode==='real'?realProvider():demoProvider(keyword.trim(),rules),
         retrieve:query=>invoke<KnowledgeHit[]>('search_knowledge',{query}),progress:setMessage,signal:controller.current.signal});
+      if(jobId){
+        if(!next.variants.some(v=>v.passed)){
+          await invoke('account_generation_finish',{jobId,batch:null});requestKey.current=null;jobId=null;
+          setBatch(next);setMessage('没有生成自检通过的补练题，本次不扣次数。请核对题干、知识库和自检提示。');return;
+        }
+        generated=next;setPendingGeneration({jobId,batch:next});
+        await invoke('account_generation_finish',{jobId,batch:next});
+        requestKey.current=null;
+        setBatch(next);
+        const saved=await save(next);
+        if(saved)setPendingGeneration(null);
+        setMessage(saved?`生成完成：${next.variants.length} 道题，已扣 1 次并保存，剩余次数请见顶部。请逐题审核。`:'已确认本次使用次数，结果暂存在本机恢复文件中，请重试保存。');
+        return;
+      }
       setBatch(next);setMessage(`${next.mode==='mock'?'演示完成':'生成完成'}：${next.variants.length} 道题，${next.skipped.length} 组跳过。请逐题查看并审核。`);
-    } catch(error){setMessage(agentError(error));}
-    finally{setWorking(false);onBusy(false);controller.current=null;void refreshStatus();}
+    } catch(error){
+      if(jobId&&!generated){try{await invoke('account_generation_finish',{jobId,batch:null});requestKey.current=null;}catch{setPendingGeneration({jobId,batch:null});}}
+      const code=error instanceof Error?error.message:String(error);
+      setMessage(generated?'补练结果已暂存，但次数确认或保存尚未完成。请点击“恢复并确认结果”；同一批不会重复扣次。':/^(account_|session_|credits_|generation_)/.test(code)?accountError(error):agentError(error));
+    }
+    finally{setWorking(false);onBusy(false);controller.current=null;void refreshStatus();void account.refresh();}
+  }
+  async function recoverGeneration(){
+    if(!pendingGeneration)return;setWorking(true);onBusy(true);
+    try{
+      await invoke('account_generation_finish',{jobId:pendingGeneration.jobId,batch:pendingGeneration.batch});
+      if(pendingGeneration.batch){setBatch(pendingGeneration.batch);if(!await save(pendingGeneration.batch))throw new Error('storage_failed');}
+      setPendingGeneration(null);requestKey.current=null;setMessage(pendingGeneration.batch?'已恢复并保存这批结果，同一批只扣 1 次。':'已释放上次未完成任务的次数，可重新生成。');
+    }catch(error){setMessage(String(error)==='invalid_practice'?'当前考试或题干已变化，无法把旧结果放入本场；恢复文件保留，请联系管理员。':accountError(error));}
+    finally{setWorking(false);onBusy(false);void account.refresh();}
   }
   function review(id:string,status:'approved'|'rejected'|'pending') {
     if(batch)setBatch({...batch,variants:batch.variants.map(v=>v.id===id?{...v,review:status}:v)});
@@ -110,6 +147,8 @@ export function AgentWorkspace({ workspace, revision, locked, onBusy, prepare, s
   }
   return <section className="card" id="agent-review" aria-label="出题流程演示">
     <div className="card-heading"><h2>Agent 出题与审核</h2><span className="badge">{mode==='real'?'DeepSeek V4.1 Flash':'离线演示'}</span></div>
+    <p className="help">账号剩余 {account.user.credits} 次，可用 {account.user.available} 次。真实生成一批自检通过的补练扣 1 次，失败、离线演示、审核和下载已有结果不扣次。</p>
+    {pendingGeneration&&<div className="generation-pending"><p>{pendingGeneration.batch?'本机有一批尚未完成确认或保存的生成结果。恢复时会核对服务器记录，同一批不会重复扣次。':'上次生成未完成，可以释放预占次数后重新开始。'}</p><button className="secondary small" disabled={disabled} onClick={()=>void recoverGeneration()}>{pendingGeneration.batch?'恢复并确认结果':'释放未完成任务'}</button></div>}
     <details><summary>DeepSeek 模型设置</summary><p className="help">官方接口 · deepseek-flash（V4.1 Flash）。密钥只保存在当前程序内存，重启需重新填写，不写入考试、日志或仓库。</p>
       <label>DeepSeek API Key<input aria-label="DeepSeek API Key" type="password" autoComplete="off" value={key} disabled={disabled} onChange={e=>setKey(e.target.value)}/></label>
       <div className="actions"><button className="secondary small" disabled={disabled||!key.trim()} onClick={()=>void configure()}>启用 DeepSeek</button><button className="secondary small" disabled={disabled||!status?.configured} onClick={()=>void configure(true)}>清除会话密钥</button></div>
@@ -121,7 +160,7 @@ export function AgentWorkspace({ workspace, revision, locked, onBusy, prepare, s
     {mode==='mock'&&<label className="agent-keyword">演示知识点与检索词<input aria-label="演示知识点与检索词" maxLength={100} disabled={disabled} value={keyword} onChange={e=>setKeyword(e.target.value)}/></label>}
     {confirmed.length>0 && <details><summary>题型规则（已核对 {confirmed.length} 题）</summary><div className="table-scroll"><table><thead><tr><th>题号</th><th>题型</th><th>共用材料组</th></tr></thead><tbody>{confirmed.map(q=><tr key={q.number}><td>{q.number}</td><td><select aria-label={`第 ${q.number} 题题型`} disabled={disabled} value={rules[q.number]?.kind??'text'} onChange={e=>setRules({...rules,[q.number]:{kind:e.target.value as QuestionKind,group:rules[q.number]?.group??''}})}>{Object.entries(labels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></td><td><input aria-label={`第 ${q.number} 题材料组`} maxLength={100} disabled={disabled||rules[q.number]?.kind!=='shared_material'} value={rules[q.number]?.group??''} onChange={e=>setRules({...rules,[q.number]:{kind:'shared_material',group:e.target.value}})}/></td></tr>)}</tbody></table></div><p className="help">同一阅读材料的小题使用相同组名，题干中需包含完整共用材料。图形题仅尝试纯文字变式；听力、作文、实验操作不自动出题。</p></details>}
     {mode==='real'&&!!workspace.paper?.pages.length&&<label><input type="checkbox" aria-label="确认空白卷不含学生姓名" checked={blank} disabled={disabled} onChange={e=>setBlank(e.target.checked)}/> 已上传空白试卷，不含学生姓名；点击生成后才发送给模型读取和核对</label>}
-    <div className="actions"><button disabled={disabled||(mode==='mock'&&(!keyword.trim()||!confirmed.length))||(mode==='real'&&(!status?.configured||status.quotaExhausted||(!workspace.paper?.pages.length&&!confirmed.length)||(!!workspace.paper?.pages.length&&!blank)))} onClick={()=>void run()}>{mode==='real'?'生成结果':'运行离线出题演示'}</button>{working&&controller.current&&<button className="secondary" onClick={()=>controller.current?.abort()}>停止生成</button>}</div>
+    <div className="actions"><button disabled={disabled||(mode==='mock'&&(!keyword.trim()||!confirmed.length))||(mode==='real'&&(!!pendingGeneration||account.user.available<1||!status?.configured||status.quotaExhausted||(!workspace.paper?.pages.length&&!confirmed.length)||(!!workspace.paper?.pages.length&&!blank)))} onClick={()=>void run()}>{mode==='real'?'生成结果':'运行离线出题演示'}</button>{working&&controller.current&&<button className="secondary" onClick={()=>controller.current?.abort()}>停止生成</button>}</div>
     <p className="notice" aria-live="polite" data-testid="agent-message">{message}</p>
     {batch&&<>
       <details><summary>知识点分析</summary><ul>{batch.annotations.map(item=><li key={item.number}>第 {item.number} 题：{item.annotation.knowledgePoints.join('、')}；检索词：{item.annotation.keywords.join('、')}</li>)}</ul></details>

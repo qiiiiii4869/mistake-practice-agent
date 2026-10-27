@@ -1,0 +1,28 @@
+[Unit]
+Description=Mistake Agent account and usage API
+After=network.target
+
+[Service]
+Type=simple
+User=mistake-agent
+Group=mistake-agent
+WorkingDirectory=/opt/mistake-agent/current
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=8787
+Environment=DATABASE_PATH=/var/lib/user-store/users.sqlite3
+ExecStart=/opt/mistake-agent/runtime/node-v24.16.0-linux-x64/bin/node src/index.mjs
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/user-store
+MemoryMax=384M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

@@ -54,6 +54,7 @@ def main():
             agent.get_by_role('button',name='保存本场出题与审核',exact=True).click()
             expect(page.get_by_test_id('workspace-message')).to_contain_text('已校验并保存')
             assert page.evaluate('testStored.snapshot.practice.mode')=='real'
+            assert page.evaluate('testAccount.credits')==9
             expect(agent.get_by_text('修改题目（修改后需重新自检与审核）',exact=True).first).to_be_visible()
             print('PASS: password input, session-only key IPC, real-provider pipeline, anonymous requests and correctly marked stored batch.')
             agent.get_by_label('确认空白卷不含学生姓名',exact=True).check()
@@ -67,6 +68,7 @@ def main():
             agent.get_by_role('button',name='清除会话密钥',exact=True).click()
             expect(agent.get_by_label('出题运行模式',exact=True)).to_have_value('mock')
             assert page.evaluate('testDeepseekCalls.length')==count
+            assert page.evaluate('testAccount.credits')==9
             assert not errors,errors
             print('PASS: quota stops after one failed call, no automatic retry/fallback, session key can be cleared.')
             browser.close()

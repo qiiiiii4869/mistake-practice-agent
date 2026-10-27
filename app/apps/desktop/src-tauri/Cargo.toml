@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Local teacher practice agent — Zhixue login validation"
 edition = "2021"
 rust-version = "1.88"
+default-run = "mistake-agent-desktop"
 
 [lib]
 name = "mistake_agent_desktop_lib"

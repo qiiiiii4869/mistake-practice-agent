@@ -8,7 +8,9 @@ import { errorMessage, type ConnectionReport, type ExamSubject, type SubjectRepo
 
 interface Props { report: ConnectionReport | null; loginOpen: boolean; parentBusy: boolean; onBusy: (busy: boolean) => void }
 export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props) {
-  const [stored, setStored] = React.useState<StoredWorkspace>({ revision: 0, snapshot: null });
+  const [stored, setStoredState] = React.useState<StoredWorkspace>({ revision: 0, snapshot: null });
+  const latestStored=React.useRef(stored);
+  function setStored(next:StoredWorkspace){latestStored.current=next;setStoredState(next);}
   const [ready, setReady] = React.useState(false);
   const [working, setWorking] = React.useState(false);
   const [message, setMessage] = React.useState('正在检查本机当前考试…');
@@ -75,7 +77,7 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props)
     setWorking(true); onBusy(true);
     try {
       const normalized = next ? validateWorkspace(next) : null;
-      const saved = await invoke<StoredWorkspace>('save_workspace', { expectedRevision: stored.revision, snapshot: normalized });
+      const saved = await invoke<StoredWorkspace>('save_workspace', { expectedRevision: latestStored.current.revision, snapshot: normalized });
       const restored = saved.snapshot ? validateWorkspace(saved.snapshot) : null;
       setStored({ revision: saved.revision, snapshot: restored }); setSettings(restored?.settings ?? null);
       setCandidate(null); setConfirmClear(false);
@@ -178,12 +180,12 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props)
     {snapshot && analysis && <PaperWorkspace paper={snapshot.paper} numbers={analysis.audit.questionNumbers} locked={locked} onBusy={onBusy}
       save={paper => persist({ ...snapshot, paper, practice: undefined })}/>}
     {snapshot && <AgentWorkspace workspace={snapshot} revision={stored.revision} locked={locked} onBusy={onBusy} prepare={async (paper,expectedRevision)=>{
-      const next=validateWorkspace({...snapshot,paper,practice:undefined});
+      const next=validateWorkspace({...latestStored.current.snapshot!,paper,practice:undefined});
       const result=await invoke<StoredWorkspace>('save_workspace',{expectedRevision,snapshot:next});
       const restored=result.snapshot?validateWorkspace(result.snapshot):null;
       if(!restored)throw new Error('paper_save_failed');
       setStored({revision:result.revision,snapshot:restored});setSettings(restored.settings);
       return {workspace:restored,revision:result.revision};
-    }} save={practice=>persist({...snapshot,practice})}/>}
+    }} save={practice=>persist({...latestStored.current.snapshot!,practice})}/>}
   </>;
 }

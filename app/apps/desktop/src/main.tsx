@@ -5,14 +5,18 @@ import { invoke } from '@tauri-apps/api/core';
 import { errorMessage, type ConnectionReport, type LoginStatus } from '../../../packages/zhixue/src';
 import './styles.css';
 import { ScoreWorkspace } from './ScoreWorkspace';
+import { AccountGate, useAccount } from './AccountGate';
+import { AdminWorkspace } from './AdminWorkspace';
 
 function App() {
+  const {setWorkBusy}=useAccount();
   const [report, setReport] = React.useState<ConnectionReport | null>(null);
   const [login, setLogin] = React.useState<LoginStatus>({ open: false, host: null, captcha_60500: false });
   const [busy, setBusy] = React.useState(false);
   const [opening, setOpening] = React.useState(false);
   const [message, setMessage] = React.useState('点击“登录智学网”，在弹出的官方页面使用教师账号登录。');
   const [saved, setSaved] = React.useState<string | null>(null);
+  React.useEffect(()=>{setWorkBusy(busy);return()=>setWorkBusy(false);},[busy,setWorkBusy]);
 
   React.useEffect(() => {
     let active = true;
@@ -81,4 +85,8 @@ function App() {
   </main>;
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+function WorkspaceRouter(){
+  const account=useAccount();
+  return <><div hidden={account.view!=='teaching'}><App/></div>{account.user.role==='admin'&&<div hidden={account.view!=='admin'}><AdminWorkspace/></div>}</>;
+}
+createRoot(document.getElementById('root')!).render(<AccountGate><WorkspaceRouter /></AccountGate>);

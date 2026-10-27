@@ -14,6 +14,7 @@ mod practice;
 mod model;
 mod model_http;
 mod pdf_export;
+mod account;
 
 #[derive(Default)]struct ExportState(AtomicBool);
 #[derive(Serialize)]#[serde(rename_all="camelCase")]
@@ -26,7 +27,7 @@ async fn export_practice_pdf(window:WebviewWindow,app:tauri::AppHandle,state:tau
     let _guard=Guard(&state.0);
     let database=database_path(&app)?;
     let compiler=app.path().resource_dir().map_err(|_|"pdf_compiler_missing")?.join("resources").join("typst").join(if cfg!(windows){"typst.exe"}else{"typst"});
-    let work=app.path().app_local_data_dir().map_err(|_|"storage_failed")?.join("export-work");
+    let work=account::user_folder(&app)?.join("export-work");
     tauri::async_runtime::spawn_blocking(move||{
         use tauri_plugin_dialog::DialogExt;
         use std::io::Write;
@@ -171,7 +172,7 @@ fn allowed_navigation(url: &tauri::Url) -> bool {
 
 fn require_main(window: &WebviewWindow) -> Result<(), String> {
     if window.label() == "main" {
-        Ok(())
+        account::require_session(&window.app_handle().state::<account::AccountState>())
     } else {
         Err("local_window_required".into())
     }
@@ -198,10 +199,7 @@ fn create_login(app: &tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     let builder = builder
         .data_directory(
-            app.path()
-                .app_local_data_dir()
-                .map_err(|_| "webview_path_failed")?
-                .join("zhixue-webview"),
+            account::user_folder(app)?.join("zhixue-webview"),
         )
         .additional_browser_args("--no-proxy-server");
     builder.build().map_err(|_| "login_window_create_failed")?;
@@ -367,16 +365,12 @@ async fn probe_progress(
 }
 
 fn database_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
-    Ok(app
-        .path()
-        .app_local_data_dir()
-        .map_err(|_| "storage_failed")?
-        .join("workspace.sqlite"))
+    Ok(account::user_folder(app)?.join("workspace.sqlite"))
 }
 
 async fn with_knowledge<T, F>(app: tauri::AppHandle, action: F) -> Result<T, String>
 where T: Send + 'static, F: FnOnce(&mut rusqlite::Connection) -> Result<T, String> + Send + 'static {
-    let path = app.path().app_local_data_dir().map_err(|_| "storage_failed")?.join("knowledge.sqlite");
+    let path = account::user_folder(&app)?.join("knowledge.sqlite");
     tauri::async_runtime::spawn_blocking(move || {
         let mut conn = storage::open(&path)?;
         knowledge::init(&conn)?;
@@ -429,14 +423,12 @@ async fn save_workspace(
     let saved = storage::save(
         &mut storage::open(&database_path(&app)?)?,
         expected_revision,
-        snapshot,
+        snapshot.clone(),
     )?;
+    account::clear_saved_pending(&app, &snapshot);
     // Audit writing is secondary: a filesystem error must not hide a committed save.
     if let Some(audit) = audit {
-        if let Ok(folder) = app
-            .path()
-            .app_local_data_dir()
-            .map(|p| p.join("diagnostics"))
+        if let Ok(folder) = account::user_folder(&app).map(|p| p.join("diagnostics"))
         {
             if std::fs::create_dir_all(&folder).is_ok() {
                 if let Ok(bytes) = serde_json::to_vec_pretty(&audit) {
@@ -516,11 +508,7 @@ async fn save_diagnostic(
         .clone()
         .ok_or("diagnostic_not_ready")?;
     let diagnostic = anonymous_diagnostic(&report, state.captcha_seen.load(Ordering::SeqCst));
-    let folder = app
-        .path()
-        .app_local_data_dir()
-        .map_err(|_| "diagnostic_path_failed")?
-        .join("diagnostics");
+    let folder = account::user_folder(&app)?.join("diagnostics");
     std::fs::create_dir_all(&folder).map_err(|_| "diagnostic_write_failed")?;
     let path = folder.join("tauri-login-verification.json");
     std::fs::write(
@@ -537,8 +525,23 @@ pub fn run() {
         .manage(ProbeState::default())
         .manage(DeepseekState::default())
         .manage(ExportState::default())
+        .manage(account::AccountState::default())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            account::account_config,
+            account::account_admin_users,
+            account::account_admin_ledger,
+            account::account_admin_grant,
+            account::account_admin_deactivate,
+            account::account_admin_audit,
+            account::account_admin_restore,
+            account::account_admin_delete,
+            account::account_sign_in,
+            account::account_me,
+            account::account_sign_out,
+            account::account_generation_begin,
+            account::account_generation_finish,
+            account::account_pending_generation,
             open_login,
             login_status,
             read_exam_list,
@@ -558,9 +561,8 @@ pub fn run() {
             export_practice_pdf
         ])
         .setup(|app| {
-            if std::env::var("ZHIXUE_OPEN_LOGIN").as_deref() == Ok("1") {
-                create_login(app.handle()).map_err(std::io::Error::other)?;
-            }
+            // Software login comes before access to a teacher's Zhixue session.
+            let _ = app;
             Ok(())
         })
         .run(tauri::generate_context!())

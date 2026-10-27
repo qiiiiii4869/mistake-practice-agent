@@ -41,7 +41,8 @@ def main():
    agent.get_by_text('DeepSeek 模型设置',exact=True).click();agent.get_by_label('DeepSeek API Key',exact=True).fill('sk-synthetic-deferred-key');agent.get_by_role('button',name='启用 DeepSeek',exact=True).click()
    run=agent.get_by_role('button',name='生成结果',exact=True);expect(run).to_be_disabled();agent.get_by_label('确认空白卷不含学生姓名',exact=True).check();expect(run).to_be_enabled()
    page.evaluate('testEvents=[]');run.click();expect(agent.get_by_test_id('agent-message')).to_contain_text('生成完成：2 道题')
-   assert page.evaluate('testEvents')==['recognize_paper','recognize_paper','save_workspace','annotate','generate','solve','solve']
+   assert page.evaluate('testEvents')==['recognize_paper','recognize_paper','save_workspace','annotate','generate','solve','solve','save_workspace']
+   assert page.evaluate('testAccount.credits')==9
    assert page.evaluate('testStored.snapshot.paper.questions[0].confirmed') is True
    assert page.evaluate('testDeepseekCalls[0].data')=={'pageId':page.evaluate('testStored.snapshot.paper.pages[0].id')}
    agent.get_by_role('button',name='保存本场出题与审核',exact=True).click();expect(page.get_by_test_id('workspace-message')).to_contain_text('已校验并保存')
@@ -57,6 +58,7 @@ def main():
    expect(agent.get_by_role('article')).to_have_count(2);assert page.evaluate('testStored.snapshot.paper.questions[0].stem')=='说明光合作用的意义。'
    page.evaluate("testSaveFailure=false;testVisionMode='ok';testQuota=true;testEvents=[]");run.click();expect(agent.get_by_test_id('agent-message')).to_contain_text('额度已耗尽');expect(run).to_be_disabled()
    assert page.evaluate('testEvents')==['recognize_paper'];assert page.evaluate('testStored.snapshot.practice.variants.length')==2
+   assert page.evaluate('testAccount.credits')==9
    assert not errors,errors
    print('PASS: uncertainty, inconsistent reads and quota exhaustion stop the pipeline without overwriting saved paper/results or continuing paid calls.')
    browser.close()

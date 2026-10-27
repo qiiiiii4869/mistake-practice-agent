@@ -12,10 +12,17 @@ MOCK = r"""
 window.testScenario = 'success';
 window.testOpened = false;
 window.testCommands = [];
+window.testAccount={id:'00000000-0000-4000-8000-000000000001',username:'synthetic_teacher',role:'user',status:'active',credits:10,reserved:0,available:10,createdAt:1};
+window.testAccountJob=null;
 window.testStored = JSON.parse(sessionStorage.getItem('synthetic-workspace') ?? '{"revision":0,"snapshot":null}');
 window.testSaveFailure = false;
 window.__TAURI_INTERNALS__ = {invoke: async (command, args) => {
   window.testCommands.push(command);
+  if (command === 'account_config') return {configured:true,server:'http://127.0.0.1:8787'};
+  if (command === 'account_me') return structuredClone(window.testAccount);
+  if (command === 'account_pending_generation') return null;
+  if (command === 'account_generation_begin') {window.testAccountJob='00000000-0000-4000-8000-000000000002';return {jobId:window.testAccountJob,state:'reserved'};}
+  if (command === 'account_generation_finish') {if(args.batch){window.testAccount.credits--;window.testAccount.available--;}return {charged:!!args.batch,user:structuredClone(window.testAccount)};}
   if (command === 'load_workspace') return structuredClone(window.testStored);
   if (command === 'save_workspace') {
     if (window.testSaveFailure) throw 'storage_failed';

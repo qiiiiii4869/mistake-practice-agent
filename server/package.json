@@ -1,0 +1,13 @@
+{
+  "name": "mistake-agent-account-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24.16.0" },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/index.mjs",
+    "test": "node --test test/*.test.mjs",
+    "admin": "node --env-file-if-exists=.env src/admin.mjs"
+  },
+  "dependencies": { "fastify": "^5.6.2", "@fastify/rate-limit": "^10.3.0" }
+}

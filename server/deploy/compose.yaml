@@ -1,0 +1,46 @@
+services:
+  api:
+    build: ..
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - accounts:/srv/data
+    expose:
+      - "8787"
+    environment:
+      TRUST_PROXY: 172.29.81.2
+    networks:
+      account_network:
+        ipv4_address: 172.29.81.3
+    mem_limit: 512m
+    security_opt:
+      - no-new-privileges:true
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      ACCOUNT_DOMAIN: ${ACCOUNT_DOMAIN:?请设置账号服务域名}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    networks:
+      account_network:
+        ipv4_address: 172.29.81.2
+networks:
+  account_network:
+    ipam:
+      config:
+        - subnet: 172.29.81.0/24
+volumes:
+  accounts:
+  caddy_data:
+  caddy_config:

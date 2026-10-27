@@ -1,0 +1,5 @@
+{$ACCOUNT_DOMAIN} {
+    encode zstd gzip
+    reverse_proxy api:8787
+    header Strict-Transport-Security "max-age=31536000"
+}

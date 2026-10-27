@@ -1,5 +1,7 @@
 # Windows 桌面端
 
+> 2026-10-27 当前状态：桌面已增加软件账号登录、同窗口管理员工作台、按批计次及普通用户冻结/恢复/删除，账号后端已上线。下文 10 月 25/26 日逐批说明保留历史；最新启动、部署、验收边界和下一步见根目录 [上午交接报告](../2026-10-27上午工作交接报告.md) 与 [账号服务说明](../server/README.md)。当前云端版用 `start-windows.ps1` 启动，重编译前需设置 `MISTAKE_ACCOUNT_API_URL=https://codeqiqi.com/mistake-agent/`，不能省略账号地址。
+
 Tauri 2 + React + TypeScript。已支持教师内置登录、考试与任教班级选择、全班逐题得分读取、扩展文件导入、单场 SQLite 存储、教师设置与薄弱题统计。已接空白卷延迟识别、知识库检索、DeepSeek 出题审核及本机 PDF 导出；真实模型质量和安装包待验收。
 
 2026-10-25 21:21（北京时间）教师会话、1 个任教班级、6 场考试验证通过，本次未观察到 60500。21:36 全班实测通过：50 人名单，49 人 × 24 题 = 1176 条逐题记录，1 人无原卷。SQLite 保存与重启恢复已确认，TS 重新校验的统计与 Python 原审计一致。证据位于根目录 `output/desktop-full-class-verification-audit.json`。原扩展文件也已通过 TS 导入校验，证据为 `output/desktop-import-verification-audit.json`，原始数据没有复制进项目。

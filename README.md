@@ -1,8 +1,11 @@
 # 错题智能推送 Agent
 
 > 整体产品计划、架构和进度见 [计划进度表.md](计划进度表.md)。
+> 2026-10-27 上午交接见 [上午工作交接报告](2026-10-27上午工作交接报告.md)，包含最终部署状态、验证结果和下一步。
 
-当前可读取、导入、保存和分析逐题得分，已实现试卷手动核对、本地 PDF 知识库、离线出题审核与保存恢复。真实模型、正式 PDF 下载与新版 Windows 安装包尚未完成；不修改智学网成绩。
+当前可读取、导入、保存和分析逐题得分，支持照片/PDF/Word 空白卷延迟读取、本地 PDF 知识库、DeepSeek 接线、教师审核、保存恢复及桌面 PDF 导出。真实模型质量、真实练习 PDF 全流程验收和新版 Windows 安装包尚未完成；不修改智学网成绩。
+
+2026-10-27 新增软件账号注册/登录、按批计次、管理员加次及普通用户冻结/恢复/删除。日常注册仅创建普通用户，管理员只能在服务器端授权。管理员 `wangmin` 已保留原账号 ID、密码摘要、10 次余额及流水迁入云端；当前桌面程序连接云端，使用 `.\app\start-windows.ps1` 启动。冻结撤销登录并保留次数，恢复允许用原密码重新登录；删除会清除当前云端数据库中的用户及关联记录，需用户名和永久删除确认，历史备份及用户本机资料不在范围内。管理员账号受保护。教学资料按账号隔离保存在本机，生成成功一批扣 1 次，失败不扣。账号服务及部署见 [`server/README.md`](server/README.md)。支付回调尚未接入。
 
 ## 下载源码与启动
 
@@ -12,7 +15,9 @@
 git clone https://github.com/qiiiiii4869/mistake-practice-agent.git
 cd mistake-practice-agent
 npm --prefix app ci
-npm --prefix app run desktop:build:debug
+$env:MISTAKE_ACCOUNT_API_URL='https://codeqiqi.com/mistake-agent/'
+& .\app\apps\desktop\scripts\prepare-runtime.ps1
+npm --prefix app run tauri --workspace @mistake-agent/desktop -- build --debug --no-bundle
 .\app\start-windows.ps1
 ```
 
