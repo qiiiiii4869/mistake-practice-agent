@@ -1,7 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { auditExport, workspaceFromExport, validateWorkspace, analyze, scoreLabel, parseExportText, validateSettings } from '../app/packages/core/src/index.ts';
+import { auditExport, workspaceFromExport, validateWorkspace, analyze, compareExams, scoreLabel, parseExportText, validateSettings } from '../app/packages/core/src/index.ts';
 import {fixture,addUnavailable} from './core_fixture.mjs';
+import {examTrend,heatCell} from '../app/packages/core/src/analysis.ts';
+
+test('trend includes all matching local exams, updates current once and preserves missing scores',()=>{
+  const w=workspaceFromExport(fixture(),'chrome_extension');
+  w.overview={status:'received',classAvg:60,gradeAvg:65,topClassAvg:80,classMax:90,gradeMax:100};
+  const record={examId:'old',examName:'Old',classId:w.exam.classId,className:w.exam.className,subjectName:w.exam.subjectName,finishedAt:'test',students:[]};
+  const history=[{...record,examId:w.exam.id,classAvg:999,gradeAvg:999,topClassAvg:999},
+    {...record,classAvg:0,gradeAvg:55,topClassAvg:70},
+    {...record,examId:'unrelated',classId:'other',classAvg:80},
+    {...record,examId:'other-subject',subjectName:'different',classAvg:80},
+    {...record,examId:'oldest'}];
+  const trend=examTrend(w,history);
+  assert.deepEqual(trend.map(r=>r.id),['oldest','old',w.exam.id]);
+  assert.equal(trend[0].classAvg,null);assert.equal(trend[0].gradeAvg,null);assert.equal(trend[0].topClassAvg,null);
+  assert.equal(trend[1].classAvg,0);assert.equal(trend[2].classAvg,60);assert.equal(trend[2].gradeAvg,65);assert.equal(trend[2].topClassAvg,80);
+  assert.equal(trend.filter(r=>r.current).length,1);
+  assert.equal(examTrend(w,[]).length,1);
+});
+test('heatmap distinguishes missing records, non-scored questions and actual zero scores',()=>{
+  assert.equal(heatCell(null,null).color,heatCell(0,0).color);
+  assert.notEqual(heatCell(0,2).color,heatCell(null,null).color);
+  assert.equal(heatCell(1,2).label,'1 / 2 · 50.0%');
+  assert.notEqual(heatCell(2,2).color,heatCell(0,2).color);
+});
 
 test('full class scores and labels are independently recomputed (Python parity)',()=>{
   const {audit} = auditExport(fixture());
@@ -11,11 +35,25 @@ test('full class scores and labels are independently recomputed (Python parity)'
 });
 test('official overview and student ranks survive workspace validation',()=>{
   const d=fixture();
-  d.data.overview={status:'received',class_max:90,class_avg:70,grade_max:100,grade_avg:75};
+  d.data.overview={status:'received',class_max:90,class_avg:70,grade_max:100,grade_avg:75,top_class_avg:95,top_class_name:'二班'};
   Object.assign(d.data.students[0],{roster_score:80,class_rank:2,grade_rank:12});
   const w=workspaceFromExport(d,'zhixue_webview');
-  assert.equal(w.overview.gradeMax,100);assert.equal(w.students[0].classRank,2);assert.equal(w.students[0].gradeRank,12);
+  assert.equal(w.overview.gradeMax,100);assert.equal(w.overview.topClassName,'二班');assert.equal(w.students[0].classRank,2);assert.equal(w.students[0].gradeRank,12);
   assert.deepEqual(validateWorkspace(JSON.parse(JSON.stringify(w))),w);
+});
+test('exam comparison uses class ranks and excludes missing ranks or zero scores',()=>{
+  const w=workspaceFromExport(fixture(),'chrome_extension');
+  const current=w.students[0];current.classRank=3;const total=current.questions.reduce((s,q)=>s+q.fullScore,0);
+  w.students[1].classRank=9;
+  const score=current.questions.reduce((s,q)=>s+q.score,0);
+  const prior={examId:'previous',examName:'Previous',classId:w.exam.classId,className:'Class',subjectName:w.exam.subjectName,finishedAt:'now',
+    students:[{id:current.id,name:'old name',score:100,fullScore:200,classRank:8},
+      {id:w.students[1].id,name:'zero',score:0,fullScore:100,classRank:1},{id:'other',name:'other',score:50,fullScore:100,classRank:1}]};
+  const result=compareExams(w,prior);
+  assert.equal(result.length,1);assert.equal(result[0].change,5);
+  assert.equal(result[0].score,score);assert.equal(result[0].fullScore,total);
+  prior.students[0].classRank=null;assert.equal(compareExams(w,prior).length,0);
+  prior.students[0].classRank=8;current.rosterScore=0;assert.equal(compareExams(w,prior).length,0);
 });
 const invalid = [
   ['missing student',d=>d.data.students.pop()],

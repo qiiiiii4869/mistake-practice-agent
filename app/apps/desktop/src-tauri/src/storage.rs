@@ -28,6 +28,42 @@ struct Overview {
     class_avg: Option<f64>,
     grade_max: Option<f64>,
     grade_avg: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    top_class_avg: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    top_class_name: Option<String>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ExamHistory {
+    exam_id: String, exam_name: String, class_id: String, class_name: String,
+    subject_name: String, finished_at: String, students: Vec<HistoryStudent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    class_avg: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    grade_avg: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    top_class_avg: Option<f64>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HistoryStudent { id: String, name: String, score: f64, full_score: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    class_rank: Option<u32> }
+impl From<&Snapshot> for ExamHistory {
+    fn from(s: &Snapshot) -> Self {
+        let full_score:f64 = s.students.iter().find(|s| s.availability == "scored")
+            .map(|s| s.questions.iter().map(|q|q.full_score).sum()).unwrap_or(0.0);
+        Self { exam_id:s.exam.id.clone(), exam_name:s.exam.name.clone(), class_id:s.exam.class_id.clone(),
+            class_name:s.exam.class_name.clone(), subject_name:s.exam.subject_name.clone(), finished_at:s.source.finished_at.clone(),
+            class_avg:s.overview.as_ref().and_then(|o|o.class_avg), grade_avg:s.overview.as_ref().and_then(|o|o.grade_avg),
+            top_class_avg:s.overview.as_ref().and_then(|o|o.top_class_avg),
+            students:s.students.iter().filter(|s| s.availability != "not_scanned" && full_score > 0.0).filter_map(|s| {
+                let score = s.roster_score.filter(|score| *score >= 0.0 && *score <= full_score)
+                    .or_else(|| (s.availability == "scored").then(|| s.questions.iter().map(|q|q.score).sum()))?;
+                Some(HistoryStudent {id:s.id.clone(),name:s.name.clone(),score,full_score,class_rank:s.class_rank})
+            }).collect() }
+    }
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -123,7 +159,8 @@ impl Snapshot {
         let settings = &self.settings;
         if self.overview.as_ref().is_some_and(|o| {
             !["received", "unavailable"].contains(&o.status.as_str()) ||
-            [o.class_max, o.class_avg, o.grade_max, o.grade_avg].iter().flatten().any(|n| !n.is_finite() || *n < 0.0)
+            o.top_class_name.as_ref().is_some_and(|name| !valid_text(name)) ||
+            [o.class_max, o.class_avg, o.grade_max, o.grade_avg, o.top_class_avg].iter().flatten().any(|n| !n.is_finite() || *n < 0.0)
         }) { return Err(bad()); }
         if !(1..=10).contains(&settings.variants_per_question)
             || !(1..=100).contains(&settings.max_questions_per_student)
@@ -278,8 +315,21 @@ pub(crate) fn open(path: &Path) -> Result<Connection, String> {
 fn init(conn: &Connection) -> Result<(), String> {
     conn.execute_batch("PRAGMA busy_timeout=5000; PRAGMA journal_mode=DELETE; PRAGMA secure_delete=ON;
         CREATE TABLE IF NOT EXISTS active_workspace (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL, payload TEXT);
+        CREATE TABLE IF NOT EXISTS exam_history (exam_id TEXT NOT NULL, class_id TEXT NOT NULL, subject_name TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(exam_id,class_id,subject_name));
         INSERT OR IGNORE INTO active_workspace(id, revision, payload) VALUES(1, 0, NULL);")
         .map_err(|_| "storage_failed".to_string())
+}
+pub(crate) fn history(conn: &Connection) -> Result<Vec<ExamHistory>, String> {
+    let mut stmt = conn.prepare("SELECT payload FROM exam_history ORDER BY rowid DESC").map_err(|_| "storage_failed")?;
+    let rows = stmt.query_map([], |row| row.get::<_,String>(0)).map_err(|_| "storage_failed")?;
+    rows.map(|row| serde_json::from_str(&row.map_err(|_| "storage_failed")?).map_err(|_| "invalid_workspace".to_string())).collect()
+}
+fn save_history(tx: &rusqlite::Transaction<'_>, snapshot: &Snapshot) -> Result<(), String> {
+    let record = ExamHistory::from(snapshot);
+    let payload = serde_json::to_string(&record).map_err(|_| "invalid_workspace")?;
+    tx.execute("INSERT INTO exam_history(exam_id,class_id,subject_name,payload) VALUES (?1,?2,?3,?4) ON CONFLICT(exam_id,class_id,subject_name) DO UPDATE SET payload=excluded.payload",
+        params![record.exam_id,record.class_id,record.subject_name,payload]).map_err(|_| "storage_failed")?;
+    Ok(())
 }
 pub(crate) fn load(conn: &Connection) -> Result<Stored, String> {
     let (revision, raw): (i64, Option<String>) = conn
@@ -361,11 +411,20 @@ pub(crate) fn save(
     let tx = conn
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|_| "storage_failed")?;
+    let previous = tx.query_row("SELECT payload FROM active_workspace WHERE id=1", [], |row| row.get::<_,Option<String>>(0))
+        .map_err(|_| "storage_failed")?.map(|raw| serde_json::from_str::<Snapshot>(&raw).map_err(|_| "invalid_workspace"))
+        .transpose()?;
     let changed = tx.execute("UPDATE active_workspace SET payload=?1, revision=revision+1 WHERE id=1 AND revision=?2", params![payload, expected])
         .map_err(|_| "storage_failed")?;
     if changed != 1 {
         return Err("storage_conflict".into());
     }
+    if let Some(old) = &previous {
+        if snapshot.is_some() { save_history(&tx, old)?; }
+        else { tx.execute("DELETE FROM exam_history WHERE exam_id=?1 AND class_id=?2 AND subject_name=?3",
+            params![old.exam.id,old.exam.class_id,old.exam.subject_name]).map_err(|_| "storage_failed")?; }
+    }
+    if let Some(current) = &snapshot { save_history(&tx, current)?; }
     tx.commit().map_err(|_| "storage_failed")?;
     load(conn)
 }
@@ -373,6 +432,31 @@ pub(crate) fn save(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn history_archives_previous_exam_transactionally_and_clears_current_only() {
+        let mut conn=Connection::open_in_memory().unwrap();init(&conn).unwrap();
+        let mut first=sample();first.students[0].class_rank=Some(3);
+        first.overview=Some(Overview {status:"received".into(),class_max:Some(2.0),class_avg:Some(1.0),
+            grade_max:Some(2.0),grade_avg:Some(1.2),top_class_avg:Some(1.5),top_class_name:None});
+        // Existing installations may have an active workspace before history existed.
+        conn.execute("UPDATE active_workspace SET revision=1,payload=?1",params![serde_json::to_string(&first).unwrap()]).unwrap();
+        let mut next=first.clone();next.exam.id="e2".into();next.exam.name="Second".into();
+        assert!(save(&mut conn,0,Some(next.clone())).is_err());
+        assert!(history(&conn).unwrap().is_empty());
+        save(&mut conn,1,Some(next)).unwrap();
+        let records=history(&conn).unwrap();assert_eq!(records.len(),2);
+        let old=records.iter().find(|r|r.exam_id=="e").unwrap();
+        assert_eq!(old.students[0].score,0.0);assert_eq!(old.students[0].full_score,2.0);
+        assert_eq!(old.students[0].class_rank,Some(3));
+        assert_eq!(old.class_avg,Some(1.0));assert_eq!(old.grade_avg,Some(1.2));assert_eq!(old.top_class_avg,Some(1.5));
+        let mut old_json=serde_json::to_value(old).unwrap();old_json["students"][0].as_object_mut().unwrap().remove("classRank");
+        for key in ["classAvg","gradeAvg","topClassAvg"] {old_json.as_object_mut().unwrap().remove(key);}
+        assert_eq!(serde_json::from_value::<ExamHistory>(old_json).unwrap().students[0].class_rank,None);
+        assert!(!serde_json::to_string(old).unwrap().contains("questions"));
+        save(&mut conn,2,None).unwrap();
+        assert_eq!(history(&conn).unwrap().len(),1);
+        assert_eq!(history(&conn).unwrap()[0].exam_id,"e");
+    }
     fn sample() -> Snapshot {
         serde_json::from_value(serde_json::json!({"schemaVersion":1,"source":{"kind":"chrome_extension","finishedAt":"SYNTHETIC"},
           "exam":{"id":"e","name":"模拟考试","classId":"c","className":"班级","subjectId":"p","subjectName":"学科"},

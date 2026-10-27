@@ -6,7 +6,7 @@ import { Users, UserCheck, FileText, UserMinus, type LucideIcon } from 'lucide-r
 import React from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { analyze, dataErrorMessage, parseExportText, validateSettings, validateWorkspace, workspaceFromExport,
-  type StoredWorkspace, type TeacherSettings, type Workspace } from '../../../packages/core/src';
+  type ExamHistory, type StoredWorkspace, type TeacherSettings, type Workspace } from '../../../packages/core/src';
 import { errorMessage, type ConnectionReport, type ExamSubject, type SubjectReport, type TeachingClass } from '../../../packages/zhixue/src';
 
 const AnalysisCharts=React.lazy(()=>import('./AnalysisCharts').then(module=>({default:module.AnalysisCharts})));
@@ -35,6 +35,8 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy, page, on
   const [candidate, setCandidate] = React.useState<Workspace | null>(null);
   const [confirmClear, setConfirmClear] = React.useState(false);
   const [settings, setSettings] = React.useState<TeacherSettings | null>(null);
+  const [history, setHistory] = React.useState<ExamHistory[]>([]);
+  const [historyError, setHistoryError] = React.useState(false);
   const requestVersion = React.useRef(0);
   const snapshot = stored.snapshot;
   const analysis = React.useMemo(() => snapshot ? analyze(snapshot) : null, [snapshot]);
@@ -51,6 +53,14 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy, page, on
     }).catch(error => { if (active) setMessage(`恢复本地数据失败，已暂停写入。${dataErrorMessage(error)}`); });
     return () => { active = false; };
   }, []);
+
+  React.useEffect(() => {
+    if (!ready) return;
+    let active = true;
+    invoke<ExamHistory[]>('list_exam_history').then(value => {if (active) {setHistory(value); setHistoryError(false);}})
+      .catch(() => {if (active) {setHistory([]); setHistoryError(true);}});
+    return () => {active = false;};
+  }, [ready, stored.revision]);
 
   function legacyError(error:unknown){
     const code=error instanceof Error?error.message:String(error);
@@ -185,7 +195,7 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy, page, on
       <label className={`file-input ${locked ? 'disabled' : ''}`}>导入扩展导出文件<input type="file" accept=".json,application/json" multiple disabled={locked} aria-label="导入扩展导出文件" onChange={e => void importFiles(e)} /></label>
       <p className="help">同时选择 student-class 与同次导出的 verification-full 文件。只接受完整全班得分，不接收答案图片或作答原文。</p>
       <p className="notice" aria-live="polite" data-testid="workspace-message">{message}</p>
-      {candidate && <div className="confirm-panel" role="region" aria-label="确认替换考试"><b>替换本机当前考试？</b><p>当前：{snapshot?.exam.name}；新数据：{candidate.exam.name}，共 {candidate.students.length} 人。当前考试、试卷照片、题干、出题审核及设置将被替换，不建立历史记录。</p><div className="actions"><button disabled={working} onClick={() => void persist(candidate)}>确认替换并保存</button><button className="secondary" disabled={working} onClick={() => { setCandidate(null); setMessage('已取消替换，当前考试保留。'); }}>保留当前考试</button></div></div>}
+      {candidate && <div className="confirm-panel" role="region" aria-label="确认替换考试"><b>替换本机当前考试？</b><p>当前：{snapshot?.exam.name}；新数据：{candidate.exam.name}，共 {candidate.students.length} 人。当前考试的学生成绩将保留用于历史比较；试卷照片、题干、出题审核及设置将被替换。</p><div className="actions"><button disabled={working} onClick={() => void persist(candidate)}>确认替换并保存</button><button className="secondary" disabled={working} onClick={() => { setCandidate(null); setMessage('已取消替换，当前考试保留。'); }}>保留当前考试</button></div></div>}
     </section>
     {ready&&!snapshot&&<section className="card" aria-label="恢复旧版考试">
       <h2>恢复旧版考试</h2><p>可把升级前保存在本机的考试复制到当前账号 {account.user.username}。不会自动分配，不覆盖已有考试，不迁移密码、登录态或模型密钥。</p>
@@ -202,7 +212,7 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy, page, on
     </div>
     <div hidden={page!=='analysis'}>
     {snapshot && analysis && <div className="exam-overview"><div><span className="overview-label">当前考试</span><h2>{snapshot.exam.name}</h2><p>{snapshot.exam.className} · {snapshot.exam.subjectName}</p></div><div className="overview-metrics"><ExamMetric label="名单人数" value={analysis.audit.rosterCount} icon={Users}/><ExamMetric label="可分析学生" value={analysis.audit.exportedCount} icon={UserCheck}/><ExamMetric label="逐题记录" value={analysis.audit.questionRecords} icon={FileText}/><ExamMetric label="没扫 / 无原卷" value={`${analysis.audit.notScannedCount} / ${analysis.audit.noPaperCount}`} icon={UserMinus}/></div></div>}
-    {snapshot && analysis && page==='analysis' && <React.Suspense fallback={<div className="chart-empty" role="status">正在加载图表…</div>}><AnalysisCharts workspace={snapshot} active/></React.Suspense>}
+    {snapshot && analysis && page==='analysis' && <React.Suspense fallback={<div className="chart-empty" role="status">正在加载图表…</div>}><AnalysisCharts workspace={snapshot} history={history} historyError={historyError} active/></React.Suspense>}
     {ready&&!snapshot&&<section className="empty-section"><h2>暂无考试数据</h2><p>导入本场考试后，这里将显示班级与逐题分析。</p><button className="secondary" onClick={()=>onPageChange('import')}>前往信息导入</button></section>}
     {snapshot && analysis && <section className="card" aria-label="本机当前考试">
       <div className="card-heading"><h2>{snapshot.exam.name}</h2><span className="badge success">已保存到本机</span></div>
@@ -222,7 +232,7 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy, page, on
       <h3>按题统计</h3><div className="table-scroll"><table><thead><tr><th>题号</th><th>满分</th><th>失分率</th><th>全错</th><th>部分得分</th><th>纳入补练人数</th></tr></thead><tbody>{analysis.questions.map(q => <tr key={q.number}><td>{q.number}</td><td>{q.fullScore}</td><td>{q.fullScore ? `${(q.lostRate * 100).toFixed(1)}%` : '不计分'}</td><td>{q.incorrectStudents}</td><td>{q.partialStudents}</td><td>{q.weakStudents}</td></tr>)}</tbody></table></div>
       <details open aria-label="学生名单与逐题得分"><summary>学生名单与逐题得分（{analysis.students.length} 人）</summary><div className="table-scroll"><table><thead><tr><th>学生</th><th>状态</th><th>逐题得分合计</th><th>班级名次</th><th>年级名次</th><th>失分</th><th>纳入补练题号</th><th>逐题明细</th></tr></thead><tbody>{analysis.students.map((s, i) => <tr key={s.id}><td>{s.name || `学生 ${i + 1}`}</td><td>{s.availability === 'scored' ? '已读取' : s.availability === 'not_scanned' ? '没扫' : '无原卷'}</td><td>{s.availability === 'scored' ? Number(snapshot.students.find(student=>student.id===s.id)!.questions.reduce((total,q)=>total+q.score,0).toFixed(2)) : '—'}</td><td>{snapshot.students.find(student=>student.id===s.id)?.classRank ?? '未获取'}</td><td>{snapshot.students.find(student=>student.id===s.id)?.gradeRank ?? '未获取'}</td><td>{s.availability === 'scored' ? Number(s.lostPoints.toFixed(2)) : '—'}</td><td>{s.availability === 'scored' ? s.weakQuestions.join('、') || '暂无' : '不判对错'}</td><td>{s.availability === 'scored' ? <details><summary>查看逐题得分</summary><ul>{snapshot.students.find(student=>student.id===s.id)!.questions.map(q=><li key={q.number}>第 {q.number} 题：{q.score} / {q.fullScore} · {q.result==='correct'?'全对':q.result==='incorrect'?'全错':q.result==='partial_credit'?'部分得分':'不计分'}</li>)}</ul></details> : '无逐题记录'}</td></tr>)}</tbody></table></div></details>
       <div className="actions"><button className="secondary small danger" disabled={locked} onClick={() => setConfirmClear(true)}>清除当前考试</button></div>
-      {confirmClear && <div className="confirm-panel" role="region" aria-label="确认清除考试"><b>清除本机当前考试及教师设置？</b><p>这会清除程序保存的本场学生、得分、试卷照片、题干及出题审核结果。下载目录中的扩展文件和智学网登录态仍保留。</p><div className="actions"><button className="danger" disabled={working} onClick={() => void persist(null)}>确认清除</button><button className="secondary" disabled={working} onClick={() => setConfirmClear(false)}>取消清除</button></div></div>}
+      {confirmClear && <div className="confirm-panel" role="region" aria-label="确认清除考试"><b>清除本机当前考试及教师设置？</b><p>这会清除本场学生、得分、试卷照片、题干、出题审核结果及本场历史成绩。其他历史考试、下载目录中的扩展文件和智学网登录态仍保留。</p><div className="actions"><button className="danger" disabled={working} onClick={() => void persist(null)}>确认清除</button><button className="secondary" disabled={working} onClick={() => setConfirmClear(false)}>取消清除</button></div></div>}
     </section>}
     </div>
     <div hidden={page!=='report'}>

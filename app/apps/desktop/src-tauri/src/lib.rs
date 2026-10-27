@@ -426,6 +426,12 @@ async fn load_workspace(
 }
 
 #[tauri::command]
+async fn list_exam_history(window: WebviewWindow, app: tauri::AppHandle) -> Result<Vec<storage::ExamHistory>, String> {
+    require_main(&window)?;
+    storage::history(&storage::open(&database_path(&app)?)?)
+}
+
+#[tauri::command]
 async fn save_workspace(
     window: WebviewWindow,
     app: tauri::AppHandle,
@@ -569,6 +575,7 @@ pub fn run() {
             read_class_scores,
             probe_progress,
             load_workspace,
+            list_exam_history,
             save_workspace,
             list_knowledge,
             legacy_workspace_summary,

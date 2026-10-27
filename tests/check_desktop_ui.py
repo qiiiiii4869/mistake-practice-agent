@@ -24,6 +24,7 @@ window.__TAURI_INTERNALS__ = {invoke: async (command, args) => {
   if (command === 'account_generation_begin') {window.testAccountJob='00000000-0000-4000-8000-000000000002';return {jobId:window.testAccountJob,state:'reserved'};}
   if (command === 'account_generation_finish') {if(args.batch){window.testAccount.credits--;window.testAccount.available--;}return {charged:!!args.batch,user:structuredClone(window.testAccount)};}
   if (command === 'load_workspace') return structuredClone(window.testStored);
+  if (command === 'list_exam_history') return structuredClone(window.testHistory || []);
   if (command === 'save_workspace') {
     if (window.testSaveFailure) throw 'storage_failed';
     if (args.expectedRevision !== window.testStored.revision) throw 'storage_conflict';

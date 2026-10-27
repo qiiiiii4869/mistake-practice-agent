@@ -5,7 +5,7 @@ import { zhixueProbe } from '../browser-probe/probe.mjs';
 
 // Every network response here is synthetic. None of these tests proves live access.
 const calls = [];
-function install({ role='teacher', roster, businessError=false, brokenPaper=false, badScore=false, classMismatch=false, backendFail=false, totalCount, scopeClasses, rowSubject, paperTransform, failPaperOnce=false, expireAt, structuredPaper, overview={}, overviewFail=false, permission, showSchoolRank=false }={}) {
+function install({ role='teacher', roster, businessError=false, brokenPaper=false, badScore=false, classMismatch=false, backendFail=false, totalCount, scopeClasses, rowSubject, paperTransform, failPaperOnce=false, expireAt, structuredPaper, overview={}, overviewFail=false, permission, showSchoolRank=false, classComparison={} }={}) {
   calls.length=0;
   globalThis.location={origin:'https://www.zhixue.com'};
   globalThis.fetch=async(url,options)=>{
@@ -24,6 +24,7 @@ function install({ role='teacher', roster, businessError=false, brokenPaper=fals
     else if(path.includes('getSubjectsIncludeSubAndGroup'))result=[{topicSetId:'paper1',subjectName:'生物',subjectCode:'bio'},{topicSetId:'mathpaper',subjectName:'数学',subjectCode:'math'},{subjectName:'总分',isSubjectGroup:true}];
     else if(path.includes('singleScoreList'))result={studentAnswerRecords:roster??[{userId:'private-student-id',userName:'Private Student',classId:classMismatch?'other':'class1',subjectCode:rowSubject??'bio',topicSetId:'paper1'}],permission,isShowSchoolRank:showSchoolRank,...(totalCount===undefined?{}:{totalCount})};
     else if(path.includes('getSubjectExamSummary')) { if(overviewFail) return {ok:false,status:403,headers:new Headers()}; result=overview; }
+    else if(path.includes('singleAvgScoreCompare')) result=classComparison;
     else if(path.includes('getNewCheckSheet'))result=structuredPaper??{};
     else if(path.includes('/checksheet/')) {
       const number=calls.filter(call=>call.url.pathname.includes('/checksheet/')).length;
@@ -44,13 +45,22 @@ const selection={action:'export',examId:'exam1',subjectId:'paper1',classId:'clas
 
 test('imports scoped official overview and authorized student ranks',async()=>{
   install({roster:[{userId:'s1',score:3,rank:2,schoolRank:12}],permission:{classRankEnable:true,schoolRankEnable:true},showSchoolRank:true,
-    overview:{clsTopScore:90,clsAvgScore:70,schTopSCore:100,schAvgScore:75}});
+    overview:{clsTopScore:90,clsAvgScore:70,schTopSCore:100,schAvgScore:75},
+    classComparison:{classAvgScorePermission:true,classList:[{avgScore:70,className:'一班'},{avgScore:80,className:'二班'},{avgScore:80,className:'三班'}]} });
   const r=await zhixueProbe({...selection,fullClass:true});
   assert.equal(r.ok,true);
-  assert.deepEqual(r.data.overview,{status:'received',class_max:90,class_avg:70,grade_max:100,grade_avg:75});
+  assert.deepEqual(r.data.overview,{status:'received',class_max:90,class_avg:70,grade_max:100,grade_avg:75,top_class_avg:80,top_class_name:'二班、三班'});
   assert.equal(r.data.students[0].class_rank,2);assert.equal(r.data.students[0].grade_rank,12);
   const q=calls.find(c=>c.url.pathname.includes('getSubjectExamSummary')).url.searchParams;
   assert.equal(q.get('classId'),'class1');assert.equal(q.get('topicSetId'),'paper1');
+});
+test('class comparison requires permission and all class averages',async()=>{
+  for(const classComparison of [{classAvgScorePermission:false,classList:[{avgScore:90}]},
+    {classAvgScorePermission:true,classList:[{avgScore:90},{avgScore:null}]}]) {
+    install({classComparison});const r=await zhixueProbe({...selection,fullClass:true});
+    assert.equal(r.ok,true);assert.equal(r.data.overview.top_class_avg,null);
+    assert.equal(r.data.overview.top_class_name,null);
+  }
 });
 test('optional overview failure and withheld ranks do not prevent class import',async()=>{
   install({roster:[{userId:'s1',rank:2,schoolRank:12}],overviewFail:true});

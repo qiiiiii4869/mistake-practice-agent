@@ -31,6 +31,7 @@ export async function zhixueProbe(command) {
     "/configure/class/getSubjectsIncludeSubAndGroup",
     "/api-classreport/class/singleScoreList/",
     "/api-classreport/class/getSubjectExamSummary/",
+    "/api-classreport/class/singleAvgScoreCompare/",
     "/api-classreport/class/student/getNewCheckSheet/",
     "/classreport/class/student/checksheet/",
   ]);
@@ -282,6 +283,23 @@ export async function zhixueProbe(command) {
       overview = {status:"received", class_max:metric(stats?.clsTopScore), class_avg:metric(stats?.clsAvgScore),
         grade_max:metric(stats?.schTopSCore), grade_avg:metric(stats?.schAvgScore)};
     } catch { /* The optional overview must not prevent importing the class. */ }
+    let topClassAverage = null;
+    let topClassName = null;
+    try {
+      const comparison = await read("/api-classreport/class/singleAvgScoreCompare/", {examId:command.examId, topicSetId:selectedSubject.id});
+      if (comparison?.classAvgScorePermission === true && Array.isArray(comparison.classList) && comparison.classList.length > 0) {
+        const averages = comparison.classList.map(item => metric(item?.avgScore));
+        if (averages.every(value => value !== null)) {
+          topClassAverage = Math.max(...averages);
+          const names = comparison.classList.filter(item => metric(item?.avgScore) === topClassAverage)
+            .map(item => typeof item.className === 'string' ? item.className.trim() : '');
+          const joined = names.join('、');
+          if (names.every(name => name.length > 0 && name.length <= 100) && joined.length <= 300 && !/https?:\/\//i.test(joined)) topClassName = joined;
+        }
+      }
+    } catch { /* An unavailable comparison does not prevent importing scores. */ }
+    overview.top_class_avg = topClassAverage;
+    overview.top_class_name = topClassName;
     const rank = value => {
       const n = typeof value === "number" ? value : typeof value === "string" && /^\d+$/.test(value) ? Number(value) : NaN;
       return Number.isSafeInteger(n) && n > 0 ? n : null;
@@ -314,6 +332,8 @@ export async function zhixueProbe(command) {
           : {student_id:userId,student_name:studentName,availability:"no_original_paper",
             reason_source:typeof row.hasOriginPaper === "boolean" ? "roster_has_origin_paper" : "roster_rank_code",
             roster_score:typeof row.score === "number" && Number.isFinite(row.score) ? row.score : null,
+            class_rank:result.permission?.classRankEnable === true ? rank(row.rank) : null,
+            grade_rank:result.permission?.schoolRankEnable === true && result.isShowSchoolRank === true ? rank(row.schoolRank) : null,
             rank_code:Number.isFinite(rankCode) && rankCode < 0 ? rankCode : null,questions:[]});
         processed++;
         updateProgress({total:sample.length,processed,succeeded:students.length,unavailable:unavailableStudents.length,failed:failures.length,status:"reading"});

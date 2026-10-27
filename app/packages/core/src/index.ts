@@ -47,6 +47,13 @@ export interface Workspace {
 export interface ExamOverview {
   status: 'received' | 'unavailable';
   classMax: number | null; classAvg: number | null; gradeMax: number | null; gradeAvg: number | null;
+  topClassAvg?: number | null;
+  topClassName?: string | null;
+}
+export interface ExamHistory {
+  examId: string; examName: string; classId: string; className: string; subjectName: string; finishedAt: string;
+  classAvg?: number | null; gradeAvg?: number | null; topClassAvg?: number | null;
+  students: {id: string; name: string; score: number; fullScore: number; classRank?: number | null}[];
 }
 export interface StoredWorkspace { revision: number; snapshot: Workspace | null }
 export interface Audit {
@@ -153,6 +160,7 @@ function importStudent(value: unknown, unavailable: boolean): Student {
 
 function importOverview(value: unknown, camelCase = false): ExamOverview {
   const o = object(value);
+  rejectSecrets(o);
   if (o.status !== 'received' && o.status !== 'unavailable') fail('invalid_data_shape');
   const metric = (key: string) => {
     const v = o[key];
@@ -163,7 +171,35 @@ function importOverview(value: unknown, camelCase = false): ExamOverview {
   };
   return {status: o.status as ExamOverview['status'], classMax: metric(camelCase ? 'classMax' : 'class_max'),
     classAvg: metric(camelCase ? 'classAvg' : 'class_avg'), gradeMax: metric(camelCase ? 'gradeMax' : 'grade_max'),
-    gradeAvg: metric(camelCase ? 'gradeAvg' : 'grade_avg')};
+    gradeAvg: metric(camelCase ? 'gradeAvg' : 'grade_avg'),
+    ...(o[camelCase ? 'topClassAvg' : 'top_class_avg'] == null ? {} : {topClassAvg: metric(camelCase ? 'topClassAvg' : 'top_class_avg')}),
+    ...(o[camelCase ? 'topClassName' : 'top_class_name'] == null ? {} : {topClassName: text(o[camelCase ? 'topClassName' : 'top_class_name'])})};
+}
+
+export function comparisonScores(workspace: Workspace) {
+  const reference = workspace.students.find(s => s.availability === 'scored');
+  const fullScore = reference?.questions.reduce((sum,q) => sum + q.fullScore, 0) ?? 0;
+  if (fullScore <= 0) return [];
+  return workspace.students.flatMap(student => {
+    if (student.availability === 'not_scanned') return [];
+    const roster = student.rosterScore;
+    const score = roster != null && roster >= 0 && roster <= fullScore ? roster
+      : student.availability === 'scored' ? student.questions.reduce((sum,q) => sum + q.score, 0) : null;
+    return score == null ? [] : [{id:student.id, name:student.name, score, fullScore, classRank:student.classRank ?? null}];
+  });
+}
+export function compareExams(current: Workspace, previous: ExamHistory) {
+  const old = new Map(previous.students.map(student => [student.id, student]));
+  return comparisonScores(current).flatMap(student => {
+    const prior = old.get(student.id);
+    const {score, fullScore} = student;
+    const currentRank = student.classRank, previousRank = prior?.classRank;
+    if (!prior || score <= 0 || prior.score <= 0 || !Number.isSafeInteger(currentRank) || !Number.isSafeInteger(previousRank)
+      || currentRank! <= 0 || previousRank! <= 0) return [];
+    return [{id:student.id, name:student.name || prior.name, score, fullScore,
+      previousScore:prior.score, previousFullScore:prior.fullScore,
+      currentRank:currentRank!, previousRank:previousRank!, change: previousRank! - currentRank!}];
+  });
 }
 
 function auditStudents(students: Student[]): Audit {
