@@ -133,6 +133,7 @@ def main():
             class_read = page.get_by_role("button", name="读取全班逐题得分", exact=True)
             expect(class_read).to_be_enabled()
             class_read.click()
+            page.get_by_role("navigation", name="功能入口").get_by_role("button", name="数据分析").click()
             current = page.get_by_role("region", name="本机当前考试", exact=True)
             expect(current).to_be_visible()
             assert page.evaluate("testStored.snapshot.source.kind") == "zhixue_webview"
@@ -155,6 +156,7 @@ def main():
             assert page.evaluate("testStored.snapshot.settings.includePartialCredit") is False
             print("PASS: teacher settings persist and recompute the partial-credit selection.")
 
+            page.get_by_role("navigation", name="功能入口").get_by_role("button", name="信息导入").click()
             paper = page.get_by_role("region", name="试卷题干核对", exact=True)
             import base64
             png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=")
@@ -185,7 +187,9 @@ def main():
             class_read.click()
             expect(page.get_by_test_id("workspace-message")).to_contain_text("导出记录包含失败")
             assert page.evaluate("testStored.revision") == old_revision
+            page.get_by_role("navigation", name="功能入口").get_by_role("button", name="数据分析").click()
             expect(current).to_be_visible()
+            page.get_by_role("navigation", name="功能入口").get_by_role("button", name="信息导入").click()
             page.evaluate("testScenario = 'success'")
             print("PASS: incomplete reads preserve the saved exam.")
 
@@ -210,6 +214,7 @@ def main():
             assert page.evaluate("testStored.revision") == old_revision
             import_pair()
             confirm.get_by_role("button", name="确认替换并保存").click()
+            page.get_by_role("navigation", name="功能入口").get_by_role("button", name="数据分析").click()
             expect(current.get_by_text("Chrome 扩展导入", exact=False)).to_be_visible()
             assert page.evaluate("testStored.snapshot.source.kind") == "chrome_extension"
             assert page.evaluate("testStored.snapshot.paper === undefined") is True
@@ -222,7 +227,7 @@ def main():
             current.get_by_text("本场教师设置", exact=True).click()
             current.get_by_label("每人题数上限", exact=True).fill("9")
             current.get_by_role("button", name="保存设置并重算").click()
-            expect(page.get_by_test_id("workspace-message")).to_contain_text("本地存储未能确认完成")
+            expect(page.get_by_test_id("analysis-workspace-message")).to_contain_text("本地存储未能确认完成")
             assert page.evaluate("testStored.snapshot.settings.maxQuestionsPerStudent") == 5
             page.evaluate("testSaveFailure = false")
             print("PASS: persisted data restores and failed saves do not report success.")
@@ -237,6 +242,7 @@ def main():
             expect(current).to_have_count(0)
             assert page.evaluate("testStored.snapshot") is None
             page.reload()
+            page.get_by_role("navigation", name="功能入口").get_by_role("button", name="信息导入").click()
             expect(page.get_by_test_id("workspace-message")).to_contain_text("本机暂无考试")
             expect(current).to_have_count(0)
             print("PASS: clear requires confirmation and remains cleared after reopening.")

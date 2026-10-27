@@ -211,7 +211,7 @@ export function AgentWorkspace({ workspace, revision, locked, onBusy, prepare, s
       </article>)}
       <details><summary>{batch.mode==='mock'?'本机组卷预览（演示，不可导出）':'本机组卷预览'}</summary><p className="help">只使用教师采用且比对通过的题；同一知识点不重复，遵守每人上限。未覆盖的失分题单独列出。</p><div className="table-scroll"><table><thead><tr><th>学生</th><th>{batch.mode==='mock'?'演示题数':'补练题数'}</th><th>未覆盖题号</th></tr></thead><tbody>{preview.map((s,i)=><tr key={s.id}><td>{s.name||`学生 ${i+1}`}</td><td>{s.availability==='scored'?s.variants.length:'没扫/无原卷，不判对错'}</td><td>{s.uncoveredNumbers.join('、')||'—'}</td></tr>)}</tbody></table></div></details>
       <div className="actions"><button disabled={disabled} onClick={async()=>{
-        const saved=await save(batch);if(!saved)setMessage('本次未能保存，请查看上方提示。当前未保存草稿仍保留。');
+        const saved=await save(batch);setMessage(saved?'已保存本场出题与审核。':'本次未能保存，请查看信息导入页的提示。当前未保存草稿仍保留。');
       }}>保存本场出题与审核</button></div>
       <div aria-label="PDF 导出"><h3>导出补练 PDF</h3><div className="fields"><label>文件组织<select aria-label="PDF 文件组织" value={layout} disabled={disabled} onChange={e=>setLayout(e.target.value as 'class'|'individual')}><option value="class">全班合订</option><option value="individual">每人一份</option></select></label></div>
         <label><input type="checkbox" aria-label="PDF 包含答案解析" checked={includeAnswers} disabled={disabled} onChange={e=>setIncludeAnswers(e.target.checked)}/> 附答案解析（另起一页）</label>

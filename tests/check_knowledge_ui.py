@@ -55,6 +55,7 @@ def main():
             page.on('request',lambda req: remote.append(req.url) if not req.url.startswith(f'http://127.0.0.1:{server.server_port}/') and not req.url.startswith(('blob:','data:')) else None)
             page.add_init_script(MOCK+KNOWLEDGE_MOCK)
             page.goto(f'http://127.0.0.1:{server.server_port}/')
+            page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click()
             library=page.get_by_role('region',name='本机知识库',exact=True)
             upload=library.get_by_label('导入知识库 PDF',exact=True)
             expect(upload).to_be_enabled()

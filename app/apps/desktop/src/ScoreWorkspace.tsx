@@ -1,14 +1,23 @@
 import { useAccount } from './AccountGate';
 import { AgentWorkspace } from './AgentWorkspace';
 import { PaperWorkspace } from './PaperWorkspace';
+import { KnowledgeWorkspace } from './KnowledgeWorkspace';
+import { Users, UserCheck, FileText, UserMinus, type LucideIcon } from 'lucide-react';
 import React from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { analyze, dataErrorMessage, parseExportText, validateSettings, validateWorkspace, workspaceFromExport,
   type StoredWorkspace, type TeacherSettings, type Workspace } from '../../../packages/core/src';
 import { errorMessage, type ConnectionReport, type ExamSubject, type SubjectReport, type TeachingClass } from '../../../packages/zhixue/src';
 
-interface Props { report: ConnectionReport | null; loginOpen: boolean; parentBusy: boolean; onBusy: (busy: boolean) => void }
-export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props) {
+const AnalysisCharts=React.lazy(()=>import('./AnalysisCharts').then(module=>({default:module.AnalysisCharts})));
+
+interface Props { report: ConnectionReport | null; loginOpen: boolean; parentBusy: boolean; onBusy: (busy: boolean) => void; page: 'import'|'analysis'|'report'|'billing'; onPageChange: (page:'import'|'analysis'|'report'|'billing')=>void }
+
+// Adapted from Shadcn Dashboard's MIT-licensed TotalAssets/AssetCard layout.
+function ExamMetric({ label, value, icon: Icon }: { label:string; value:string|number; icon:LucideIcon }) {
+  return <div className="exam-metric"><div className="exam-metric-icon"><Icon size={16}/></div><div><strong>{value}</strong><span>{label}</span></div></div>;
+}
+export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy, page, onPageChange }: Props) {
   const account=useAccount();
   const [legacy,setLegacy]=React.useState<{revision:number;examName:string;subjectName:string;studentCount:number;questionRecords:number;paperFiles:number}|null>(null);
   const [legacyUsername,setLegacyUsername]=React.useState('');
@@ -162,6 +171,7 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props)
   const subjectCode = subjects.find(s => s.id === subjectId)?.code;
   const matchingClasses = classes.filter(c => c.subjects.some(s => s.code === subjectCode));
   return <>
+    <div hidden={page!=='import'}>
     <section className="card" id="exam-students" aria-label="全班成绩接入">
       <div className="card-heading"><h2>选择考试，读取学生信息</h2><span className="muted">仅处理当前一场考试</span></div>
       {report?.ok && report.options.length > 0 ? <>
@@ -177,10 +187,27 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props)
       <p className="notice" aria-live="polite" data-testid="workspace-message">{message}</p>
       {candidate && <div className="confirm-panel" role="region" aria-label="确认替换考试"><b>替换本机当前考试？</b><p>当前：{snapshot?.exam.name}；新数据：{candidate.exam.name}，共 {candidate.students.length} 人。当前考试、试卷照片、题干、出题审核及设置将被替换，不建立历史记录。</p><div className="actions"><button disabled={working} onClick={() => void persist(candidate)}>确认替换并保存</button><button className="secondary" disabled={working} onClick={() => { setCandidate(null); setMessage('已取消替换，当前考试保留。'); }}>保留当前考试</button></div></div>}
     </section>
+    {ready&&!snapshot&&<section className="card" aria-label="恢复旧版考试">
+      <h2>恢复旧版考试</h2><p>可把升级前保存在本机的考试复制到当前账号 {account.user.username}。不会自动分配，不覆盖已有考试，不迁移密码、登录态或模型密钥。</p>
+      <button className="secondary" disabled={locked} onClick={()=>void inspectLegacy()}>检查旧版考试</button>
+      {legacy&&<div className="confirm-panel"><p>{legacy.examName} · {legacy.subjectName}；{legacy.studentCount} 人、{legacy.questionRecords} 条逐题得分、{legacy.paperFiles} 个试卷文件。</p>
+        <p>目标账号：{account.user.username}。原始考试保留，资料只复制到本机。</p>
+        <label>输入当前用户名确认<input aria-label="恢复旧版考试确认用户名" value={legacyUsername} disabled={locked} onChange={e=>setLegacyUsername(e.target.value)}/></label>
+        <button disabled={locked||legacyUsername!==account.user.username} onClick={()=>void importLegacy()}>确认恢复到当前账号</button>
+      </div>}
+    </section>}
+    {snapshot && analysis && <PaperWorkspace paper={snapshot.paper} numbers={analysis.audit.questionNumbers} locked={locked} onBusy={onBusy}
+      save={paper => persist({ ...snapshot, paper, practice: undefined })}/>}
+    {!snapshot && <section className="empty-section"><h2>空白卷</h2><p>读取或导入考试后，可以上传本场空白卷。</p></section>}
+    </div>
+    <div hidden={page!=='analysis'}>
+    {snapshot && analysis && <div className="exam-overview"><div><span className="overview-label">当前考试</span><h2>{snapshot.exam.name}</h2><p>{snapshot.exam.className} · {snapshot.exam.subjectName}</p></div><div className="overview-metrics"><ExamMetric label="名单人数" value={analysis.audit.rosterCount} icon={Users}/><ExamMetric label="可分析学生" value={analysis.audit.exportedCount} icon={UserCheck}/><ExamMetric label="逐题记录" value={analysis.audit.questionRecords} icon={FileText}/><ExamMetric label="没扫 / 无原卷" value={`${analysis.audit.notScannedCount} / ${analysis.audit.noPaperCount}`} icon={UserMinus}/></div></div>}
+    {snapshot && analysis && page==='analysis' && <React.Suspense fallback={<div className="chart-empty" role="status">正在加载图表…</div>}><AnalysisCharts workspace={snapshot} active/></React.Suspense>}
+    {ready&&!snapshot&&<section className="empty-section"><h2>暂无考试数据</h2><p>导入本场考试后，这里将显示班级与逐题分析。</p><button className="secondary" onClick={()=>onPageChange('import')}>前往信息导入</button></section>}
     {snapshot && analysis && <section className="card" aria-label="本机当前考试">
       <div className="card-heading"><h2>{snapshot.exam.name}</h2><span className="badge success">已保存到本机</span></div>
       <p>{snapshot.exam.className} · {snapshot.exam.subjectName} · {snapshot.source.kind === 'zhixue_webview' ? '内置窗口读取' : 'Chrome 扩展导入'}</p>
-      <div className="metrics"><div><b>{analysis.audit.rosterCount}</b><span>名单人数</span></div><div><b>{analysis.audit.exportedCount}</b><span>可分析学生</span></div><div><b>{analysis.audit.questionRecords}</b><span>逐题记录</span></div><div><b>{analysis.audit.notScannedCount} / {analysis.audit.noPaperCount}</b><span>没扫 / 无原卷</span></div></div>
+      <p className="notice" aria-live="polite" data-testid="analysis-workspace-message">{message}</p>
       <p className="help">没扫、无原卷学生不判对错，也不进入每题统计分母。失分用于选题，不能直接认定错因。</p>
       {settings && <details><summary>本场教师设置</summary><div className="fields settings">
         <label>每道错题变式数<input aria-label="每道错题变式数" type="number" min="1" max="10" value={settings.variantsPerQuestion} onChange={e => setSettings({ ...settings, variantsPerQuestion: Number(e.target.value) })} disabled={locked}/></label>
@@ -197,17 +224,10 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props)
       <div className="actions"><button className="secondary small danger" disabled={locked} onClick={() => setConfirmClear(true)}>清除当前考试</button></div>
       {confirmClear && <div className="confirm-panel" role="region" aria-label="确认清除考试"><b>清除本机当前考试及教师设置？</b><p>这会清除程序保存的本场学生、得分、试卷照片、题干及出题审核结果。下载目录中的扩展文件和智学网登录态仍保留。</p><div className="actions"><button className="danger" disabled={working} onClick={() => void persist(null)}>确认清除</button><button className="secondary" disabled={working} onClick={() => setConfirmClear(false)}>取消清除</button></div></div>}
     </section>}
-    {ready&&!snapshot&&<section className="card" aria-label="恢复旧版考试">
-      <h2>恢复旧版考试</h2><p>可把升级前保存在本机的考试复制到当前账号 {account.user.username}。不会自动分配，不覆盖已有考试，不迁移密码、登录态或模型密钥。</p>
-      <button className="secondary" disabled={locked} onClick={()=>void inspectLegacy()}>检查旧版考试</button>
-      {legacy&&<div className="confirm-panel"><p>{legacy.examName} · {legacy.subjectName}；{legacy.studentCount} 人、{legacy.questionRecords} 条逐题得分、{legacy.paperFiles} 个试卷文件。</p>
-        <p>目标账号：{account.user.username}。原始考试保留，资料只复制到本机。</p>
-        <label>输入当前用户名确认<input aria-label="恢复旧版考试确认用户名" value={legacyUsername} disabled={locked} onChange={e=>setLegacyUsername(e.target.value)}/></label>
-        <button disabled={locked||legacyUsername!==account.user.username} onClick={()=>void importLegacy()}>确认恢复到当前账号</button>
-      </div>}
-    </section>}
-    {snapshot && analysis && <PaperWorkspace paper={snapshot.paper} numbers={analysis.audit.questionNumbers} locked={locked} onBusy={onBusy}
-      save={paper => persist({ ...snapshot, paper, practice: undefined })}/>}
+    </div>
+    <div hidden={page!=='report'}>
+    <KnowledgeWorkspace/>
+    {ready&&!snapshot&&<section className="empty-section"><h2>暂无本场报告</h2><p>导入考试和空白卷后，可以在这里生成和审核补练。</p><button className="secondary" onClick={()=>onPageChange('import')}>前往信息导入</button></section>}
     {snapshot && <AgentWorkspace workspace={snapshot} revision={stored.revision} locked={locked} onBusy={onBusy} prepare={async (paper,expectedRevision)=>{
       const next=validateWorkspace({...latestStored.current.snapshot!,paper,practice:undefined});
       const result=await invoke<StoredWorkspace>('save_workspace',{expectedRevision,snapshot:next});
@@ -216,5 +236,6 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props)
       setStored({revision:result.revision,snapshot:restored});setSettings(restored.settings);
       return {workspace:restored,revision:result.revision};
     }} save={practice=>persist({...latestStored.current.snapshot!,practice})}/>}
+    </div>
   </>;
 }

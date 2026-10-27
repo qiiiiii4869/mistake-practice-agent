@@ -1,5 +1,5 @@
-import { KnowledgeWorkspace } from './KnowledgeWorkspace';
 import React from 'react';
+import { BarChart3, ClipboardList, FileText, Wallet, GraduationCap, QrCode, ChevronRight } from 'lucide-react';
 import { createRoot } from 'react-dom/client';
 import { invoke } from '@tauri-apps/api/core';
 import { errorMessage, type ConnectionReport, type LoginStatus } from '../../../packages/zhixue/src';
@@ -9,7 +9,11 @@ import { AccountGate, useAccount } from './AccountGate';
 import { AdminWorkspace } from './AdminWorkspace';
 
 function App() {
-  const {setWorkBusy}=useAccount();
+  const {setWorkBusy,user}=useAccount();
+  type Page = 'import'|'analysis'|'report'|'billing';
+  function pageFromHash():Page {const value=window.location.hash.slice(1);return ['import','analysis','report','billing'].includes(value)?value as Page:'import';}
+  const [page,setPage]=React.useState<Page>(pageFromHash);
+  React.useEffect(()=>{const changed=()=>setPage(pageFromHash());window.addEventListener('hashchange',changed);return()=>window.removeEventListener('hashchange',changed);},[]);
   const [report, setReport] = React.useState<ConnectionReport | null>(null);
   const [login, setLogin] = React.useState<LoginStatus>({ open: false, host: null, captcha_60500: false });
   const [busy, setBusy] = React.useState(false);
@@ -60,11 +64,22 @@ function App() {
   }
 
   const verified = report?.ok === true && report.summary.authentication === 'verified_teacher_session' && report.options.length > 0;
-  return <main>
-    <header><div className="brand">错题智能推送 <span>AGENT</span></div><div className="stage">阶段 4 · 离线出题与审核</div></header>
-    <nav className="section-nav" aria-label="功能入口"><a href="#exam-students">考试与学生信息</a><a href="#paper-review">上传空白卷</a><a href="#agent-review">出题与审核</a><a href="#knowledge-library">知识库</a></nav>
-    <section className="intro"><span className="eyebrow">数据接入 / 智学网</span><h1>先读取考试与学生，再安排补练。</h1><p>登录智学网后，选择某次考试、学科和班级，读取全班学生名单及逐题得分。</p></section>
-    <section className="steps" aria-label="验证步骤"><div><b>01</b><span>教师登录智学网</span></div><div><b>02</b><span>选择考试、学科与班级</span></div><div><b>03</b><span>读取学生与逐题得分</span></div></section>
+  const pages = [
+    { id:'import' as const, label:'信息导入', icon:ClipboardList, description:'考试、学生与空白卷' },
+    { id:'analysis' as const, label:'数据分析', icon:BarChart3, description:'班级与逐题统计' },
+    { id:'report' as const, label:'生成报告', icon:FileText, description:'知识库与补练报告' },
+    { id:'billing' as const, label:'充值中心', icon:Wallet, description:'生成次数与充值' },
+  ];
+  const current=pages.find(item=>item.id===page)!;
+  function navigate(next:typeof page){setPage(next);window.location.hash=next;window.scrollTo({top:0,behavior:'auto'});}
+  return <div className="workspace-shell">
+    <aside className="workspace-sidebar"><div className="sidebar-brand"><span className="sidebar-logo"><GraduationCap size={20}/></span><div><b>错题智能推送</b><small>教师工作台</small></div></div>
+      <div className="sidebar-label">工作空间</div><nav className="workspace-nav" aria-label="功能入口">{pages.map(item=><button key={item.id} type="button" aria-current={page===item.id?'page':undefined} className={page===item.id?'active':''} onClick={()=>navigate(item.id)}><item.icon size={18} strokeWidth={1.8}/><span>{item.label}</span>{page===item.id&&<ChevronRight className="nav-arrow" size={15}/>}</button>)}</nav>
+      <div className="sidebar-bottom"><span className="sidebar-dot"/>本机工作区</div>
+    </aside>
+    <main className="workspace-main"><div className="page-top"><div className="breadcrumb">教师工作台 <ChevronRight size={13}/> <strong>{current.label}</strong></div><span className="page-session">{user.username}</span></div>
+    <div className="page-heading"><div><span className="page-kicker">{page==='import'?'WORKSPACE / IMPORT':page==='analysis'?'WORKSPACE / ANALYSIS':page==='report'?'WORKSPACE / REPORT':'ACCOUNT / CREDITS'}</span><h1>{current.label}</h1><p>{current.description}</p></div><span className="page-heading-icon"><current.icon size={23}/></span></div>
+    <div hidden={page!=='import'}>
     <section className="card">
       <div className="card-heading"><h2>教师账号连接</h2><span className={`badge ${verified ? 'success' : ''}`}>{verified ? '验证通过' : busy ? '读取中' : '待验证'}</span></div>
       <p>点击登录按钮会弹出智学网官方登录页面，请在那里填写账号密码。登录完成后回到这里读取考试列表。</p>
@@ -79,10 +94,11 @@ function App() {
       <div className="actions"><button className="secondary small" onClick={() => void saveDiagnostic()}>保存匿名诊断</button></div>
       {saved && <p className="saved">诊断已保存：{saved}</p>}
     </section>}
-    <ScoreWorkspace report={report} loginOpen={login.open} parentBusy={busy} onBusy={setBusy}/>
-    <KnowledgeWorkspace/>
-    <footer>每场考试单独处理，学生与得分只保存在本机。上传空白卷后，点击“生成结果”启动 Agent 读取、核对、知识库检索和出题；最终结果需教师审核。<br/>本次只读取得分，不采集作答选项，暂不提供错误选项分布。</footer>
-  </main>;
+    </div>
+    <ScoreWorkspace report={report} loginOpen={login.open} parentBusy={busy} onBusy={setBusy} page={page} onPageChange={navigate}/>
+    <div hidden={page!=='billing'}><section className="recharge-layout" aria-label="充值信息"><div className="recharge-details"><span className="recharge-label">账户次数</span><h2>生成次数</h2><div className="recharge-balance"><strong>{user.credits}</strong><span>次</span></div><p>当前可用 {user.available} 次{user.reserved>0?`，${user.reserved} 次处理中`:''}</p><div className="recharge-divider"/><h3>充值方式</h3><p>请联系管理员充值，到账后可在此查看余额。</p><div className="recharge-note">成功生成一批补练扣 1 次；失败不扣次。</div></div><div className="recharge-code"><div className="qr-placeholder"><QrCode size={52} strokeWidth={1.2}/><span>暂无收款二维码</span></div><b>扫码充值</b><p>充值完成后请联系管理员确认</p></div></section></div>
+    <div className="workspace-footer">错题智能推送 <span>·</span> 教学资料保存在本机</div>
+  </main></div>;
 }
 
 function WorkspaceRouter(){

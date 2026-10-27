@@ -38,6 +38,7 @@ def main():
             initial=json.dumps({'revision':1,'snapshot':workspace()})
             page.add_init_script(MOCK+'\nwindow.testStored='+initial+';'+EXTRA+DEEPSEEK_MOCK)
             page.goto(f'http://127.0.0.1:{server.server_port}/')
+            page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click()
             agent=page.get_by_role('region',name='出题流程演示',exact=True)
             agent.get_by_text('DeepSeek 模型设置',exact=True).click()
             key=agent.get_by_label('DeepSeek API Key',exact=True)
@@ -60,7 +61,7 @@ def main():
             assert '模拟学生甲' not in page.evaluate('JSON.stringify(testDeepseekCalls)')
             assert 'sk-synthetic' not in page.evaluate('JSON.stringify(testStored)+JSON.stringify(sessionStorage)')
             agent.get_by_role('button',name='保存本场出题与审核',exact=True).click()
-            expect(page.get_by_test_id('workspace-message')).to_contain_text('已校验并保存')
+            expect(agent.get_by_test_id('agent-message')).to_contain_text('已保存本场出题与审核')
             assert page.evaluate('testStored.snapshot.practice.mode')=='real'
             assert page.evaluate('testAccount.credits')==9
             expect(agent.get_by_text('修改题目（修改后需重新自检与审核）',exact=True).first).to_be_visible()
