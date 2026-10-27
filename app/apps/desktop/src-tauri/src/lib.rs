@@ -76,6 +76,9 @@ fn configure_deepseek(window:WebviewWindow,state:tauri::State<'_,DeepseekState>,
 #[tauri::command]
 async fn call_deepseek(window:WebviewWindow,app:tauri::AppHandle,state:tauri::State<'_,DeepseekState>,request:model::Request)->Result<Value,String>{
     require_main(&window)?;
+    if matches!(request.stage.as_str(), "recognize_paper" | "annotate") {
+        with_knowledge(app.clone(), |conn| knowledge::require_searchable(conn)).await?;
+    }
     if state.quota.load(Ordering::SeqCst){return Err("model_quota_exhausted".into());}
     if state.running.swap(true,Ordering::SeqCst){return Err("model_busy".into());}
     struct Guard<'a>(&'a AtomicBool);impl Drop for Guard<'_>{fn drop(&mut self){self.0.store(false,Ordering::SeqCst);}}
@@ -384,6 +387,20 @@ async fn list_knowledge(window: WebviewWindow, app: tauri::AppHandle) -> Result<
     with_knowledge(app, |conn| knowledge::list(conn)).await
 }
 #[tauri::command]
+async fn legacy_workspace_summary(window: WebviewWindow, app: tauri::AppHandle) -> Result<Option<storage::LegacySummary>, String> {
+    require_main(&window)?;
+    let source = app.path().app_local_data_dir().map_err(|_| "storage_failed")?.join("workspace.sqlite");
+    tauri::async_runtime::spawn_blocking(move || storage::legacy_summary(&source)).await.map_err(|_| "legacy_read_failed")?
+}
+#[tauri::command]
+async fn import_legacy_workspace(window: WebviewWindow, app: tauri::AppHandle, username: String, source_revision: i64, target_revision: i64) -> Result<storage::Stored, String> {
+    require_main(&window)?;
+    account::confirm_current_username(&app, &username)?;
+    let source = app.path().app_local_data_dir().map_err(|_| "storage_failed")?.join("workspace.sqlite");
+    let destination = database_path(&app)?;
+    tauri::async_runtime::spawn_blocking(move || storage::import_legacy(&source, &destination, source_revision, target_revision)).await.map_err(|_| "legacy_read_failed")?
+}
+#[tauri::command]
 async fn import_knowledge(window: WebviewWindow, app: tauri::AppHandle, expected_revision: i64, document: knowledge::Document) -> Result<knowledge::Library, String> {
     require_main(&window)?;
     with_knowledge(app, move |conn| knowledge::import(conn, expected_revision, document)).await
@@ -554,6 +571,8 @@ pub fn run() {
             load_workspace,
             save_workspace,
             list_knowledge,
+            legacy_workspace_summary,
+            import_legacy_workspace,
             import_knowledge,
             remove_knowledge,
             search_knowledge,

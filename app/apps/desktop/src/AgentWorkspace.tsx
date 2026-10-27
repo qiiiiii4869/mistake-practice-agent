@@ -7,7 +7,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { analyze, type Workspace, type Paper } from '../../../packages/core/src';
 import { runPipeline, assemble, agentError, editVariant, recheckVariant, regenerateVariant, type AgentBatch, type QuestionKind, type Exercise } from '../../../packages/agent/src';
 import { demoProvider } from '../../../packages/agent/src/mock';
-import type { KnowledgeHit } from '../../../packages/knowledge/src';
+import type { KnowledgeHit, KnowledgeLibrary } from '../../../packages/knowledge/src';
 import { useAccount, accountError } from './AccountGate';
 
 const labels: Record<QuestionKind,string> = {choice:'选择题',text:'纯文字题',diagram:'依赖图形',shared_material:'共用材料',listening:'听力',writing:'作文',practical:'实验操作'};
@@ -24,6 +24,9 @@ export function AgentWorkspace({ workspace, revision, locked, onBusy, prepare, s
   const [key,setKey]=React.useState('');
   const [status,setStatus]=React.useState<DeepseekStatus|null>(null);
   const [configuring,setConfiguring]=React.useState(false);
+  const [checking,setChecking]=React.useState(false);
+  const [knowledgeCheck,setKnowledgeCheck]=React.useState<{documents:number;chunks:number}|null>(null);
+  const [readinessMessage,setReadinessMessage]=React.useState('检查只读取当前账号的本机资料，不调用模型、不预占或扣次数。');
   const [working,setWorking]=React.useState(false);
   const [layout,setLayout]=React.useState<'class'|'individual'>('class');
   const [includeAnswers,setIncludeAnswers]=React.useState(true);
@@ -52,7 +55,23 @@ export function AgentWorkspace({ workspace, revision, locked, onBusy, prepare, s
   const analysis=React.useMemo(()=>analyze(workspace),[workspace]);
   const confirmed=workspace.paper?.questions.filter(q=>q.confirmed) ?? [];
   const preview=React.useMemo(()=>batch && batch.inputKey===practiceKey(workspace) ? assemble(workspace,batch,true) : [],[workspace,batch]);
-  const disabled=locked||working||configuring;
+  const disabled=locked||working||configuring||checking;
+  async function checkReadiness(){
+    const library=await invoke<KnowledgeLibrary>('list_knowledge');
+    const chunks=library.documents.reduce((sum,d)=>sum+d.chunkCount,0);
+    setKnowledgeCheck({documents:library.documents.length,chunks});
+    if(chunks<1)throw new Error('knowledge_required');
+    if(!workspace.paper?.pages.length&&!confirmed.length)throw new Error('paper_required');
+    if(!analysis.questions.some(q=>q.weakStudents>0))throw new Error('no_weak_questions');
+    const current=await invoke<DeepseekStatus>('deepseek_status');setStatus(current);
+    if(!current.configured||current.quotaExhausted)throw new Error(current.quotaExhausted?'model_quota_exhausted':'model_key_required');
+    setReadinessMessage('本机资料检查通过；点击“生成结果”才会预占次数并调用模型。题号对应及识别质量仍需实际核对。');
+  }
+  async function inspectReadiness(){
+    setChecking(true);
+    try{await checkReadiness();}catch(error){setReadinessMessage(agentError(error));}
+    finally{setChecking(false);}
+  }
   async function run() {
     if (mode==='mock'&&!keyword.trim()) return;
     if(mode==='real'&&(!status?.configured||status.quotaExhausted)){setMessage(agentError(status?.quotaExhausted?'model_quota_exhausted':'model_key_required'));return;}
@@ -60,6 +79,8 @@ export function AgentWorkspace({ workspace, revision, locked, onBusy, prepare, s
     let jobId:string|null=null;let generated:AgentBatch|null=null;
     try {
       if(mode==='real'){
+        setMessage('正在检查本机知识库、试卷和模型配置，尚未预占次数…');
+        await checkReadiness();
         requestKey.current??=crypto.randomUUID();
         const job=await invoke<{jobId:string}>('account_generation_begin',{requestKey:requestKey.current});jobId=job.jobId;
       }
@@ -160,6 +181,15 @@ export function AgentWorkspace({ workspace, revision, locked, onBusy, prepare, s
     {mode==='mock'&&<label className="agent-keyword">演示知识点与检索词<input aria-label="演示知识点与检索词" maxLength={100} disabled={disabled} value={keyword} onChange={e=>setKeyword(e.target.value)}/></label>}
     {confirmed.length>0 && <details><summary>题型规则（已核对 {confirmed.length} 题）</summary><div className="table-scroll"><table><thead><tr><th>题号</th><th>题型</th><th>共用材料组</th></tr></thead><tbody>{confirmed.map(q=><tr key={q.number}><td>{q.number}</td><td><select aria-label={`第 ${q.number} 题题型`} disabled={disabled} value={rules[q.number]?.kind??'text'} onChange={e=>setRules({...rules,[q.number]:{kind:e.target.value as QuestionKind,group:rules[q.number]?.group??''}})}>{Object.entries(labels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></td><td><input aria-label={`第 ${q.number} 题材料组`} maxLength={100} disabled={disabled||rules[q.number]?.kind!=='shared_material'} value={rules[q.number]?.group??''} onChange={e=>setRules({...rules,[q.number]:{kind:'shared_material',group:e.target.value}})}/></td></tr>)}</tbody></table></div><p className="help">同一阅读材料的小题使用相同组名，题干中需包含完整共用材料。图形题仅尝试纯文字变式；听力、作文、实验操作不自动出题。</p></details>}
     {mode==='real'&&!!workspace.paper?.pages.length&&<label><input type="checkbox" aria-label="确认空白卷不含学生姓名" checked={blank} disabled={disabled} onChange={e=>setBlank(e.target.checked)}/> 已上传空白试卷，不含学生姓名；点击生成后才发送给模型读取和核对</label>}
+    {mode==='real'&&<div className="notice" aria-label="生成准备检查">
+      <b>生成前准备</b><ul>
+        <li>当前账号：{account.user.username}；本场 {analysis.audit.exportedCount} 人有逐题得分。</li>
+        <li>空白卷：{workspace.paper?.pages.length??0} 个文件或页面；已核对题干 {confirmed.length} 道。</li>
+        <li>知识库：{knowledgeCheck?`${knowledgeCheck.documents} 份文档、${knowledgeCheck.chunks} 个可检索片段（上次检查）`:'尚未检查'}。 <a href="#knowledge-library">前往知识库</a></li>
+        <li>模型密钥：{status?.configured?'本次会话已配置':'尚未配置'}；可用生成次数：{account.user.available}。</li>
+      </ul><button className="secondary small" disabled={disabled} onClick={()=>void inspectReadiness()}>检查生成准备</button>
+      <p role="status">{readinessMessage}</p>
+    </div>}
     <div className="actions"><button disabled={disabled||(mode==='mock'&&(!keyword.trim()||!confirmed.length))||(mode==='real'&&(!!pendingGeneration||account.user.available<1||!status?.configured||status.quotaExhausted||(!workspace.paper?.pages.length&&!confirmed.length)||(!!workspace.paper?.pages.length&&!blank)))} onClick={()=>void run()}>{mode==='real'?'生成结果':'运行离线出题演示'}</button>{working&&controller.current&&<button className="secondary" onClick={()=>controller.current?.abort()}>停止生成</button>}</div>
     <p className="notice" aria-live="polite" data-testid="agent-message">{message}</p>
     {batch&&<>

@@ -1,3 +1,4 @@
+import { useAccount } from './AccountGate';
 import { AgentWorkspace } from './AgentWorkspace';
 import { PaperWorkspace } from './PaperWorkspace';
 import React from 'react';
@@ -8,6 +9,9 @@ import { errorMessage, type ConnectionReport, type ExamSubject, type SubjectRepo
 
 interface Props { report: ConnectionReport | null; loginOpen: boolean; parentBusy: boolean; onBusy: (busy: boolean) => void }
 export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props) {
+  const account=useAccount();
+  const [legacy,setLegacy]=React.useState<{revision:number;examName:string;subjectName:string;studentCount:number;questionRecords:number;paperFiles:number}|null>(null);
+  const [legacyUsername,setLegacyUsername]=React.useState('');
   const [stored, setStoredState] = React.useState<StoredWorkspace>({ revision: 0, snapshot: null });
   const latestStored=React.useRef(stored);
   function setStored(next:StoredWorkspace){latestStored.current=next;setStoredState(next);}
@@ -38,6 +42,22 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props)
     }).catch(error => { if (active) setMessage(`恢复本地数据失败，已暂停写入。${dataErrorMessage(error)}`); });
     return () => { active = false; };
   }, []);
+
+  function legacyError(error:unknown){
+    const code=error instanceof Error?error.message:String(error);
+    return ({legacy_not_found:'旧版目录中没有可恢复的考试。',legacy_read_failed:'旧版考试无法读取，原文件保持不变。',legacy_username_mismatch:'确认用户名与当前登录账号不一致。',legacy_source_changed:'旧版考试已变化，请重新检查后确认。',legacy_target_not_empty:'当前账号已有考试，不能通过旧版恢复覆盖。',storage_conflict:'当前账号数据已变化，请重新打开后检查。'} as Record<string,string>)[code]??dataErrorMessage(error);
+  }
+  async function inspectLegacy(){
+    setWorking(true);onBusy(true);
+    try{const value=await invoke<typeof legacy>('legacy_workspace_summary');setLegacy(value);setLegacyUsername('');setMessage(value?'已找到旧版考试，请核对考试及目标账号后确认恢复。':'旧版目录中没有可恢复的考试。');}
+    catch(error){setMessage(legacyError(error));}finally{setWorking(false);onBusy(false);}
+  }
+  async function importLegacy(){
+    if(!legacy||legacyUsername!==account.user.username)return;
+    setWorking(true);onBusy(true);
+    try{const value=await invoke<StoredWorkspace>('import_legacy_workspace',{username:legacyUsername,sourceRevision:legacy.revision,targetRevision:stored.revision});const normalized=value.snapshot?validateWorkspace(value.snapshot):null;if(!normalized)throw new Error('legacy_read_failed');setStored({...value,snapshot:normalized});setSettings(normalized.settings);setLegacy(null);setMessage('旧版考试已复制到当前账号的本机工作区；原数据保留，未上传学生资料。');}
+    catch(error){setMessage(legacyError(error));}finally{setWorking(false);onBusy(false);}
+  }
 
   async function chooseExam(id: string) {
     const version = ++requestVersion.current;
@@ -176,6 +196,15 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy }: Props)
       <details open aria-label="学生名单与逐题得分"><summary>学生名单与逐题得分（{analysis.students.length} 人）</summary><div className="table-scroll"><table><thead><tr><th>学生</th><th>状态</th><th>逐题得分合计</th><th>失分</th><th>纳入补练题号</th><th>逐题明细</th></tr></thead><tbody>{analysis.students.map((s, i) => <tr key={s.id}><td>{s.name || `学生 ${i + 1}`}</td><td>{s.availability === 'scored' ? '已读取' : s.availability === 'not_scanned' ? '没扫' : '无原卷'}</td><td>{s.availability === 'scored' ? Number(snapshot.students.find(student=>student.id===s.id)!.questions.reduce((total,q)=>total+q.score,0).toFixed(2)) : '—'}</td><td>{s.availability === 'scored' ? Number(s.lostPoints.toFixed(2)) : '—'}</td><td>{s.availability === 'scored' ? s.weakQuestions.join('、') || '暂无' : '不判对错'}</td><td>{s.availability === 'scored' ? <details><summary>查看逐题得分</summary><ul>{snapshot.students.find(student=>student.id===s.id)!.questions.map(q=><li key={q.number}>第 {q.number} 题：{q.score} / {q.fullScore} · {q.result==='correct'?'全对':q.result==='incorrect'?'全错':q.result==='partial_credit'?'部分得分':'不计分'}</li>)}</ul></details> : '无逐题记录'}</td></tr>)}</tbody></table></div></details>
       <div className="actions"><button className="secondary small danger" disabled={locked} onClick={() => setConfirmClear(true)}>清除当前考试</button></div>
       {confirmClear && <div className="confirm-panel" role="region" aria-label="确认清除考试"><b>清除本机当前考试及教师设置？</b><p>这会清除程序保存的本场学生、得分、试卷照片、题干及出题审核结果。下载目录中的扩展文件和智学网登录态仍保留。</p><div className="actions"><button className="danger" disabled={working} onClick={() => void persist(null)}>确认清除</button><button className="secondary" disabled={working} onClick={() => setConfirmClear(false)}>取消清除</button></div></div>}
+    </section>}
+    {ready&&!snapshot&&<section className="card" aria-label="恢复旧版考试">
+      <h2>恢复旧版考试</h2><p>可把升级前保存在本机的考试复制到当前账号 {account.user.username}。不会自动分配，不覆盖已有考试，不迁移密码、登录态或模型密钥。</p>
+      <button className="secondary" disabled={locked} onClick={()=>void inspectLegacy()}>检查旧版考试</button>
+      {legacy&&<div className="confirm-panel"><p>{legacy.examName} · {legacy.subjectName}；{legacy.studentCount} 人、{legacy.questionRecords} 条逐题得分、{legacy.paperFiles} 个试卷文件。</p>
+        <p>目标账号：{account.user.username}。原始考试保留，资料只复制到本机。</p>
+        <label>输入当前用户名确认<input aria-label="恢复旧版考试确认用户名" value={legacyUsername} disabled={locked} onChange={e=>setLegacyUsername(e.target.value)}/></label>
+        <button disabled={locked||legacyUsername!==account.user.username} onClick={()=>void importLegacy()}>确认恢复到当前账号</button>
+      </div>}
     </section>}
     {snapshot && analysis && <PaperWorkspace paper={snapshot.paper} numbers={analysis.audit.questionNumbers} locked={locked} onBusy={onBusy}
       save={paper => persist({ ...snapshot, paper, practice: undefined })}/>}

@@ -45,6 +45,16 @@ pub(crate) fn list(conn: &Connection) -> Result<Library, String> {
     Ok(Library { revision, documents })
 }
 
+// Check actual indexed text, rather than only whether a PDF has been imported.
+// No source text, filenames or student information leaves this local check.
+pub(crate) fn require_searchable(conn: &Connection) -> Result<(), String> {
+    let ready: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM knowledge_documents d JOIN knowledge_chunks c ON c.document_id=d.id WHERE length(trim(c.text))>0 LIMIT 1)",
+        [], |row| row.get(0),
+    ).map_err(|_| "storage_failed")?;
+    if ready { Ok(()) } else { Err("knowledge_required".into()) }
+}
+
 // Character boundaries preserve UTF-8. Overlap retains context; chunks never cross pages.
 fn chunks(text: &str) -> Vec<String> {
     let chars: Vec<char> = text.chars().collect();

@@ -220,6 +220,15 @@ pub(crate) fn user_folder(app: &tauri::AppHandle) -> Result<std::path::PathBuf, 
         .join("accounts")
         .join(id))
 }
+pub(crate) fn confirm_current_username(app: &tauri::AppHandle, username: &str) -> Result<(), String> {
+    let state = app.state::<AccountState>();
+    require_session(&state)?;
+    let session = state.session.lock().map_err(|_| "state_unavailable")?;
+    if session.as_ref().ok_or("session_required")?.user.username != username {
+        return Err("legacy_username_mismatch".into());
+    }
+    Ok(())
+}
 fn pending_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     Ok(user_folder(app)?.join("pending-generation.json"))
 }
