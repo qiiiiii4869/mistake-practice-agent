@@ -10,8 +10,10 @@ from check_agent_ui import workspace,EXTRA
 DEEPSEEK_MOCK=r"""
 window.testDeepseek={configured:false,quotaExhausted:false,model:'deepseek-flash',usage:{promptTokens:0,completionTokens:0,totalTokens:0}};
 window.testDeepseekCalls=[];window.testQuota=false;
+window.testKnowledgeReady=true;
 const priorInvoke=window.__TAURI_INTERNALS__.invoke;
 window.__TAURI_INTERNALS__.invoke=async(command,args)=>{
+ if(command==='list_knowledge')return {revision:1,documents:testKnowledgeReady?[{id:'a'.repeat(64),name:'合成知识库.pdf',pageCount:1,chunkCount:1,emptyPages:[]}]:[]};
  if(command==='deepseek_status')return structuredClone(testDeepseek);
  if(command==='configure_deepseek'){testDeepseek.configured=!!args.key;testDeepseek.quotaExhausted=false;return;}
  if(command!=='call_deepseek')return priorInvoke(command,args);
@@ -46,6 +48,12 @@ def main():
             expect(agent.get_by_label('出题运行模式',exact=True)).to_have_value('real')
             run=agent.get_by_role('button',name='生成结果',exact=True)
             agent.get_by_label('确认空白卷不含学生姓名',exact=True).check()
+            page.evaluate('testKnowledgeReady=false')
+            run.click()
+            expect(agent.get_by_test_id('agent-message')).to_contain_text('知识库')
+            assert page.evaluate('testDeepseekCalls.length')==0
+            assert page.evaluate("testCommands.filter(c=>c==='account_generation_begin').length")==0
+            page.evaluate('testKnowledgeReady=true')
             run.click()
             expect(agent.get_by_test_id('agent-message')).to_contain_text('生成完成：2 道题')
             assert page.evaluate('testDeepseekCalls.map(r=>r.stage)')==['recognize_paper','recognize_paper','annotate','generate','solve','solve']
