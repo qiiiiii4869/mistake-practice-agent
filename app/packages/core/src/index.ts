@@ -18,6 +18,8 @@ export interface Student {
   reasonSource: string | null;
   rosterScore: number | null;
   rankCode: number | null;
+  classRank?: number | null;
+  gradeRank?: number | null;
   questions: QuestionResult[];
 }
 export interface ExamIdentity {
@@ -37,9 +39,14 @@ export interface Workspace {
   source: { kind: 'zhixue_webview' | 'chrome_extension'; finishedAt: string };
   exam: ExamIdentity;
   students: Student[];
+  overview?: ExamOverview;
   settings: TeacherSettings;
   paper?: Paper;
   practice?: AgentBatch;
+}
+export interface ExamOverview {
+  status: 'received' | 'unavailable';
+  classMax: number | null; classAvg: number | null; gradeMax: number | null; gradeAvg: number | null;
 }
 export interface StoredWorkspace { revision: number; snapshot: Workspace | null }
 export interface Audit {
@@ -112,6 +119,14 @@ function importStudent(value: unknown, unavailable: boolean): Student {
   const s = object(value);
   const student: Student = { id: id(s.student_id), name: text(s.student_name ?? ''),
     availability: 'scored', reasonSource: null, rosterScore: null, rankCode: null, questions: [] };
+  if (s.roster_score != null) student.rosterScore = number(s.roster_score);
+  for (const [field, value] of [['classRank', s.class_rank], ['gradeRank', s.grade_rank]] as const) {
+    if (value != null) {
+      const rank = count(value);
+      if (rank < 1) fail('invalid_count');
+      student[field] = rank;
+    }
+  }
   const questions = array(s.questions);
   if (unavailable) {
     if (s.availability === 'not_scanned' && s.reason_source === 'roster_score_column') student.availability = 'not_scanned';
@@ -119,7 +134,6 @@ function importStudent(value: unknown, unavailable: boolean): Student {
     else fail('invalid_unavailable_student');
     if (questions.length) fail('invalid_unavailable_student');
     student.reasonSource = String(s.reason_source);
-    if (s.roster_score != null) student.rosterScore = number(s.roster_score);
     if (s.rank_code != null) student.rankCode = number(s.rank_code);
   } else {
     if (s.availability != null && s.availability !== 'scored') fail('invalid_unavailable_student');
@@ -135,6 +149,21 @@ function importStudent(value: unknown, unavailable: boolean): Student {
     if (new Set(student.questions.map(q => q.number)).size !== student.questions.length) fail('duplicate_question_numbers');
   }
   return student;
+}
+
+function importOverview(value: unknown, camelCase = false): ExamOverview {
+  const o = object(value);
+  if (o.status !== 'received' && o.status !== 'unavailable') fail('invalid_data_shape');
+  const metric = (key: string) => {
+    const v = o[key];
+    if (v == null) return null;
+    const n = number(v);
+    if (n < 0) fail('invalid_score');
+    return n;
+  };
+  return {status: o.status as ExamOverview['status'], classMax: metric(camelCase ? 'classMax' : 'class_max'),
+    classAvg: metric(camelCase ? 'classAvg' : 'class_avg'), gradeMax: metric(camelCase ? 'gradeMax' : 'grade_max'),
+    gradeAvg: metric(camelCase ? 'gradeAvg' : 'grade_avg')};
 }
 
 function auditStudents(students: Student[]): Audit {
@@ -191,7 +220,8 @@ export function workspaceFromExport(value: unknown, kind: Workspace['source']['k
     name: text(names.name ?? '导入考试'), subjectName: text(names.subjectName ?? '未命名学科'), className: text(names.className ?? '导入班级') };
   if ((names.id != null && names.id !== exam.id) || (names.subjectId != null && names.subjectId !== exam.subjectId)
     || (names.classId != null && names.classId !== exam.classId)) fail('selection_mismatch');
-  return { schemaVersion: 1, source: { kind, finishedAt }, exam, students, settings: { ...defaultSettings } };
+  return { schemaVersion: 1, source: { kind, finishedAt }, exam, students, settings: { ...defaultSettings },
+    ...(data.overview === undefined ? {} : {overview: importOverview(data.overview)}) };
 }
 
 // Revalidate and project local persisted data before using it, including after upgrades.
@@ -204,7 +234,7 @@ export function validateWorkspace(value: unknown): Workspace {
     const s = object(value);
     if (!['scored', 'not_scanned', 'no_original_paper'].includes(String(s.availability))) fail('invalid_unavailable_student');
     return importStudent({student_id: s.id, student_name: s.name, availability: s.availability,
-      reason_source: s.reasonSource, roster_score: s.rosterScore, rank_code: s.rankCode,
+      reason_source: s.reasonSource, roster_score: s.rosterScore, rank_code: s.rankCode, class_rank: s.classRank, grade_rank: s.gradeRank,
       questions: array(s.questions).map(value => {
         const q = object(value);
         return {question_number: q.number, question_label: q.label, score: q.score, full_score: q.fullScore,
@@ -215,6 +245,7 @@ export function validateWorkspace(value: unknown): Workspace {
   const normalized: Workspace = { schemaVersion: 1, source: { kind: source.kind as Workspace['source']['kind'], finishedAt: id(source.finishedAt) },
     exam: { id: id(exam.id), name: text(exam.name), subjectId: id(exam.subjectId), subjectName: text(exam.subjectName),
       classId: id(exam.classId), className: text(exam.className) }, students, settings: validateSettings(w.settings),
+    ...(w.overview === undefined ? {} : {overview: importOverview(w.overview, true)}),
     ...(w.paper === undefined ? {} : { paper: validatePaper(w.paper, students.find(s => s.availability === 'scored')!.questions.map(q => q.number)) }) };
   if (w.practice !== undefined) normalized.practice = validateBatch(w.practice, normalized);
   return normalized;

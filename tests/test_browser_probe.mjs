@@ -5,7 +5,7 @@ import { zhixueProbe } from '../browser-probe/probe.mjs';
 
 // Every network response here is synthetic. None of these tests proves live access.
 const calls = [];
-function install({ role='teacher', roster, businessError=false, brokenPaper=false, badScore=false, classMismatch=false, backendFail=false, totalCount, scopeClasses, rowSubject, paperTransform, failPaperOnce=false, expireAt, structuredPaper }={}) {
+function install({ role='teacher', roster, businessError=false, brokenPaper=false, badScore=false, classMismatch=false, backendFail=false, totalCount, scopeClasses, rowSubject, paperTransform, failPaperOnce=false, expireAt, structuredPaper, overview={}, overviewFail=false, permission, showSchoolRank=false }={}) {
   calls.length=0;
   globalThis.location={origin:'https://www.zhixue.com'};
   globalThis.fetch=async(url,options)=>{
@@ -22,7 +22,8 @@ function install({ role='teacher', roster, businessError=false, brokenPaper=fals
     else if(path.includes('getUserTeachingInfos'))result={gradeClassSubjectDTO:[{gradeCode:'g3',classes:scopeClasses??[{classId:'class1',className:'三班',subjects:[{subjectCode:'bio',subjectName:'生物'}]}]}]};
     else if(path.includes('getClassReportList'))result={classPaperSummaryList:[{examId:'exam1',examName:'Synthetic exam'}],pageInfoDTO:{totalCount:1}};
     else if(path.includes('getSubjectsIncludeSubAndGroup'))result=[{topicSetId:'paper1',subjectName:'生物',subjectCode:'bio'},{topicSetId:'mathpaper',subjectName:'数学',subjectCode:'math'},{subjectName:'总分',isSubjectGroup:true}];
-    else if(path.includes('singleScoreList'))result={studentAnswerRecords:roster??[{userId:'private-student-id',userName:'Private Student',classId:classMismatch?'other':'class1',subjectCode:rowSubject??'bio',topicSetId:'paper1'}],...(totalCount===undefined?{}:{totalCount})};
+    else if(path.includes('singleScoreList'))result={studentAnswerRecords:roster??[{userId:'private-student-id',userName:'Private Student',classId:classMismatch?'other':'class1',subjectCode:rowSubject??'bio',topicSetId:'paper1'}],permission,isShowSchoolRank:showSchoolRank,...(totalCount===undefined?{}:{totalCount})};
+    else if(path.includes('getSubjectExamSummary')) { if(overviewFail) return {ok:false,status:403,headers:new Headers()}; result=overview; }
     else if(path.includes('getNewCheckSheet'))result=structuredPaper??{};
     else if(path.includes('/checksheet/')) {
       const number=calls.filter(call=>call.url.pathname.includes('/checksheet/')).length;
@@ -40,6 +41,23 @@ function install({ role='teacher', roster, businessError=false, brokenPaper=fals
   };
 }
 const selection={action:'export',examId:'exam1',subjectId:'paper1',classId:'class1'};
+
+test('imports scoped official overview and authorized student ranks',async()=>{
+  install({roster:[{userId:'s1',score:3,rank:2,schoolRank:12}],permission:{classRankEnable:true,schoolRankEnable:true},showSchoolRank:true,
+    overview:{clsTopScore:90,clsAvgScore:70,schTopSCore:100,schAvgScore:75}});
+  const r=await zhixueProbe({...selection,fullClass:true});
+  assert.equal(r.ok,true);
+  assert.deepEqual(r.data.overview,{status:'received',class_max:90,class_avg:70,grade_max:100,grade_avg:75});
+  assert.equal(r.data.students[0].class_rank,2);assert.equal(r.data.students[0].grade_rank,12);
+  const q=calls.find(c=>c.url.pathname.includes('getSubjectExamSummary')).url.searchParams;
+  assert.equal(q.get('classId'),'class1');assert.equal(q.get('topicSetId'),'paper1');
+});
+test('optional overview failure and withheld ranks do not prevent class import',async()=>{
+  install({roster:[{userId:'s1',rank:2,schoolRank:12}],overviewFail:true});
+  const r=await zhixueProbe({...selection,fullClass:true});
+  assert.equal(r.ok,true);assert.equal(r.data.overview.status,'unavailable');
+  assert.equal(r.data.students[0].class_rank,null);assert.equal(r.data.students[0].grade_rank,null);
+});
 
 test('manifest limits access to explicit current-tab action and local downloads',()=>{
   const m=JSON.parse(fs.readFileSync(new URL('../browser-probe/manifest.json',import.meta.url)));

@@ -9,6 +9,14 @@ test('full class scores and labels are independently recomputed (Python parity)'
   assert.equal(audit.resultCounts.partial_credit,2);
   assert.ok(!JSON.stringify(audit).includes('SYNTHETIC_1'));
 });
+test('official overview and student ranks survive workspace validation',()=>{
+  const d=fixture();
+  d.data.overview={status:'received',class_max:90,class_avg:70,grade_max:100,grade_avg:75};
+  Object.assign(d.data.students[0],{roster_score:80,class_rank:2,grade_rank:12});
+  const w=workspaceFromExport(d,'zhixue_webview');
+  assert.equal(w.overview.gradeMax,100);assert.equal(w.students[0].classRank,2);assert.equal(w.students[0].gradeRank,12);
+  assert.deepEqual(validateWorkspace(JSON.parse(JSON.stringify(w))),w);
+});
 const invalid = [
   ['missing student',d=>d.data.students.pop()],
   ['mislabeled score',d=>d.data.students[0].questions[0].result='incorrect'],

@@ -30,6 +30,7 @@ export async function zhixueProbe(command) {
     "/api-teacher/newContainer/getClassReportList",
     "/configure/class/getSubjectsIncludeSubAndGroup",
     "/api-classreport/class/singleScoreList/",
+    "/api-classreport/class/getSubjectExamSummary/",
     "/api-classreport/class/student/getNewCheckSheet/",
     "/classreport/class/student/checksheet/",
   ]);
@@ -272,6 +273,19 @@ export async function zhixueProbe(command) {
     if (!rows.length) fail("empty_roster");
     if (unique.size !== rows.length) fail("roster_student_ids_missing_or_duplicated");
     summary.roster = { status: "passed_live", student_count: unique.size, scope: "selected_teaching_class_and_subject", source: "class_single_score_list" };
+    const metric = value => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+    let overview = {status:"unavailable", class_max:null, class_avg:null, grade_max:null, grade_avg:null};
+    try {
+      const stats = await read("/api-classreport/class/getSubjectExamSummary/", {
+        examId: command.examId, classId: command.classId, topicSetId: selectedSubject.id, historyReportFlag: "",
+      });
+      overview = {status:"received", class_max:metric(stats?.clsTopScore), class_avg:metric(stats?.clsAvgScore),
+        grade_max:metric(stats?.schTopSCore), grade_avg:metric(stats?.schAvgScore)};
+    } catch { /* The optional overview must not prevent importing the class. */ }
+    const rank = value => {
+      const n = typeof value === "number" ? value : typeof value === "string" && /^\d+$/.test(value) ? Number(value) : NaN;
+      return Number.isSafeInteger(n) && n > 0 ? n : null;
+    };
     const students = [];
     const unavailableStudents = [];
     const failures = [];
@@ -333,7 +347,10 @@ export async function zhixueProbe(command) {
           delete question.student_answer;
           delete question.subjective_answer_present;
         }
-        students.push({ student_id: userId, student_name: studentName, questions });
+        students.push({ student_id: userId, student_name: studentName, questions,
+          roster_score:metric(row.score),
+          class_rank:result.permission?.classRankEnable === true ? rank(row.rank) : null,
+          grade_rank:result.permission?.schoolRankEnable === true && result.isShowSchoolRank === true ? rank(row.schoolRank) : null });
       } catch (error) {
         failures.push({ sample_index: i + 1, code: /^[a-z_0-9-]+$/.test(error.message) ? error.message : "paper_read_failed",
           roster_hints: {
@@ -372,7 +389,7 @@ export async function zhixueProbe(command) {
     summary.finished_at = new Date().toISOString();
     return {
       ok: accountedCount() === sample.length, summary,
-      data: { exam_id: command.examId, subject_id: command.subjectId, class_id: command.classId, students, unavailable_students: unavailableStudents },
+      data: { exam_id: command.examId, subject_id: command.subjectId, class_id: command.classId, overview, students, unavailable_students: unavailableStudents },
     };
   } catch (error) {
     summary.status = "failed";

@@ -31,10 +31,23 @@ export function AnalysisCharts({ workspace, active }: { workspace: Workspace; ac
     if (band) band.count++;
   }
   const scored = bands.reduce((sum, band) => sum + band.count, 0);
+  const totals = workspace.students.filter(student => student.availability === 'scored' && student.questions.some(q => q.fullScore > 0))
+    .map(student => student.questions.reduce((sum, q) => sum + q.score, 0));
+  const formatScore = (value: number | null | undefined) => value == null ? '未获取' : Number(value.toFixed(2));
+  const overview = workspace.overview;
   const weak = loss.filter(question => question.rate > 0).sort((a, b) => b.rate - a.rate).slice(0, 5);
   if (!active) return null;
 
   return <div className="analysis-grid" aria-label="成绩图表">
+    <section className="chart-panel chart-wide" aria-label="班级和年级成绩概览">
+      <div className="chart-heading"><div><h2>班级和年级成绩概览</h2><p>智学网统计与已读取逐题成绩分别展示</p></div></div>
+      <div className="table-scroll"><table><thead><tr><th>统计口径</th><th>最高分</th><th>最低分</th><th>平均分</th><th>人数</th></tr></thead><tbody>
+        <tr><td>智学网班级统计</td><td>{formatScore(overview?.classMax)}</td><td>未获取</td><td>{formatScore(overview?.classAvg)}</td><td>未获取</td></tr>
+        <tr><td>智学网年级统计</td><td>{formatScore(overview?.gradeMax)}</td><td>未获取</td><td>{formatScore(overview?.gradeAvg)}</td><td>未获取</td></tr>
+        <tr><td>已读取逐题成绩</td><td>{formatScore(totals.length ? Math.max(...totals) : null)}</td><td>{formatScore(totals.length ? Math.min(...totals) : null)}</td><td>{formatScore(totals.length ? totals.reduce((a,b) => a+b, 0) / totals.length : null)}</td><td>{totals.length}</td></tr>
+      </tbody></table></div>
+      <p className="chart-footnote">逐题统计不包含没扫、无原卷和无可计分题的学生；智学网统计可能采用不同人数或口径。旧数据需重新读取才能获取智学网概览与名次。</p>
+    </section>
     <section className="chart-panel chart-wide" aria-label="各题失分率图表">
       <div className="chart-heading"><div><h2>各题失分率</h2><p>各题失分总和 / 可分析学生的该题满分总和</p></div><span className="chart-chip">按题统计</span></div>
       {loss.length ? <div className="chart-scroll"><div style={{ width: '100%', minWidth: Math.max(500, loss.length * 38), height: 260 }}>

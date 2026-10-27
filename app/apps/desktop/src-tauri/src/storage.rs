@@ -12,11 +12,22 @@ pub(crate) struct Snapshot {
     source: Source,
     exam: Exam,
     students: Vec<Student>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    overview: Option<Overview>,
     settings: Settings,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     paper: Option<Paper>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     practice: Option<crate::practice::Batch>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Overview {
+    status: String,
+    class_max: Option<f64>,
+    class_avg: Option<f64>,
+    grade_max: Option<f64>,
+    grade_avg: Option<f64>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -52,6 +63,10 @@ struct Student {
     reason_source: Option<String>,
     roster_score: Option<f64>,
     rank_code: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    class_rank: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    grade_rank: Option<u32>,
     questions: Vec<Question>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -106,6 +121,10 @@ impl Snapshot {
             return Err(bad());
         }
         let settings = &self.settings;
+        if self.overview.as_ref().is_some_and(|o| {
+            !["received", "unavailable"].contains(&o.status.as_str()) ||
+            [o.class_max, o.class_avg, o.grade_max, o.grade_avg].iter().flatten().any(|n| !n.is_finite() || *n < 0.0)
+        }) { return Err(bad()); }
         if !(1..=10).contains(&settings.variants_per_question)
             || !(1..=100).contains(&settings.max_questions_per_student)
             || settings.partial_credit_threshold > 100
@@ -122,6 +141,7 @@ impl Snapshot {
                 || !ids.insert(&s.id)
                 || s.roster_score.is_some_and(|n| !n.is_finite())
                 || s.rank_code.is_some_and(|n| !n.is_finite())
+                || s.class_rank == Some(0) || s.grade_rank == Some(0)
             {
                 return Err(bad());
             }
