@@ -211,6 +211,11 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy, page, on
         <button disabled={locked||legacyUsername!==account.user.username} onClick={()=>void importLegacy()}>确认恢复到当前账号</button>
       </div>}
     </section>}
+    {snapshot && <details className="card" aria-label="当前考试管理"><summary>当前考试管理</summary>
+      <p>{snapshot.exam.name} · {snapshot.exam.className} · {snapshot.exam.subjectName}</p>
+      <div className="actions"><button className="secondary small danger" disabled={locked} onClick={() => setConfirmClear(true)}>清除当前考试</button></div>
+      {confirmClear && <div className="confirm-panel" role="region" aria-label="确认清除考试"><b>清除本机当前考试及教师设置？</b><p>这会清除本场学生、得分、试卷照片、题干、出题审核结果及本场历史成绩。其他历史考试、下载目录中的扩展文件和智学网登录态仍保留。</p><div className="actions"><button className="danger" disabled={working} onClick={() => void persist(null)}>确认清除</button><button className="secondary" disabled={working} onClick={() => setConfirmClear(false)}>取消清除</button></div></div>}
+    </details>}
     {snapshot && analysis && <PaperWorkspace paper={snapshot.paper} numbers={analysis.audit.questionNumbers} locked={locked} onBusy={onBusy}
       save={paper => persist({ ...snapshot, paper, practice: undefined })}/>}
     {!snapshot && <section className="empty-section"><h2>空白卷</h2><p>读取或导入考试后，可以上传本场空白卷。</p></section>}
@@ -219,11 +224,10 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy, page, on
     {snapshot && analysis && <div className="exam-overview"><div><span className="overview-label">当前考试</span><h2>{snapshot.exam.name}</h2><p>{snapshot.exam.className} · {snapshot.exam.subjectName}</p></div><div className="overview-metrics"><ExamMetric label="名单人数" value={analysis.audit.rosterCount} icon={Users}/><ExamMetric label="可分析学生" value={analysis.audit.exportedCount} icon={UserCheck}/><ExamMetric label="逐题记录" value={analysis.audit.questionRecords} icon={FileText}/><ExamMetric label="没扫 / 无原卷" value={`${analysis.audit.notScannedCount} / ${analysis.audit.noPaperCount}`} icon={UserMinus}/></div></div>}
     {snapshot && analysis && page==='analysis' && <React.Suspense fallback={<div className="chart-empty" role="status">正在加载图表…</div>}><AnalysisCharts workspace={snapshot} history={history} historyError={historyError} active/></React.Suspense>}
     {ready&&!snapshot&&<section className="empty-section"><h2>暂无考试数据</h2><p>导入本场考试后，这里将显示班级与逐题分析。</p><button className="secondary" onClick={()=>onPageChange('import')}>前往信息导入</button></section>}
-    {snapshot && analysis && <section className="card" aria-label="本机当前考试">
-      <div className="card-heading"><h2>{snapshot.exam.name}</h2><span className="badge success">已保存到本机</span></div>
-      <p>{snapshot.exam.className} · {snapshot.exam.subjectName} · {snapshot.source.kind === 'zhixue_webview' ? '内置窗口读取' : 'Chrome 扩展导入'}</p>
-      <p className="notice" aria-live="polite" data-testid="analysis-workspace-message">{message}</p>
-      <p className="help">没扫、无原卷学生不判对错，也不进入每题统计分母。失分用于选题，不能直接认定错因。</p>
+
+    </div>
+    <div hidden={page!=='report'}>
+    {snapshot && settings && <section className="card" aria-label="本场教师设置">
       {settings && <details><summary>本场教师设置</summary><div className="fields settings">
         <label>每道错题变式数<input aria-label="每道错题变式数" type="number" min="1" max="10" value={settings.variantsPerQuestion} onChange={e => setSettings({ ...settings, variantsPerQuestion: Number(e.target.value) })} disabled={locked}/></label>
         <label>每人题数上限<input aria-label="每人题数上限" type="number" min="1" max="100" value={settings.maxQuestionsPerStudent} onChange={e => setSettings({ ...settings, maxQuestionsPerStudent: Number(e.target.value) })} disabled={locked}/></label>
@@ -234,13 +238,8 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy, page, on
         try { const checked = validateSettings(settings); void persist({ ...snapshot, settings: checked, practice: undefined }); }
         catch (error) { setMessage(dataErrorMessage(error)); }
       }}>保存设置并重算</button></details>}
-      <h3>按题统计</h3><div className="table-scroll"><table><thead><tr><th>题号</th><th>满分</th><th>失分率</th><th>全错</th><th>部分得分</th><th>纳入补练人数</th></tr></thead><tbody>{analysis.questions.map(q => <tr key={q.number}><td>{q.number}</td><td>{q.fullScore}</td><td>{q.fullScore ? `${(q.lostRate * 100).toFixed(1)}%` : '不计分'}</td><td>{q.incorrectStudents}</td><td>{q.partialStudents}</td><td>{q.weakStudents}</td></tr>)}</tbody></table></div>
-      <details open aria-label="学生名单与逐题得分"><summary>学生名单与逐题得分（{analysis.students.length} 人）</summary><div className="table-scroll"><table><thead><tr><th>学生</th><th>状态</th><th>逐题得分合计</th><th>班级名次</th><th>年级名次</th><th>失分</th><th>纳入补练题号</th><th>逐题明细</th></tr></thead><tbody>{analysis.students.map((s, i) => <tr key={s.id}><td>{s.name || `学生 ${i + 1}`}</td><td>{s.availability === 'scored' ? '已读取' : s.availability === 'not_scanned' ? '没扫' : '无原卷'}</td><td>{s.availability === 'scored' ? Number(snapshot.students.find(student=>student.id===s.id)!.questions.reduce((total,q)=>total+q.score,0).toFixed(2)) : '—'}</td><td>{snapshot.students.find(student=>student.id===s.id)?.classRank ?? '未获取'}</td><td>{snapshot.students.find(student=>student.id===s.id)?.gradeRank ?? '未获取'}</td><td>{s.availability === 'scored' ? Number(s.lostPoints.toFixed(2)) : '—'}</td><td>{s.availability === 'scored' ? s.weakQuestions.join('、') || '暂无' : '不判对错'}</td><td>{s.availability === 'scored' ? <details><summary>查看逐题得分</summary><ul>{snapshot.students.find(student=>student.id===s.id)!.questions.map(q=><li key={q.number}>第 {q.number} 题：{q.score} / {q.fullScore} · {q.result==='correct'?'全对':q.result==='incorrect'?'全错':q.result==='partial_credit'?'部分得分':'不计分'}</li>)}</ul></details> : '无逐题记录'}</td></tr>)}</tbody></table></div></details>
-      <div className="actions"><button className="secondary small danger" disabled={locked} onClick={() => setConfirmClear(true)}>清除当前考试</button></div>
-      {confirmClear && <div className="confirm-panel" role="region" aria-label="确认清除考试"><b>清除本机当前考试及教师设置？</b><p>这会清除本场学生、得分、试卷照片、题干、出题审核结果及本场历史成绩。其他历史考试、下载目录中的扩展文件和智学网登录态仍保留。</p><div className="actions"><button className="danger" disabled={working} onClick={() => void persist(null)}>确认清除</button><button className="secondary" disabled={working} onClick={() => setConfirmClear(false)}>取消清除</button></div></div>}
+      <p className="notice" aria-live="polite" data-testid="report-workspace-message">{message}</p>
     </section>}
-    </div>
-    <div hidden={page!=='report'}>
     <KnowledgeWorkspace/>
     {ready&&!snapshot&&<section className="empty-section"><h2>暂无本场报告</h2><p>导入考试和空白卷后，可以在这里生成和审核补练。</p><button className="secondary" onClick={()=>onPageChange('import')}>前往信息导入</button></section>}
     {snapshot && <AgentWorkspace workspace={snapshot} revision={stored.revision} locked={locked} onBusy={onBusy} prepare={async (paper,expectedRevision)=>{
