@@ -6,7 +6,7 @@ import { openDatabase,transaction } from './database.mjs';
 
 export function exportAdmin(db,username){
   return transaction(db,()=>{
-    const user=db.prepare('SELECT id,username,password_hash,role,status,credits,created_at,last_login_at FROM users WHERE username=?').get(username.toLowerCase());
+    const user=db.prepare('SELECT id,username,password_hash,password_plain,role,status,credits,created_at,last_login_at FROM users WHERE username=?').get(username.toLowerCase());
     if(!user||user.role!=='admin'||user.status!=='active')throw new Error('active_admin_required');
     if(db.prepare("SELECT COUNT(*) AS n FROM generations WHERE user_id=? AND state='reserved' AND expires_at>?").get(user.id,Date.now()).n)throw new Error('generation_in_progress');
     const ledger=db.prepare('SELECT * FROM credit_ledger WHERE user_id=? ORDER BY rowid').all(user.id);
@@ -18,7 +18,7 @@ export function importAdmin(db,document){
   const uuid=/^[a-f0-9-]{36}$/;
   const u=document?.user;
   if(document?.schemaVersion!==1||!u||!uuid.test(u.id)||!/^[a-z0-9_]{3,32}$/.test(u.username)
-    ||!/^scrypt-v1\$[a-f0-9]{32}\$[a-f0-9]{128}$/.test(u.password_hash)||u.role!=='admin'||u.status!=='active'
+    ||!(typeof u.password_plain==='string'?u.password_plain.length>=10&&u.password_plain.length<=128&&u.password_hash==='':/^scrypt-v1\$[a-f0-9]{32}\$[a-f0-9]{128}$/.test(u.password_hash))||u.role!=='admin'||u.status!=='active'
     ||!Number.isSafeInteger(u.credits)||u.credits<0||u.credits>1000000||!Number.isSafeInteger(u.created_at)
     ||(u.last_login_at!==null&&!Number.isSafeInteger(u.last_login_at))||!Array.isArray(document.ledger)||document.ledger.length>10000)
     throw new Error('invalid_admin_transfer');
@@ -36,14 +36,14 @@ export function importAdmin(db,document){
     const existing=db.prepare('SELECT * FROM users WHERE id=? OR username=?').all(u.id,u.username);
     if(existing.length){
       const old=existing[0];
-      if(existing.length!==1||old.id!==u.id||old.username!==u.username||old.password_hash!==u.password_hash||old.role!=='admin'||old.status!=='active'||old.credits!==u.credits)
+      if(existing.length!==1||old.id!==u.id||old.username!==u.username||old.password_hash!==u.password_hash||old.password_plain!==(u.password_plain??null)||old.role!=='admin'||old.status!=='active'||old.credits!==u.credits)
         throw new Error('existing_account_conflict');
       const oldLedger=db.prepare('SELECT * FROM credit_ledger WHERE user_id=? ORDER BY rowid').all(u.id);
       if(JSON.stringify(oldLedger)!==JSON.stringify(document.ledger))throw new Error('existing_ledger_conflict');
       return {username:u.username,id:u.id,credits:u.credits,role:'admin',duplicate:true};
     }
-    db.prepare("INSERT INTO users(id,username,password_hash,role,status,credits,created_at,last_login_at) VALUES(?,?,?,'admin','active',?,?,?)")
-      .run(u.id,u.username,u.password_hash,u.credits,u.created_at,u.last_login_at);
+    db.prepare("INSERT INTO users(id,username,password_hash,password_plain,role,status,credits,created_at,last_login_at) VALUES(?,?,?,?,'admin','active',?,?,?)")
+      .run(u.id,u.username,u.password_hash,u.password_plain??null,u.credits,u.created_at,u.last_login_at);
     const insert=db.prepare('INSERT INTO credit_ledger VALUES(?,?,?,?,?,?,?,?,?)');
     for(const row of document.ledger)insert.run(row.id,row.user_id,row.delta,row.balance_after,row.kind,row.actor_id,row.reference,row.reason,row.created_at);
     db.prepare("INSERT INTO account_audit VALUES(?,?,?,'import_admin',?,?,?)").run(randomUUID(),u.id,u.id,'admin-import:'+u.id,'从本机迁移管理员账号与次数流水',Date.now());

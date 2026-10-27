@@ -2,7 +2,7 @@ import React from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
 export interface AccountUser {id:string;username:string;role:'user'|'admin';status:string;credits:number;reserved:number;available:number;createdAt:number}
-interface AccountContextValue {user:AccountUser;refresh:()=>Promise<void>;setWorkBusy:(busy:boolean)=>void;view:'teaching'|'admin';setView:(view:'teaching'|'admin')=>void}
+interface AccountContextValue {user:AccountUser;refresh:()=>Promise<void>;setWorkBusy:(busy:boolean)=>void;view:'teaching'|'admin';setView:(view:'teaching'|'admin')=>void;passwordChanged:()=>void}
 const AccountContext=React.createContext<AccountContextValue|null>(null);
 export function useAccount(){const value=React.useContext(AccountContext);if(!value)throw new Error('account_required');return value;}
 export function accountError(error:unknown):string{
@@ -17,6 +17,7 @@ export function accountError(error:unknown):string{
     generation_not_found:'没有找到这次生成任务，请联系管理员。',server_busy:'服务器正忙，请稍后重试。',
     admin_required:'此账号没有管理员权限。',credit_limit:'次数余额超过上限，请减少添加数量。',idempotency_conflict:'这笔操作的内容不一致，请联系管理员核对。',user_not_found:'没有找到这个用户，请刷新列表。',
     account_inactive:'这个账号已冻结，不能继续添加次数。',protected_account:'管理员账号受保护，不能冻结、恢复或删除。',username_confirmation_mismatch:'输入的用户名与目标账号不一致。',account_not_disabled:'该账号当前未冻结，请刷新用户列表。',
+    current_password_required:'修改管理员密码需要输入你当前的管理员密码。',current_password_incorrect:'当前管理员密码不正确。',password_change_conflict:'该账号密码或权限已经变更，请刷新后重试。',
     account_invalid_response:'服务器返回的账号信息不完整，请稍后重试。'} as Record<string,string>)[code]??'账号操作未完成，请稍后重试。';
 }
 
@@ -33,6 +34,7 @@ export function AccountGate({children}:{children:React.ReactNode}){
   const [view,setView]=React.useState<'teaching'|'admin'>('teaching');
   const accountId=React.useRef<string|null>(null);
   const [error,setError]=React.useState('');
+  const [loginNotice,setLoginNotice]=React.useState('');
   const [blocked,setBlocked]=React.useState(false);
   const refreshing=React.useRef(false);
   const acceptAccount=React.useCallback((next:AccountUser|null)=>{
@@ -58,7 +60,7 @@ export function AccountGate({children}:{children:React.ReactNode}){
   }
   async function logout(){setBusy(true);try{await invoke('account_sign_out');acceptAccount(null);setBlocked(false);setPassword('');setConfirm('');setError('');}catch(err){setError(accountError(err));}finally{setBusy(false);}}
   if(checking)return <main className="auth-loading" role="status">正在连接账号服务…</main>;
-  if(user)return <AccountContext.Provider value={{user,refresh,setWorkBusy,view,setView}}>
+  if(user)return <AccountContext.Provider value={{user,refresh,setWorkBusy,view,setView,passwordChanged:()=>{acceptAccount(null);setWorkBusy(false);setError('');setBlocked(false);setLoginNotice('密码已修改，请使用新密码重新登录。');}}}>
     <div className="account-toolbar"><div><span className="account-avatar" aria-hidden="true">{user.username.slice(0,1).toUpperCase()}</span><b>{user.username}</b>{user.role==='admin'&&<span className="badge success">管理员</span>}<span className="account-balance">剩余 <strong>{user.credits}</strong> 次{user.reserved>0?` · ${user.reserved} 次处理中`:''}</span></div><div>{user.role==='admin'&&<><button className={`small ${view==='admin'?'':'secondary'}`} disabled={busy||workBusy} onClick={()=>setView('admin')}>管理用户与次数</button><button className={`small ${view==='teaching'?'':'secondary'}`} disabled={busy||workBusy} onClick={()=>setView('teaching')}>教学工作台</button></>}<button className="secondary small" disabled={busy} onClick={()=>void refresh()}>刷新次数</button><button className="secondary small" disabled={busy||workBusy} onClick={()=>void logout()}>退出登录</button></div></div>
     {error&&<div className="account-warning notice error" role="alert">{error}{blocked&&<button className="secondary small" onClick={()=>void refresh()}>重新连接</button>}</div>}
     <div hidden={blocked} key={user.id}>{children}</div>
@@ -69,6 +71,7 @@ export function AccountGate({children}:{children:React.ReactNode}){
       <form onSubmit={event=>void submit(event)}><label>用户名<input aria-label="软件用户名" autoComplete="username" pattern="[a-zA-Z0-9_]{3,32}" minLength={3} maxLength={32} placeholder="3～32 位字母、数字或下划线" required value={username} disabled={busy} onChange={e=>setUsername(e.target.value)}/></label>
         <label>密码<input aria-label="软件密码" type="password" autoComplete={register?'new-password':'current-password'} minLength={10} maxLength={128} placeholder={register?'设置至少 10 位密码':'输入你的密码'} required value={password} disabled={busy} onChange={e=>setPassword(e.target.value)}/></label>
         {register&&<label>确认密码<input aria-label="确认软件密码" type="password" autoComplete="new-password" minLength={10} maxLength={128} placeholder="再次输入密码" required value={confirm} disabled={busy} onChange={e=>setConfirm(e.target.value)}/></label>}
+        {loginNotice&&<div className="notice passed" role="status">{loginNotice}</div>}
         {error&&<div className="notice error" role="alert">{error}</div>}
         {config&&!config.configured&&<div className="notice" role="status">账号服务尚未配置，请联系管理员。</div>}
         <button className="auth-submit" type="submit" disabled={busy||!config?.configured}>{busy?'正在连接…':register?'注册并进入工作台':'登录工作台'}<span aria-hidden="true">↗</span></button>

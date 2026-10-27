@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 
 const usersSchema=`CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE,
-  password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user','admin')),
+  password_hash TEXT NOT NULL,password_plain TEXT, role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user','admin')),
   status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','disabled')),
   credits INTEGER NOT NULL DEFAULT 0 CHECK(credits >= 0 AND credits <= 1000000),
   created_at INTEGER NOT NULL, last_login_at INTEGER,
@@ -44,9 +44,10 @@ export function openDatabase(path) {
   const db = new DatabaseSync(path);
   try {
   db.exec('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA secure_delete=ON;');
-  if(db.prepare('PRAGMA user_version').get().user_version>3)throw new Error('unsupported_account_database_version');
+  if(db.prepare('PRAGMA user_version').get().user_version>5)throw new Error('unsupported_account_database_version');
   upgradeBasicUserStore(db,path);
   db.exec(usersSchema);
+  if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name==='password_plain'))db.exec('ALTER TABLE users ADD COLUMN password_plain TEXT;');
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
       token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
@@ -71,19 +72,19 @@ export function openDatabase(path) {
     CREATE TABLE IF NOT EXISTS account_audit (
       id TEXT PRIMARY KEY, actor_id TEXT NOT NULL REFERENCES users(id),
       target_id TEXT NOT NULL REFERENCES users(id),
-      action TEXT NOT NULL CHECK(action IN ('deactivate_user','restore_user','import_admin')),
+      action TEXT NOT NULL CHECK(action IN ('deactivate_user','restore_user','reset_password','view_password','import_admin')),
       request_key TEXT NOT NULL UNIQUE, reason TEXT NOT NULL, created_at INTEGER NOT NULL
     ) STRICT;
     CREATE INDEX IF NOT EXISTS account_audit_target ON account_audit(target_id,created_at DESC);
     `);
   const auditSchema=db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='account_audit'").get().sql;
-  if(!auditSchema.includes("'restore_user'")){
+  if(!auditSchema.includes("'view_password'")){
     transaction(db,()=>{
       db.exec(`ALTER TABLE account_audit RENAME TO account_audit_before_v3;
         DROP INDEX IF EXISTS account_audit_target;
         CREATE TABLE account_audit (
           id TEXT PRIMARY KEY,actor_id TEXT NOT NULL REFERENCES users(id),target_id TEXT NOT NULL REFERENCES users(id),
-          action TEXT NOT NULL CHECK(action IN ('deactivate_user','restore_user','import_admin')),
+          action TEXT NOT NULL CHECK(action IN ('deactivate_user','restore_user','reset_password','view_password','import_admin')),
           request_key TEXT NOT NULL UNIQUE,reason TEXT NOT NULL,created_at INTEGER NOT NULL
         ) STRICT;
         INSERT INTO account_audit SELECT * FROM account_audit_before_v3 ORDER BY rowid;
@@ -91,7 +92,7 @@ export function openDatabase(path) {
         CREATE INDEX account_audit_target ON account_audit(target_id,created_at DESC);`);
     });
   }
-  db.exec('PRAGMA user_version=3;');
+  db.exec('PRAGMA user_version=5;');
   return db;
   }catch(error){db.close();throw error;}
 }

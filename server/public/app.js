@@ -1,9 +1,11 @@
 const $ = id => document.getElementById(id);
 const apiBase = new URL('./',window.location.href);
+let adminId='',passwordUser=null,passwordKey=null,passwordBusy=false;
+let viewUser=null,viewTimer=null;
 let token = '', page = 1, selected = null, pendingGrant = null, cancelSelected = null, pendingCancel = null, lifecycle = null, pendingLifecycle = null;
-const messages = {account_not_disabled:'该账号当前未冻结，请刷新列表。', account_inactive:'这个账号已冻结，不能添加次数。',protected_account:'管理员账号受保护，不能冻结、恢复或删除。',username_confirmation_mismatch:'输入的用户名与要冻结的账号不一致。', invalid_credentials:'用户名或密码不正确，请重试。', account_disabled:'账号已停用。', admin_required:'此账号没有管理员权限。', session_expired:'登录已过期，请重新登录。', session_required:'请先登录。', rate_limited:'操作较频繁，请稍后重试。', invalid_input:'请检查用户名、密码、次数和备注的格式。', credit_limit:'余额超过上限，请减少添加次数。', idempotency_conflict:'这次操作内容已发生变化，请重新选择用户。' };
+const messages = {current_password_required:'请输入你当前的管理员密码。',current_password_incorrect:'当前管理员密码不正确。',password_change_conflict:'该账号密码或权限已变化，请刷新后重试。',account_not_disabled:'该账号当前未冻结，请刷新列表。', account_inactive:'这个账号已冻结，不能添加次数。',protected_account:'管理员账号受保护，不能冻结、恢复或删除。',username_confirmation_mismatch:'输入的用户名与要冻结的账号不一致。', invalid_credentials:'用户名或密码不正确，请重试。', account_disabled:'账号已停用。', admin_required:'此账号没有管理员权限。', session_expired:'登录已过期，请重新登录。', session_required:'请先登录。', rate_limited:'操作较频繁，请稍后重试。', invalid_input:'请检查用户名、密码、次数和备注的格式。', credit_limit:'余额超过上限，请减少添加次数。', idempotency_conflict:'这次操作内容已发生变化，请重新选择用户。' };
 function message(text, failed = false) { $('message').textContent = text; $('message').className = failed ? 'error' : ''; }
-function signedOut() { token=''; selected=null; pendingGrant=null;cancelSelected=null;pendingCancel=null;lifecycle=null;pendingLifecycle=null;$('lifecycle-panel').hidden=true; $('login-panel').hidden=false; $('dashboard').hidden=true; $('logout').hidden=true; $('users').replaceChildren(); $('ledger').replaceChildren();$('audit').replaceChildren(); $('grant-panel').hidden=true; $('ledger-panel').hidden=true;$('deactivate-panel').hidden=true;$('audit-panel').hidden=true; }
+function signedOut() { clearViewPassword(); clearPassword(); passwordUser=null; passwordKey=null; token=''; selected=null; pendingGrant=null;cancelSelected=null;pendingCancel=null;lifecycle=null;pendingLifecycle=null;$('lifecycle-panel').hidden=true; $('login-panel').hidden=false; $('dashboard').hidden=true; $('logout').hidden=true; $('users').replaceChildren(); $('ledger').replaceChildren();$('audit').replaceChildren(); $('grant-panel').hidden=true; $('ledger-panel').hidden=true;$('deactivate-panel').hidden=true;$('audit-panel').hidden=true; }
 async function api(path, body) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
@@ -33,6 +35,8 @@ async function loadUsers() {
     const ledger=document.createElement('button'); ledger.textContent='查看流水'; ledger.className='secondary small'; ledger.onclick=()=>loadLedger(user).catch(err=>message(err.message,true));
     const audit=document.createElement('button');audit.textContent='账号记录';audit.className='secondary small';audit.onclick=()=>loadAudit(user).catch(err=>message(err.message,true));
     actions.append(grant,ledger,audit);
+    const setPassword=document.createElement('button');setPassword.textContent='设置密码';setPassword.className='secondary small';setPassword.onclick=()=>openPassword(user);actions.append(setPassword);
+    const viewPassword=document.createElement('button');viewPassword.textContent='查看密码';viewPassword.className='secondary small';viewPassword.onclick=()=>openViewPassword(user);actions.append(viewPassword);
     if(user.role==='user'&&user.status==='active'){
       const cancel=document.createElement('button');cancel.textContent='冻结用户';cancel.className='secondary small';cancel.onclick=()=>{
         if(pendingGrant||pendingCancel||pendingLifecycle){message('上一笔操作尚未确认，请先重试完成。',true);return;}
@@ -55,7 +59,7 @@ async function loadLedger(user) {
 }
 async function loadAudit(user){
   const result=await api(`/v1/admin/users/${user.id}/account-audit`);$('audit-title').textContent=`${user.username} 的账号记录`;$('audit').replaceChildren();
-  for(const item of result.items){const row=document.createElement('tr');cell(row,date(item.createdAt));cell(row,item.action==='deactivate_user'?'冻结普通用户':item.action==='restore_user'?'恢复普通用户':'迁移管理员');cell(row,item.reason);cell(row,item.actor);$('audit').append(row);}
+  for(const item of result.items){const row=document.createElement('tr');cell(row,date(item.createdAt));cell(row,item.action==='deactivate_user'?'冻结普通用户':item.action==='restore_user'?'恢复普通用户':item.action==='reset_password'?'设置新密码':item.action==='view_password'?'查看用户密码':'迁移管理员');cell(row,item.reason);cell(row,item.actor);$('audit').append(row);}
   if(!result.items.length){const row=document.createElement('tr');cell(row,'暂无账号操作记录').colSpan=4;$('audit').append(row);}
   $('audit-panel').hidden=false;
 }
@@ -63,7 +67,7 @@ $('login-form').onsubmit=async event=>{
   event.preventDefault(); const button=event.submitter; button.disabled=true;
   try{const data=new FormData(event.currentTarget); const result=await api('/v1/auth/login',{username:data.get('username'),password:data.get('password')}); $('login-form').reset();
     token=result.token; if(result.user.role!=='admin'){await api('/v1/auth/logout',{});signedOut();throw new Error(messages.admin_required);}
-    $('admin-name').textContent=result.user.username; $('login-panel').hidden=true;$('dashboard').hidden=false;$('logout').hidden=false;page=1;await loadUsers();message('已登录，选择用户即可添加次数。');
+    adminId=result.user.id;$('admin-name').textContent=result.user.username; $('login-panel').hidden=true;$('dashboard').hidden=false;$('logout').hidden=false;page=1;await loadUsers();message('已登录，选择用户即可添加次数。');
   }catch(err){message(err.message,true);}finally{button.disabled=false;}
 };
 $('logout').onclick=async()=>{try{await api('/v1/auth/logout',{});}catch{}signedOut();message('已退出管理控制台。');};
@@ -120,4 +124,53 @@ $('lifecycle-form').onsubmit=async event=>{
     }else{message(`已恢复 ${operation.user.username}，可用原密码重新登录，剩余次数保留。`);await loadUsers();await loadAudit(operation.user);}
   }catch(err){message(`${err.message} 可以重试同一笔操作。`,true);}
   finally{for(const id of ['lifecycle-submit','lifecycle-name','restore-reason','delete-check'])$(id).disabled=!!pendingLifecycle&&id!=='lifecycle-submit';if(pendingLifecycle)$('lifecycle-submit').textContent='重试操作';}
+};
+function clearPassword(){
+  for(const id of ['admin-current-password','admin-new-password','admin-confirm-password'])$(id).value='';
+  $('password-panel').hidden=true;
+}
+function openPassword(user){
+  if(pendingGrant||pendingCancel||pendingLifecycle||passwordBusy){message('请先完成当前操作。',true);return;}
+  clearViewPassword();clearPassword();passwordUser=user;passwordKey=null;
+  $('password-title').textContent=`为 ${user.username} 设置新密码${user.id===adminId?'（本人）':''}`;
+  $('current-password-label').hidden=user.role!=='admin';$('admin-current-password').required=user.role==='admin';
+  $('password-panel').hidden=false;$('password-panel').scrollIntoView({behavior:'smooth',block:'center'});
+}
+$('close-password').onclick=()=>{if(passwordBusy)return;clearPassword();passwordUser=null;passwordKey=null;};
+$('admin-new-password').oninput=()=>{passwordKey=null;};
+$('password-form').onsubmit=async event=>{
+  event.preventDefault();if(!passwordUser||passwordBusy)return;
+  if($('admin-new-password').value!==$('admin-confirm-password').value){message('两次新密码不一致。',true);return;}
+  const target=passwordUser;passwordKey??=crypto.randomUUID();passwordBusy=true;
+  for(const id of ['password-submit','admin-current-password','admin-new-password','admin-confirm-password','logout'])$(id).disabled=true;
+  try{
+    const body={confirmUsername:target.username,newPassword:$('admin-new-password').value,requestKey:passwordKey};
+    if(target.role==='admin')body.currentPassword=$('admin-current-password').value;
+    const result=await api(`/v1/admin/users/${target.id}/password`,body);
+    clearPassword();passwordUser=null;passwordKey=null;
+    if(result.self){signedOut();message('密码已修改，请使用新密码重新登录。');}
+    else{message(`已为 ${target.username} 设置新密码，原有登录已失效。`);await loadAudit(target);}
+  }catch(err){message(err.message,true);}
+  finally{passwordBusy=false;for(const id of ['password-submit','admin-current-password','admin-new-password','admin-confirm-password','logout'])$(id).disabled=false;}
+};
+function clearViewPassword(){
+  clearTimeout(viewTimer);viewTimer=null;viewUser=null;
+  $('view-admin-password').value='';$('view-password-result').value='';$('view-password-result-label').hidden=true;$('view-password-unavailable').hidden=true;$('view-password-panel').hidden=true;
+}
+function openViewPassword(user){
+  if(passwordBusy||pendingGrant||pendingCancel||pendingLifecycle){message('请先完成当前操作。',true);return;}
+  clearPassword();clearViewPassword();viewUser=user;$('view-password-title').textContent=`查看 ${user.username} 的密码`;$('view-password-panel').hidden=false;$('view-password-panel').scrollIntoView({behavior:'smooth',block:'center'});
+}
+$('close-view-password').onclick=()=>clearViewPassword();
+$('view-password-form').onsubmit=async event=>{
+  event.preventDefault();if(!viewUser||$('view-password-submit').disabled)return;
+  const target=viewUser;clearTimeout(viewTimer);$('view-password-result').value='';$('view-password-result-label').hidden=true;$('view-password-unavailable').hidden=true;$('view-password-submit').disabled=true;
+  try{
+    const result=await api(`/v1/admin/users/${target.id}/password/view`,{currentPassword:$('view-admin-password').value,requestKey:crypto.randomUUID()});
+    $('view-admin-password').value='';
+    if(viewUser?.id!==target.id)return;
+    if(result.available){$('view-password-result').value=result.password;$('view-password-result-label').hidden=false;viewTimer=setTimeout(()=>{$('view-password-result').value='';$('view-password-result-label').hidden=true;},30000);}
+    else $('view-password-unavailable').hidden=false;
+    await loadAudit(target);
+  }catch(err){message(err.message,true);}finally{$('view-password-submit').disabled=false;}
 };

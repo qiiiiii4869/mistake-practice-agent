@@ -73,7 +73,7 @@ test('version 2 audit schema upgrades transactionally and retains existing histo
       INSERT INTO users VALUES('owner');INSERT INTO users VALUES('target');
       INSERT INTO account_audit VALUES('entry','owner','target','deactivate_user','old-key','旧注销记录',1);
       PRAGMA user_version=2;`);db.close();
-    db=openDatabase(path);assert.equal(db.prepare('PRAGMA user_version').get().user_version,3);
+    db=openDatabase(path);assert.equal(db.prepare('PRAGMA user_version').get().user_version,5);
     assert.equal(db.prepare('SELECT reason FROM account_audit WHERE id=?').get('entry').reason,'旧注销记录');
     db.prepare('INSERT INTO account_audit VALUES(?,?,?,?,?,?,?)').run('restore','owner','target','restore_user','restore-key','恢复测试',2);
     assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(),[]);db.close();

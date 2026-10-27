@@ -536,6 +536,8 @@ pub fn run() {
             account::account_admin_audit,
             account::account_admin_restore,
             account::account_admin_delete,
+            account::account_admin_password,
+            account::account_admin_view_password,
             account::account_sign_in,
             account::account_me,
             account::account_sign_out,

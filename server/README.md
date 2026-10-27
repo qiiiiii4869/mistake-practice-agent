@@ -1,10 +1,13 @@
 # 软件账号与次数服务
 
-支持用户名密码注册/登录、退出、服务器端登录会话、剩余次数查询、管理员加次和次数流水。适用于 Ubuntu 单机部署，数据库为服务器上的 SQLite，不需要另装数据库服务。学生名单、成绩、试卷、知识库和补练正文不会上传到账号服务。
+支持用户名密码注册/登录、退出、服务器端登录会话、剩余次数查询、管理员加次、密码查看/修改和次数流水。适用于 Ubuntu 单机部署，数据库为服务器上的 SQLite，不需要另装数据库服务。学生名单、成绩、试卷、知识库和补练正文不会上传到账号服务。
 
 ## 规则
 
-- 用户名为 3～32 位英文字母、数字、下划线，不区分大小写；密码 10～128 位。密码用带随机盐的 scrypt 派生后存储，不保存明文。
+- 用户名为 3～32 位英文字母、数字、下划线，不区分大小写；密码 10～128 位。**2026-10-27 晚间按负责人明确要求改为明文保存**：新注册和设置密码写入 `users.password_plain`，`password_hash` 留空。数据库及包含明文的备份泄露将直接暴露密码，不应把当前方式描述为安全的密码哈希存储。
+- 旧账号保留原 scrypt 哈希，迁移不重置任何密码。旧用户首次成功登录时，用其提交的正确密码写入明文字段并清空哈希；错误登录和仅升级数据库不会转换。旧哈希无法逆推出密码，查看时返回“旧哈希无法还原”，可等待用户登录或由管理员设置新密码。
+- 所有用户行（含管理员本人）有“设置密码”和“查看密码”。修改管理员账号的密码须验证操作者当前密码；修改后撤销目标全部会话、释放未完成预占，余额与冻结状态保留，修改自己后立即退出并要求新密码登录。普通用户无权调用管理密码接口。
+- 查看任何账号密码均须验证操作者当前管理员密码，成功后显示 30 秒自动隐藏；只在专用管理查看接口返回明文，普通用户列表、登录响应及审计不返回明文。查看和修改各自留操作者/目标/时间记录，记录不含密码；客户端不把查看结果或输入密码持久化到本机。
 - 新注册账号默认普通用户、0 次。管理员只能在服务器命令行授权，不能通过注册参数获取权限。
 - 公共注册接口只接受用户名和密码，角色、状态和余额由服务器固定为普通用户、正常、0 次；伪造管理员或余额字段会被拒绝。服务器授权命令也不能把已注销账号改成管理员。
 - 管理员可冻结普通用户（原“注销”，界面现统一使用“冻结”）：输入目标用户名并填写原因，撤销全部会话、取消未完成预占，余额与历史保留；被冻结用户不能登录、加次或重新注册同名账号。
@@ -49,14 +52,14 @@ npm --prefix app run desktop:build:debug
 
 ### 已有 Ubuntu 与 Caddy 的部署（2026-10-27）
 
-负责人指定的基础库为 `/var/lib/user-store/users.sqlite3`，原表只有 `username/password_hash/remaining_uses`，检查时为空库。现已备份并升级到版本 3，包含 `users/sessions/generations/credit_ledger/account_audit`；`remaining_uses` 映射到当前 API 的 `credits`。保留 STRICT 约束，增加账号角色、唯一 ID、账号状态、会话摘要、并发预占、次数流水及冻结/恢复审计。版本 2 的审计表在事务中迁移并保留既有记录。数据库文件权限 0600，目录 0700，归独立系统账号 `mistake-agent` 所有。
+负责人指定的基础库为 `/var/lib/user-store/users.sqlite3`，原表只有 `username/password_hash/remaining_uses`，检查时为空库。现已备份并升级到版本 5，包含 `users/sessions/generations/credit_ledger/account_audit`；`remaining_uses` 映射到当前 API 的 `credits`。保留 STRICT 约束，增加账号角色、唯一 ID、账号状态、会话摘要、并发预占、次数流水、冻结/恢复和密码操作审计及 `password_plain`。旧审计表在事务中迁移并保留既有记录。数据库文件权限 0600，目录 0700，归独立系统账号 `mistake-agent` 所有。
 
 迁移器只自动处理已知的三字段基础结构。非空库要求用户名合法且不发生大小写冲突、余额为非负整数、密码为当前支持的 scrypt 摘要；不满足则停止，不猜测或重置密码。迁移前以 SQLite 完整快照保留备份，测试已验证哈希及余额保留和失败时原表不变。
 
 - 账号服务入口：`https://codeqiqi.com/mistake-agent/`
 - 独立管理网页：`https://codeqiqi.com/mistake-agent/admin`
 - 内部监听：`127.0.0.1:8787`，由现有 Caddy 按 `/mistake-agent/*` 转发；现有网站继续使用原后端。
-- 源码：`/opt/mistake-agent/current`，实际发布目录 `/opt/mistake-agent/releases/20261027-accounts-v3`。
+- 源码：`/opt/mistake-agent/current`，实际发布目录 `/opt/mistake-agent/releases/20261027-accounts-v5`。
 - Node：`/opt/mistake-agent/runtime/node-v24.16.0-linux-x64/bin/node`，安装包按官方 SHASUMS 校验。该服务器无法直连 Docker 镜像站，因此采用独立 Node + systemd，无需改变现有容器。
 - 服务：`mistake-agent-accounts.service`，已启用开机启动和故障重启，独立用户、只读系统目录，数据库目录可写，内存上限 384 MiB。
 - 原库备份：`/var/lib/user-store/backups/users-before-account-api-20261027-101053.sqlite3`，另保留自动升级快照及原 `schema.sql` 副本。配置备份位于 `/etc/caddy/Caddyfile.before-mistake-agent-20261027-101338`。

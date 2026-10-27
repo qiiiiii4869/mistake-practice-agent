@@ -151,6 +151,9 @@ async fn send_request(
             "protected_account",
             "username_confirmation_mismatch",
             "account_not_disabled",
+            "current_password_required",
+            "current_password_incorrect",
+            "password_change_conflict",
         ];
         return Err(if allowed.contains(&code) {
             code.into()
@@ -418,6 +421,91 @@ pub(crate) async fn account_admin_delete(
     request(
         &format!("/v1/admin/users/{user_id}/delete"),
         Some(json!({"confirmUsername":confirm_username,"confirmDelete":true})),
+        Some(&access),
+    )
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn account_admin_password(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AccountState>,
+    user_id: String,
+    confirm_username: String,
+    new_password: String,
+    current_password: Option<String>,
+    request_key: String,
+) -> Result<Value, String> {
+    local(&window)?;
+    let _guard = lock(&state)?;
+    let access = admin_access(&state)?;
+    if !valid_id(&user_id)
+        || !valid_id(&request_key)
+        || !(3..=32).contains(&confirm_username.len())
+        || !(10..=128).contains(&new_password.chars().count())
+    {
+        return Err("invalid_input".into());
+    }
+    let self_change = state
+        .session
+        .lock()
+        .map_err(|_| "state_unavailable")?
+        .as_ref()
+        .ok_or("session_required")?
+        .user
+        .id
+        == user_id;
+    if self_change
+        && (app
+            .state::<super::ProbeState>()
+            .running
+            .load(Ordering::SeqCst)
+            || app
+                .state::<super::DeepseekState>()
+                .running
+                .load(Ordering::SeqCst)
+            || app.state::<super::ExportState>().0.load(Ordering::SeqCst))
+    {
+        return Err("account_work_in_progress".into());
+    }
+    let mut body = json!({"confirmUsername":confirm_username,"newPassword":new_password,"requestKey":request_key});
+    if let Some(password) = current_password {
+        body["currentPassword"] = json!(password);
+    }
+    let value = request(
+        &format!("/v1/admin/users/{user_id}/password"),
+        Some(body),
+        Some(&access),
+    )
+    .await?;
+    if self_change {
+        *state.session.lock().map_err(|_| "state_unavailable")? = None;
+        clear_private_state(&app)?;
+    }
+    Ok(value)
+}
+
+#[tauri::command]
+pub(crate) async fn account_admin_view_password(
+    window: WebviewWindow,
+    state: tauri::State<'_, AccountState>,
+    user_id: String,
+    current_password: String,
+    request_key: String,
+) -> Result<Value, String> {
+    local(&window)?;
+    let _guard = lock(&state)?;
+    let access = admin_access(&state)?;
+    if !valid_id(&user_id)
+        || !valid_id(&request_key)
+        || !(10..=128).contains(&current_password.chars().count())
+    {
+        return Err("invalid_input".into());
+    }
+    request(
+        &format!("/v1/admin/users/{user_id}/password/view"),
+        Some(json!({"currentPassword":current_password,"requestKey":request_key})),
         Some(&access),
     )
     .await

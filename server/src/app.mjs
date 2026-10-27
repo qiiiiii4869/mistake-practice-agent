@@ -3,7 +3,7 @@ import rateLimit from '@fastify/rate-limit';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { openDatabase, transaction, expireJobs, publicUser } from './database.mjs';
-import { hashPassword, verifyPassword, tokenHash } from './password.mjs';
+import { hashPassword, verifyAccountPassword, tokenHash } from './password.mjs';
 
 const error = (code, statusCode = 400) => { throw Object.assign(new Error(code), { statusCode }); };
 const object = (properties, required = Object.keys(properties)) => ({ type: 'object', additionalProperties: false, required, properties });
@@ -32,7 +32,7 @@ export async function createApp({ databasePath = './data/accounts.sqlite', sessi
   app.setNotFoundHandler((_request, reply) => reply.code(404).send({ error: 'not_found' }));
   app.addHook('onClose', async () => db.close());
 
-  async function authenticated(request) {
+  function readSession(request) {
     const header = request.headers.authorization ?? '';
     if (!/^Bearer [a-f0-9]{64}$/.test(header)) error('session_required', 401);
     const session = db.prepare('SELECT * FROM sessions WHERE token_hash=? AND expires_at>?').get(tokenHash(header.slice(7)), Date.now());
@@ -41,16 +41,21 @@ export async function createApp({ databasePath = './data/accounts.sqlite', sessi
     if (user?.status !== 'active') error('account_disabled', 403);
     request.account = user; request.sessionHash = session.token_hash;
   }
+  async function authenticated(request) { readSession(request); }
   async function administrator(request) {
     await authenticated(request);
     if (request.account.role !== 'admin') error('admin_required', 403);
   }
-  function sessionFor(user) {
+  function sessionFor(user,loginPassword=null) {
     const token = randomBytes(32).toString('hex'), now = Date.now(), expiresAt = now + sessionHours * 3600_000;
     let current;
     transaction(db, () => {
       current=db.prepare('SELECT * FROM users WHERE id=?').get(user.id);
       if(current?.status!=='active')error('account_disabled',403);
+      if(current.password_hash!==user.password_hash||current.password_plain!==user.password_plain)error('invalid_credentials',401);
+      if(loginPassword!==null&&current.password_plain===null){
+        db.prepare("UPDATE users SET password_hash='',password_plain=? WHERE id=?").run(loginPassword,user.id);
+      }
       db.prepare('DELETE FROM sessions WHERE expires_at<=?').run(now);
       const sessions = db.prepare('SELECT token_hash FROM sessions WHERE user_id=? ORDER BY created_at DESC').all(user.id);
       for (const old of sessions.slice(4)) db.prepare('DELETE FROM sessions WHERE token_hash=?').run(old.token_hash);
@@ -63,22 +68,21 @@ export async function createApp({ databasePath = './data/accounts.sqlite', sessi
   app.get('/health', async () => ({ ok: true }));
   app.post('/v1/auth/register', { schema: { body: credentials }, config: { rateLimit: { max: 5, timeWindow: '1 hour' } } }, async request => {
     const name = request.body.username.toLowerCase();
-    const hash = await hashPassword(request.body.password);
     const id = randomUUID();
     // Public registration never accepts role/status/balance and never creates admins.
-    try { db.prepare("INSERT INTO users(id,username,password_hash,role,status,credits,created_at) VALUES(?,?,?,'user','active',0,?)").run(id, name, hash, Date.now()); }
+    try { db.prepare("INSERT INTO users(id,username,password_hash,password_plain,role,status,credits,created_at) VALUES(?,?,'',?,'user','active',0,?)").run(id, name, request.body.password, Date.now()); }
     catch (err) { if (String(err.code).startsWith('ERR_SQLITE') && db.prepare('SELECT id FROM users WHERE username=?').get(name)) error('username_taken', 409); throw err; }
     return sessionFor(db.prepare('SELECT * FROM users WHERE id=?').get(id));
   });
   app.post('/v1/auth/login', { schema: { body: credentials }, config: authLimit }, async request => {
     const user = db.prepare('SELECT * FROM users WHERE username=?').get(request.body.username.toLowerCase());
-    const matches = await verifyPassword(request.body.password, user?.password_hash ?? dummy);
+    const matches = await verifyAccountPassword(request.body.password, user ?? {password_hash:dummy,password_plain:null});
     if (!user || !matches || user.locked_until > Date.now()) {
       if (user) db.prepare('UPDATE users SET failed_logins=failed_logins+1,locked_until=CASE WHEN failed_logins>=9 THEN ? ELSE locked_until END WHERE id=?').run(Date.now() + 15 * 60_000, user.id);
       error('invalid_credentials', 401);
     }
     if (user.status !== 'active') error('account_disabled', 403);
-    return sessionFor(user);
+    return sessionFor(user,request.body.password);
   });
   app.get('/v1/me', { preHandler: authenticated }, async request => {
     expireJobs(db); return { user: publicUser(db, db.prepare('SELECT * FROM users WHERE id=?').get(request.account.id)) };
@@ -209,6 +213,65 @@ export async function createApp({ databasePath = './data/accounts.sqlite', sessi
     items:db.prepare(`SELECT a.action,a.reason,a.created_at AS createdAt,u.username AS actor FROM account_audit a
       JOIN users u ON u.id=a.actor_id WHERE a.target_id=? ORDER BY a.rowid DESC LIMIT 100`).all(request.params.id)
   }));
+  app.post('/v1/admin/users/:id/password',{preHandler:administrator,config:{rateLimit:{max:10,timeWindow:'15 minutes'}},schema:{
+    params:object({id:uuid}),body:object({confirmUsername:username,newPassword:password,currentPassword:password,
+      requestKey:uuid},['confirmUsername','newPassword','requestKey'])
+  }},async request=>{
+    const {confirmUsername,newPassword,currentPassword,requestKey}=request.body;
+    const target=db.prepare('SELECT * FROM users WHERE id=?').get(request.params.id);
+    if(!target)error('user_not_found',404);
+    if(confirmUsername!==target.username)error('username_confirmation_mismatch',409);
+    const self=target.id===request.account.id;
+    // Administrator targets, including oneself, require proof of the acting admin's password.
+    if(target.role==='admin'){
+      if(!currentPassword)error('current_password_required',400);
+      if(!await verifyAccountPassword(currentPassword,request.account))error('current_password_incorrect',403);
+    }
+    const actorHash=request.account.password_hash;
+    const actorPlain=request.account.password_plain;
+    const existing=db.prepare('SELECT * FROM account_audit WHERE request_key=?').get(requestKey);
+    if(existing){
+      if(existing.actor_id!==request.account.id||existing.target_id!==target.id||existing.action!=='reset_password')error('idempotency_conflict',409);
+      return {ok:true,self,duplicate:true,reauthenticate:self};
+    }
+    return transaction(db,()=>{
+      // The expensive hashing runs outside the write transaction. Recheck the session,
+      // role and hashes so a concurrent freeze, reset or deletion cannot be bypassed.
+      readSession(request);
+      if(request.account.role!=='admin')error('admin_required',403);
+      if(request.account.password_hash!==actorHash||request.account.password_plain!==actorPlain)error('session_expired',401);
+      const current=db.prepare('SELECT * FROM users WHERE id=?').get(target.id);
+      if(!current)error('user_not_found',404);
+      const prior=db.prepare('SELECT * FROM account_audit WHERE request_key=?').get(requestKey);
+      if(prior){
+        if(prior.actor_id!==request.account.id||prior.target_id!==target.id||prior.action!=='reset_password')error('idempotency_conflict',409);
+        return {ok:true,self,duplicate:true,reauthenticate:self};
+      }
+      if(current.password_hash!==target.password_hash||current.password_plain!==target.password_plain||current.role!==target.role)error('password_change_conflict',409);
+      db.prepare("UPDATE users SET password_hash='',password_plain=?,failed_logins=0,locked_until=0 WHERE id=?").run(newPassword,target.id);
+      db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
+      db.prepare("UPDATE generations SET state='cancelled' WHERE user_id=? AND state='reserved'").run(target.id);
+      db.prepare("INSERT INTO account_audit VALUES(?,?,?,'reset_password',?,?,?)").run(randomUUID(),request.account.id,target.id,requestKey,self?'管理员修改本人密码':'管理员重设账号密码',Date.now());
+      return {ok:true,self,duplicate:false,reauthenticate:self};
+    });
+  });
+  app.post('/v1/admin/users/:id/password/view',{preHandler:administrator,config:{rateLimit:{max:20,timeWindow:'15 minutes'}},schema:{
+    params:object({id:uuid}),body:object({currentPassword:password,requestKey:uuid})
+  }},async request=>{
+    const actor={...request.account};
+    if(!await verifyAccountPassword(request.body.currentPassword,actor))error('current_password_incorrect',403);
+    return transaction(db,()=>{
+      readSession(request);
+      if(request.account.role!=='admin')error('admin_required',403);
+      if(request.account.password_hash!==actor.password_hash||request.account.password_plain!==actor.password_plain)error('session_expired',401);
+      const target=db.prepare('SELECT * FROM users WHERE id=?').get(request.params.id);
+      if(!target)error('user_not_found',404);
+      const prior=db.prepare('SELECT * FROM account_audit WHERE request_key=?').get(request.body.requestKey);
+      if(prior&&(prior.actor_id!==actor.id||prior.target_id!==target.id||prior.action!=='view_password'))error('idempotency_conflict',409);
+      if(!prior)db.prepare("INSERT INTO account_audit VALUES(?,?,?,'view_password',?,?,?)").run(randomUUID(),actor.id,target.id,request.body.requestKey,'管理员查看账号密码',Date.now());
+      return {available:typeof target.password_plain==='string',password:target.password_plain??null};
+    });
+  });
   for (const [route, file, type] of [['/admin', 'index.html', 'text/html; charset=utf-8'], ['/admin/app.js', 'app.js', 'text/javascript; charset=utf-8'], ['/admin/style.css', 'style.css', 'text/css; charset=utf-8']]) {
     app.get(route, async (_request, reply) => reply.type(type).send(await readFile(new URL(`../public/${file}`, import.meta.url))));
   }

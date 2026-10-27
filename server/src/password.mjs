@@ -20,3 +20,12 @@ export async function verifyPassword(password, hash) {
   return timingSafeEqual(await key(password, parts[1]), Buffer.from(parts[2], 'hex'));
 }
 export const tokenHash = token => createHash('sha256').update(token).digest('hex');
+
+// The owner explicitly selected plaintext storage. Legacy hashes remain readable
+// for authentication until a successful login supplies the original password.
+export async function verifyAccountPassword(password,user){
+  if(typeof user.password_plain==='string'){
+    return timingSafeEqual(createHash('sha256').update(password).digest(),createHash('sha256').update(user.password_plain).digest());
+  }
+  return verifyPassword(password,user.password_hash);
+}

@@ -25,7 +25,8 @@ test('registration, authorization and atomic usage accounting', async () => {
     assert.equal((await request('GET','/v1/admin/users',null,alice.token)).status,403);
     assert.equal((await request('GET','/v1/me')).status,401);
     assert.equal((await request('POST','/v1/auth/login',{username:'alice',password:'Wrong-password-999'})).data.error,'invalid_credentials');
-    assert.match(db.prepare('SELECT password_hash FROM users WHERE id=?').get(alice.user.id).password_hash,/^scrypt-v1\$/);
+    const credential=db.prepare('SELECT password_hash,password_plain FROM users WHERE id=?').get(alice.user.id);
+    assert.equal(credential.password_hash,'');assert.equal(credential.password_plain,'Sufficient-test-password-42');
     assert.ok(!JSON.stringify(db.prepare('SELECT * FROM sessions').all()).includes(alice.token));
     db.prepare("UPDATE users SET role='admin' WHERE id=?").run(owner.user.id);
     const grant={amount:2,reason:'test payment',requestKey:randomUUID()},url=`/v1/admin/users/${alice.user.id}/credits`;
