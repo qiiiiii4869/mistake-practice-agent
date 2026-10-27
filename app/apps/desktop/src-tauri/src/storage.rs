@@ -277,6 +277,38 @@ pub(crate) fn load(conn: &Connection) -> Result<Stored, String> {
     }
     Ok(Stored { revision, snapshot })
 }
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LegacySummary {
+    revision: i64, exam_name: String, subject_name: String,
+    student_count: usize, question_records: usize, paper_files: usize,
+}
+fn legacy_connection(path: &Path) -> Result<Connection, String> {
+    Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|_| "legacy_read_failed".into())
+}
+pub(crate) fn legacy_summary(path: &Path) -> Result<Option<LegacySummary>, String> {
+    if !path.is_file() { return Ok(None); }
+    let stored = load(&legacy_connection(path)?)?;
+    Ok(stored.snapshot.map(|s| LegacySummary {
+        revision: stored.revision, exam_name: s.exam.name, subject_name: s.exam.subject_name,
+        student_count: s.students.len(), question_records: s.students.iter().map(|s| s.questions.len()).sum(),
+        paper_files: s.paper.as_ref().map_or(0, |p| p.pages.len()),
+    }))
+}
+pub(crate) fn import_legacy(source: &Path, destination: &Path, source_revision: i64, target_revision: i64) -> Result<Stored, String> {
+    let source = legacy_connection(source)?;
+    let snapshot = load(&source)?;
+    if snapshot.revision != source_revision { return Err("legacy_source_changed".into()); }
+    let snapshot = snapshot.snapshot.ok_or("legacy_not_found")?;
+    let mut target = open(destination)?;
+    let current = load(&target)?;
+    if current.snapshot.is_some() { return Err("legacy_target_not_empty".into()); }
+    if current.revision != target_revision { return Err("storage_conflict".into()); }
+    // save uses a revision-checked transaction; the source is opened read-only.
+    save(&mut target, target_revision, Some(snapshot))
+}
 pub(crate) fn model_names(conn:&Connection)->Result<Vec<String>,String>{
     Ok(load(conn)?.snapshot.ok_or("model_no_workspace")?.students.into_iter().map(|s|s.name).collect())
 }
