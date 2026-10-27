@@ -37,6 +37,7 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy, page, on
   const [settings, setSettings] = React.useState<TeacherSettings | null>(null);
   const [history, setHistory] = React.useState<ExamHistory[]>([]);
   const [historyError, setHistoryError] = React.useState(false);
+  const [historyRefresh, setHistoryRefresh] = React.useState(0);
   const requestVersion = React.useRef(0);
   const snapshot = stored.snapshot;
   const analysis = React.useMemo(() => snapshot ? analyze(snapshot) : null, [snapshot]);
@@ -60,7 +61,7 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy, page, on
     invoke<ExamHistory[]>('list_exam_history').then(value => {if (active) {setHistory(value); setHistoryError(false);}})
       .catch(() => {if (active) {setHistory([]); setHistoryError(true);}});
     return () => {active = false;};
-  }, [ready, stored.revision]);
+  }, [ready, stored.revision, historyRefresh]);
 
   function legacyError(error:unknown){
     const code=error instanceof Error?error.message:String(error);
@@ -127,7 +128,11 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy, page, on
   }
 
   async function accept(next: Workspace) {
-    if (snapshot) { setCandidate(next); setMessage('新数据已通过校验。确认后将替换本机当前考试。'); }
+    if (snapshot) {
+      const records = await invoke<ExamHistory[]>('archive_exam_history', {expectedRevision:latestStored.current.revision,snapshot:validateWorkspace(next)});
+      setHistory(records);setHistoryError(false);setHistoryRefresh(value=>value+1);
+      setCandidate(next); setMessage(`“${next.exam.name}”已保存为本机历史成绩，可离线对比。是否切换为当前考试？`);
+    }
     else await persist(next);
   }
 
@@ -183,7 +188,7 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy, page, on
   return <>
     <div hidden={page!=='import'}>
     <section className="card" id="exam-students" aria-label="全班成绩接入">
-      <div className="card-heading"><h2>选择考试，读取学生信息</h2><span className="muted">仅处理当前一场考试</span></div>
+      <div className="card-heading"><h2>选择考试，读取学生信息</h2><span className="muted">读取成功自动保存历史成绩</span></div>
       {report?.ok && report.options.length > 0 ? <>
         <div className="fields">
           <label>选择考试<select aria-label="选择考试" value={examId} disabled={locked} onChange={e => void chooseExam(e.target.value)}><option value="">请选择考试</option>{report.options.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select></label>
@@ -195,7 +200,7 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy, page, on
       <label className={`file-input ${locked ? 'disabled' : ''}`}>导入扩展导出文件<input type="file" accept=".json,application/json" multiple disabled={locked} aria-label="导入扩展导出文件" onChange={e => void importFiles(e)} /></label>
       <p className="help">同时选择 student-class 与同次导出的 verification-full 文件。只接受完整全班得分，不接收答案图片或作答原文。</p>
       <p className="notice" aria-live="polite" data-testid="workspace-message">{message}</p>
-      {candidate && <div className="confirm-panel" role="region" aria-label="确认替换考试"><b>替换本机当前考试？</b><p>当前：{snapshot?.exam.name}；新数据：{candidate.exam.name}，共 {candidate.students.length} 人。当前考试的学生成绩将保留用于历史比较；试卷照片、题干、出题审核及设置将被替换。</p><div className="actions"><button disabled={working} onClick={() => void persist(candidate)}>确认替换并保存</button><button className="secondary" disabled={working} onClick={() => { setCandidate(null); setMessage('已取消替换，当前考试保留。'); }}>保留当前考试</button></div></div>}
+      {candidate && <div className="confirm-panel" role="region" aria-label="确认替换考试"><b>历史成绩已保存，是否切换当前考试？</b><p>当前：{snapshot?.exam.name}；新数据：{candidate.exam.name}，共 {candidate.students.length} 人。新成绩已可用于对比和趋势图。切换后当前试卷照片、题干、出题审核及设置将被替换。</p><div className="actions"><button disabled={working} onClick={() => void persist(candidate)}>确认替换并保存</button><button className="secondary" disabled={working} onClick={() => { setCandidate(null); setMessage('当前考试保留，新读取的历史成绩也已保存，可继续读取其他考试。'); }}>仅存为历史，保留当前考试</button></div></div>}
     </section>
     {ready&&!snapshot&&<section className="card" aria-label="恢复旧版考试">
       <h2>恢复旧版考试</h2><p>可把升级前保存在本机的考试复制到当前账号 {account.user.username}。不会自动分配，不覆盖已有考试，不迁移密码、登录态或模型密钥。</p>

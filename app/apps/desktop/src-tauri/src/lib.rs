@@ -432,6 +432,12 @@ async fn list_exam_history(window: WebviewWindow, app: tauri::AppHandle) -> Resu
 }
 
 #[tauri::command]
+async fn archive_exam_history(window: WebviewWindow, app: tauri::AppHandle, expected_revision: i64, snapshot: storage::Snapshot) -> Result<Vec<storage::ExamHistory>, String> {
+    require_main(&window)?;
+    storage::archive_exam(&mut storage::open(&database_path(&app)?)?, expected_revision, &snapshot)
+}
+
+#[tauri::command]
 async fn save_workspace(
     window: WebviewWindow,
     app: tauri::AppHandle,
@@ -576,6 +582,7 @@ pub fn run() {
             probe_progress,
             load_workspace,
             list_exam_history,
+            archive_exam_history,
             save_workspace,
             list_knowledge,
             legacy_workspace_summary,

@@ -24,7 +24,22 @@ window.__TAURI_INTERNALS__ = {invoke: async (command, args) => {
   if (command === 'account_generation_begin') {window.testAccountJob='00000000-0000-4000-8000-000000000002';return {jobId:window.testAccountJob,state:'reserved'};}
   if (command === 'account_generation_finish') {if(args.batch){window.testAccount.credits--;window.testAccount.available--;}return {charged:!!args.batch,user:structuredClone(window.testAccount)};}
   if (command === 'load_workspace') return structuredClone(window.testStored);
-  if (command === 'list_exam_history') return structuredClone(window.testHistory || []);
+  if (command === 'list_exam_history') return structuredClone(window.testHistory || JSON.parse(sessionStorage.getItem('synthetic-history') || '[]'));
+  if (command === 'archive_exam_history') {
+    if (window.testSaveFailure) throw 'storage_failed';
+    if (args.expectedRevision !== window.testStored.revision) throw 'storage_conflict';
+    const records=window.testHistory || JSON.parse(sessionStorage.getItem('synthetic-history') || '[]');
+    for (const snapshot of [window.testStored.snapshot,args.snapshot]) {
+      if(!snapshot) continue;
+      const record={examId:snapshot.exam.id,examName:snapshot.exam.name,classId:snapshot.exam.classId,className:snapshot.exam.className,
+        subjectName:snapshot.exam.subjectName,finishedAt:snapshot.source.finishedAt,classAvg:snapshot.overview?.classAvg,
+        gradeAvg:snapshot.overview?.gradeAvg,topClassAvg:snapshot.overview?.topClassAvg,students:[]};
+      const index=records.findIndex(r=>r.examId===record.examId&&r.classId===record.classId&&r.subjectName===record.subjectName);
+      if(index<0)records.push(record);else records[index]=record;
+    }
+    window.testHistory=records;sessionStorage.setItem('synthetic-history',JSON.stringify(records));
+    return structuredClone(records);
+  }
   if (command === 'save_workspace') {
     if (window.testSaveFailure) throw 'storage_failed';
     if (args.expectedRevision !== window.testStored.revision) throw 'storage_conflict';
@@ -60,7 +75,7 @@ window.__TAURI_INTERNALS__ = {invoke: async (command, args) => {
     exams: {status: 'passed_live', count: 1, scope: 'latest_term_first_page'},
     endpoints: [{host: 'ali-bg.zhixue.com', path: '/api-teacher/newContainer/getClassReportList',
       status: 'received_json', http_status: 200}]},
-    options: [{id: 'e-test', name: '模拟考试 · 仅供界面验证'}, ...(window.testScenario === 'multi' ? [{id:'e-other',name:'第二场模拟考试'}] : [])],
+    options: window.testExamOptions || [{id: 'e-test', name: '模拟考试 · 仅供界面验证'}, ...(window.testScenario === 'multi' ? [{id:'e-other',name:'第二场模拟考试'}] : [])],
     teachingClasses: [{id: 'c-test', name: '模拟班级', subjects: [{code: 'bio', name: '生物'}]}]};
 }};
 """

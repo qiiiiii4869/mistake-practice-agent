@@ -327,9 +327,24 @@ pub(crate) fn history(conn: &Connection) -> Result<Vec<ExamHistory>, String> {
 fn save_history(tx: &rusqlite::Transaction<'_>, snapshot: &Snapshot) -> Result<(), String> {
     let record = ExamHistory::from(snapshot);
     let payload = serde_json::to_string(&record).map_err(|_| "invalid_workspace")?;
-    tx.execute("INSERT INTO exam_history(exam_id,class_id,subject_name,payload) VALUES (?1,?2,?3,?4) ON CONFLICT(exam_id,class_id,subject_name) DO UPDATE SET payload=excluded.payload",
+    tx.execute("INSERT INTO exam_history(exam_id,class_id,subject_name,payload) VALUES (?1,?2,?3,?4) ON CONFLICT(exam_id,class_id,subject_name) DO UPDATE SET payload=excluded.payload WHERE json_extract(excluded.payload,'$.finishedAt') >= json_extract(exam_history.payload,'$.finishedAt')",
         params![record.exam_id,record.class_id,record.subject_name,payload]).map_err(|_| "storage_failed")?;
     Ok(())
+}
+pub(crate) fn archive_exam(conn: &mut Connection, expected: i64, snapshot: &Snapshot) -> Result<Vec<ExamHistory>, String> {
+    snapshot.validate()?;
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate).map_err(|_| "storage_failed")?;
+    let (revision, raw): (i64, Option<String>) = tx.query_row("SELECT revision,payload FROM active_workspace WHERE id=1", [],
+        |row| Ok((row.get(0)?,row.get(1)?))).map_err(|_| "storage_failed")?;
+    if revision != expected { return Err("storage_conflict".into()); }
+    if let Some(raw) = raw {
+        let current: Snapshot = serde_json::from_str(&raw).map_err(|_| "invalid_workspace")?;
+        current.validate()?;
+        save_history(&tx, &current)?;
+    }
+    save_history(&tx, snapshot)?;
+    tx.commit().map_err(|_| "storage_failed")?;
+    history(conn)
 }
 pub(crate) fn load(conn: &Connection) -> Result<Stored, String> {
     let (revision, raw): (i64, Option<String>) = conn
@@ -432,6 +447,39 @@ pub(crate) fn save(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn archive_without_replacing_keeps_all_reads_and_rolls_back_on_failure() {
+        let mut conn=Connection::open_in_memory().unwrap();init(&conn).unwrap();
+        let current=sample();save(&mut conn,0,Some(current)).unwrap();
+        for id in ["week2","week3","week5"] {
+            let mut exam=sample();exam.exam.id=id.into();exam.exam.name=id.into();
+            let records=archive_exam(&mut conn,1,&exam).unwrap();
+            assert!(records.iter().any(|r|r.exam_id==id));
+            let active=load(&conn).unwrap();assert_eq!(active.revision,1);assert_eq!(active.snapshot.unwrap().exam.id,"e");
+        }
+        assert_eq!(history(&conn).unwrap().len(),4);
+        let mut exam=sample();exam.exam.id="week3".into();exam.students[0].class_rank=Some(9);
+        archive_exam(&mut conn,1,&exam).unwrap();
+        assert_eq!(history(&conn).unwrap().len(),4);
+        assert_eq!(history(&conn).unwrap().iter().find(|r|r.exam_id=="week3").unwrap().students[0].class_rank,Some(9));
+        exam.exam.id="invalid".into();exam.students[0].questions[0].score=-1.0;
+        assert!(archive_exam(&mut conn,1,&exam).is_err());
+        exam.students[0].questions[0].score=0.0;
+        assert_eq!(archive_exam(&mut conn,0,&exam).unwrap_err(),"storage_conflict");
+        assert_eq!(history(&conn).unwrap().len(),4);
+    }
+    #[test]
+    fn later_active_saves_cannot_revert_a_refreshed_history() {
+        let mut conn=Connection::open_in_memory().unwrap();init(&conn).unwrap();
+        let mut active=sample();active.source.finished_at="2026-10-27T10:00:00Z".into();
+        save(&mut conn,0,Some(active.clone())).unwrap();
+        let mut refreshed=active.clone();refreshed.source.finished_at="2026-10-27T11:00:00Z".into();refreshed.students[0].class_rank=Some(5);
+        archive_exam(&mut conn,1,&refreshed).unwrap();
+        let mut other=sample();other.exam.id="other".into();archive_exam(&mut conn,1,&other).unwrap();
+        save(&mut conn,1,Some(active)).unwrap();
+        let history=history(&conn).unwrap();let record=history.iter().find(|r|r.exam_id=="e").unwrap();
+        assert_eq!(record.students[0].class_rank,Some(5));assert_eq!(record.finished_at,"2026-10-27T11:00:00Z");
+    }
     #[test]
     fn history_archives_previous_exam_transactionally_and_clears_current_only() {
         let mut conn=Connection::open_in_memory().unwrap();init(&conn).unwrap();
