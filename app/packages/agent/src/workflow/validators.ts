@@ -63,7 +63,7 @@ export function parseExercise(value:unknown,facts:KnowledgeFact[],availableMater
   const expected=[...new Set(facts.filter(f=>targetIds.includes(f.factId)).flatMap(f=>f.sourceNumbers))].sort();
   if(JSON.stringify([...sourceNumbers].sort())!==JSON.stringify(expected))fail();
   const stem=text(v.stem),answer=text(v.answer,10000),options=strings(v.options,10,3000),rubric=strings(v.rubric,20,3000);
-  if((/如图|下图|上图|图中|见图/.test(stem)&&!materialRefs.length)||/https?:\/\//i.test(JSON.stringify(v)))throw new Error('workflow_missing_material');
+  if((/如图|下图|上图|图中|见图/.test([stem,...options].join(' '))&&!materialRefs.length)||/https?:\/\//i.test(JSON.stringify(v)))throw new Error('workflow_missing_material');
   const type=v.type as ExerciseItem['type'];
   if(type==='single_choice'||type==='multiple_choice'){
     if(options.length<2||new Set(options.map(normalize)).size!==options.length)fail();
