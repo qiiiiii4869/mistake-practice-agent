@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "templateVersion": "workflow-pdf-v1",
+  "approved": true,
+  "reviewedBy": "Codex visual review of rendered pages",
+  "date": "2026-10-28",
+  "templateSourceSha256": "7d136ca2813829462fcd4f30d84077af2098bff9422930bb7b1f571e1d74b577",
+  "compiler": {
+    "version": "typst 0.15.1 (9dfd3a08)",
+    "sha256": "081217a463adb006f8894b44227fe4b9c9e91fc85f5463d5948e8370db9bb31e"
+  },
+  "fontEvidence": [
+    {
+      "file": "msyh.ttc",
+      "sha256": "d79c55e68b1131eea0cc1c47be4f572d964f28c682e143db2ad09c1e4cb07a3f"
+    },
+    {
+      "file": "msyhbd.ttc",
+      "sha256": "4508821b3dffe01f0ef5e5326a3e60df705a44633858811f67b6982dce3f6ee6"
+    },
+    {
+      "file": "cambria.ttc",
+      "sha256": "84e70ccc1664482f4a960442c7a166c91a1b2cf98ff88c33cb73f79403f66d7b"
+    }
+  ],
+  "pdfjsVersion": "6.4.299",
+  "coverage": [
+    "dictation/individual",
+    "dictation/combined",
+    "exercise/individual",
+    "exercise/combined",
+    "formula_and_unicode_scripts",
+    "long_material_and_four_exercise_types",
+    "continued_teacher_table",
+    "missing_and_no_target_status_pages",
+    "answer_separation"
+  ],
+  "finalIndependentReview": {
+    "files": 31,
+    "pages": 96,
+    "renderer": "Poppler 144 dpi",
+    "previouslyReviewedPixelIdenticalPages": 78,
+    "changedPagesInspected": 18,
+    "detailViews": [
+      "fraction_and_scripts",
+      "continued_table_header",
+      "teacher_final_page"
+    ]
+  },
+  "limitations": [
+    "Synthetic data only. No real-class/model/PDF quality guarantee.",
+    "Automated geometric and raster checks do not prove all scientific facts or visual details."
+  ],
+  "sourceNormalization": "UTF-8 with LF line endings"
+}

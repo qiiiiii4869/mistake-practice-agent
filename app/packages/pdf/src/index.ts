@@ -3,6 +3,8 @@ import { validateBatch } from '../../agent/src/storage.ts';
 import type { Workspace } from '../../core/src/index.ts';
 import { typstContent } from './math.ts';
 export { latexToTypst, typstContent } from './math.ts';
+export {buildDocumentPlan,renderDocument,PDF_TEMPLATE_VERSION} from './workflow/plan.ts';
+export type {DocumentPlan,PlannedDocument,PdfBlock} from './workflow/plan.ts';
 
 export interface PdfSource { filename:string; typst:string; studentIds:string[] }
 export interface ExportOptions { layout:'individual'|'class'; includeAnswers:boolean; demoPreview?:boolean }

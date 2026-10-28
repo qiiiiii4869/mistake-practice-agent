@@ -2,7 +2,7 @@
 
 2026-10-28 实现。入口为 `index.ts`，与旧版 `AgentBatch`、人工审核及计次流程独立。
 
-阶段 A 实现纯业务核心和内存存储；后续按负责人要求先接云端共享 Key 与真实模型。`live.ts` 通过受控 Rust 命令授权、调用和结束任务，不在 JavaScript 接收 Key。真实模型必须同时提供 authorize/release 生命周期；模拟模型继续独立使用。`contentReady` 表示内容校验与分配完成，不能显示为正式报告交付成功。PDF、SQLite 重启恢复及正式计次仍未接入。
+阶段 A 实现纯业务核心和内存存储；后续按负责人要求先接云端共享 Key 与真实模型。`live.ts` 通过受控 Rust 命令授权、调用和结束任务，不在 JavaScript 接收 Key。真实模型必须同时提供 authorize/release 生命周期；模拟模型继续独立使用。`contentReady` 表示内容校验与分配完成，不能显示为正式报告交付成功。阶段 B 已增加独立的 PDF 离线执行器，见 `packages/pdf/src/workflow/README.md`；SQLite 工作流重启恢复、桌面正式交付入口及计次继续按后续阶段接入。
 
 ## 真实内容测试
 
@@ -141,8 +141,8 @@ const result = await runWorkflow({
 
 同账号同一时刻只能运行一个任务；同 runId/contentHash 重复点击共享 Promise。完成的同任务读取缓存，不再次生成。继续未完成任务须显式 `resume:true`，原预算与截止时间不重置；有未确认调用须由调用方明确处理后使用 `retryUnknownCalls:true`，不自动重发。此选项只是允许在剩余预算内继续，不保证供应商不重复计费。
 
-内存检查点支持当前进程内取消后继续，尚不支持程序重启恢复。XState 状态可序列化；SQLite、持久化完整性复核、崩溃与跨进程恢复属于阶段 C。PDF 和结算失败恢复尚未接入。
+内存检查点支持当前进程内取消后继续，尚不支持程序重启恢复。XState 状态可序列化；SQLite、持久化完整性复核、崩溃与跨进程恢复属于阶段 C。阶段 B 的本机 PDF 文件检查点可独立重试导出并复用已验证内容；正式结算失败恢复仍待接线。
 
 共同分析缓存要求模型依赖显式提供 `cacheKey`，标明配置版本；缓存按账号、考试/学科、试卷内容、题号、资料版本、模型配置、工作流/提示词版本隔离。只缓存没有隔离/失败项的共同识题与事实结果；跨模式可复用，仍重新选择个人目标、生成模式内容。教师综合报告只在完整考试流程最后生成。无 `cacheKey` 时关闭跨任务分析缓存。同任务复用也检查模型配置。
 
-`exportProfile` 仅建立未来导出设置与独立 `exportHash`，改变分开/合订或答案组织不调用模型。DocumentPlan、PDF QA、输出提交、正式成功与计次属于后续阶段，当前没有伪造导出成功状态。
+`exportProfile` 建立独立导出设置与摘要，改变分开/合订或答案组织不调用模型。阶段 B 的 `buildDocumentPlan` 与 PDF 执行器已实现文档计划、逐页 QA 和新目录提交，输出 `exportStatus=verified` 与 `settlementStatus=not_requested`；不修改本模块的 `contentReady` 为正式计次成功。

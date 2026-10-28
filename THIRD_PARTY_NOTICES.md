@@ -10,6 +10,8 @@
 
 PDF 文字提取使用 Mozilla PDF.js（`pdfjs-dist`，Apache-2.0）。worker、CMap 与标准字体来自锁定的 npm 包，在构建/开发前由 `app/apps/desktop/scripts/prepare-pdf.mjs` 复制到本地资源目录，同时保留该包 LICENSE。库的版本与依赖固定在 `app/package-lock.json`。
 
+阶段 B 的本机 Node PDF 执行器复用 PDF.js 的 `@napi-rs/canvas` 1.0.13 可选依赖（MIT）进行工作线程内渲染；其版本及原生平台包由现有 npm lockfile 固定，许可证保留于依赖发行包。Windows 中文和数学字体从已验证系统字体读取并记录摘要，不将系统字体复制进项目或分发包。
+
 ## XState
 
 云端 Key 会话的 Rust 内存缓冲区清理使用 `zeroize` 1.9.1（MIT OR Apache-2.0），本项目按 MIT 许可使用。Copyright (c) 2018-2026 The RustCrypto Project Developers；完整许可保留在 `licenses/zeroize-MIT.txt`，版本固定于桌面 Cargo.lock。该库清理其管理的缓冲区，不代表 HTTP/TLS 或操作系统所有临时副本均可证明已擦除。
