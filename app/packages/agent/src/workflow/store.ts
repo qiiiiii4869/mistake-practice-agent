@@ -1,9 +1,17 @@
-import type { AnalysisCache, WorkflowRun, WorkflowStore } from './types.ts';
+import type { AnalysisCache, WorkflowRun, WorkflowStore,ModelResponse } from './types.ts';
 
 // A clone-on-read/write port for deterministic tests. Durable SQLite is phase C.
 export class MemoryWorkflowStore implements WorkflowStore {
   private records = new Map<string, WorkflowRun>();
   private analysis = new Map<string, AnalysisCache>();
+  private responses=new Map<string,ModelResponse>();
+  async completeCall(ownerId:string,run:WorkflowRun,callId:string,response:ModelResponse):Promise<void>{
+    this.records.set(`${ownerId}:${run.runId}`,structuredClone(run));
+    this.responses.set(`${ownerId}:${run.runId}:${callId}`,structuredClone(response));
+  }
+  async loadResponse(ownerId:string,runId:string,callId:string):Promise<ModelResponse|null>{
+    return structuredClone(this.responses.get(`${ownerId}:${runId}:${callId}`)??null);
+  }
   async save(ownerId: string, run: WorkflowRun): Promise<void> {
     this.records.set(`${ownerId}:${run.runId}`, structuredClone(run));
   }

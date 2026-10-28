@@ -8,12 +8,13 @@ import { generateDictation } from './strategies/dictation.ts';
 import { generateExercise } from './strategies/exercise.ts';
 import { templateClassTeachingReport,validateClassTeachingReport,teachingReportInput } from './teachingAdvice.ts';
 import { teachingEvidence,classOverview } from './teachingEvidence.ts';
-import type { BudgetPolicy, FactCandidate, FrozenInput, InvokeModel, KnowledgeFact, ModelResponse, WorkflowPorts, WorkflowRun, WorkflowState } from './types.ts';
+import type { BudgetPolicy, FactCandidate, FrozenInput, InvokeModel, KnowledgeFact, ModelResponse, WorkflowPorts, WorkflowRun, WorkflowState,WorkflowTaskContext,CheckpointData } from './types.ts';
 import { factPassed, invalid, list, normalize, object, validateEvidence, validateFactCheck, validateFacts, validateUnits,validationReason } from './validators.ts';
 
 export interface RunOptions {
   input: FrozenInput; ports: WorkflowPorts; runId?: string; signal?: AbortSignal;
   policy?: Partial<BudgetPolicy>; resume?: boolean; retryUnknownCalls?: boolean;
+  taskContext?:WorkflowTaskContext;
 }
 const activeOwners = new Map<string,{ runId: string; hash: string; promise: Promise<WorkflowRun> }>();
 
@@ -24,13 +25,14 @@ export function runWorkflow(options: RunOptions): Promise<WorkflowRun> {
     if (active.runId === runId && active.hash === input.contentHash) return active.promise;
     return Promise.reject(new Error('workflow_busy'));
   }
-  const promise = execute({ ...options, input, runId }).finally(() => activeOwners.delete(input.ownerId));
+  const promise = execute({ ...options, input, runId }).finally(async()=>{try{await options.ports.store.endRun?.(input.ownerId,runId);}finally{activeOwners.delete(input.ownerId);}});
   activeOwners.set(input.ownerId,{ runId, hash: input.contentHash, promise });
   return promise;
 }
 
 async function execute(options: RunOptions & { runId: string }): Promise<WorkflowRun> {
-  const { input, ports, runId, signal } = options, now = ports.now ?? Date.now;
+  const { input, ports, runId } = options, now = ports.now ?? Date.now;
+  const leaseController=new AbortController(),signal=options.signal?AbortSignal.any([options.signal,leaseController.signal]):leaseController.signal;
   await assertFrozen(input);
   if (ports.model.executionMode === 'real' && (!ports.authorize || !ports.release)) throw new Error('workflow_authorization_required');
   if (!/^[\w-]{1,100}$/.test(runId)) throw new Error('workflow_invalid_run_id');
@@ -48,7 +50,9 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
     if (run.state === 'contentReady' || run.state === 'partial') return run;
     if (!options.resume) throw new Error('workflow_resume_required');
     // Restored counters and original deadlines are retained, including unknown usage.
-    if (run.calls.some(c => c.status !== 'completed') && !options.retryUnknownCalls) throw new Error('workflow_unknown_call_requires_decision');
+    const resolvedRetry=(i:number)=>run!.calls[i].attempt===1&&run!.calls[i+1]?.attempt===2&&run!.calls[i+1].status==='completed'
+      &&run!.calls[i+1].requestHash===run!.calls[i].requestHash&&run!.calls[i+1].scopeId===run!.calls[i].scopeId;
+    if (run.calls.some((c,i) => c.status !== 'completed'&&!resolvedRetry(i)) && !options.retryUnknownCalls) throw new Error('workflow_unknown_call_requires_decision');
     run.calls.filter(c => c.status === 'pending').forEach(c => { c.status = 'unknown'; });
   } else {
     if (options.resume) throw new Error('workflow_run_not_found');
@@ -60,11 +64,13 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
       advice: [],teacherReport:null, skipped: [], checkpoints: [],validationAttempts:[],recognitionChecks:[] };
   }
   const current = run;
+  await ports.store.beginRun?.(input,runId,options.taskContext??{},()=>leaseController.abort());
   current.validationAttempts??=[];
   current.recognitionChecks??=[];
   const analysisKey = ports.model.cacheKey ? await digest({ ownerId: input.ownerId, exam: input.workspace.exam,
     paper: input.workspace.paper, numbers: [...new Set(input.workspace.students.flatMap(s => s.questions.map(q => q.number)))],
     scope: input.testScope,
+    recognitionPolicy:input.recognitionPolicy,
     knowledgeRevision: input.knowledgeRevision, modelConfiguration: ports.model.cacheKey, executionMode: ports.model.executionMode,
     workflowVersion: input.workflowVersion, promptVersion: input.promptVersion }) : null;
   const cached = analysisKey && shape.hasTargets && (!current.checkpoints.length || current.analysisCacheHit) ? await ports.store.loadAnalysis(input.ownerId,analysisKey) : null;
@@ -75,16 +81,28 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
   const save = async () => { current.machineSnapshot = actor.getPersistedSnapshot(); await ports.store.save(input.ownerId,current); };
   const check = () => {
     if (signal?.aborted) throw new Error('workflow_cancelled');
-    if (now() - current.startedAt >= current.policy.maxRunMs) throw new Error('workflow_deadline');
+    if (!options.resume&&now() - current.startedAt >= current.policy.maxRunMs) throw new Error('workflow_deadline');
   };
   const next = async (expected: WorkflowState) => {
     check(); actor.send({ type: 'NEXT' }); current.state = actorState(actor);
     if (current.state !== expected) throw new Error('workflow_invalid_transition');
     await save(); ports.onProgress?.(current.state);
   };
+  const dataKeys=['units','facts','items','draftFacts','unitEvidence','targets','assignments','evidence','advice','teacherReport','skipped','validationAttempts','recognitionChecks'] as const;
+  let replayCursor:number|null=null;
   const checkpoint = async (id: string, action: () => Promise<void>) => {
     if (current.checkpoints.includes(id)) return;
-    check(); await action(); check(); current.checkpoints.push(id); await save();
+    check();
+    if(current.frame){if(current.frame.id!==id)throw new Error('workflow_checkpoint_mismatch');
+      Object.assign(current,structuredClone(current.frame.data));}
+    else{current.frame={id,callStart:current.calls.length,data:Object.fromEntries(dataKeys.map(k=>[k,structuredClone(current[k])])) as CheckpointData};await save();}
+    replayCursor=current.frame.callStart;
+    await action();check();current.checkpoints.push(id);delete current.frame;replayCursor=null;await save();
+  };
+  let authorized=false;
+  const authorize=async()=>{if(authorized||!shape.hasTargets||!ports.authorize)return;
+    const cloud=await ports.authorize(input,current.policy,signal);authorized=true;
+    if(cloud){current.cloud=cloud;await save();}
   };
   const names = input.workspace.students.map(s => s.name);
   let networkRetries = current.calls.filter(c => c.attempt > 1).length;
@@ -94,15 +112,34 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
     const serialized = JSON.stringify(request), requestHash = await digest(request);
     const scopeId = typeof data.contentId === 'string' ? data.contentId
       : data.original && typeof data.original === 'object' && 'unitId' in data.original ? String(data.original.unitId) : 'batch';
+    const callScope=stage==='recognize'?String(data.pageId):scopeId;
     for (let attempt = 1; attempt <= 2; attempt++) {
       check();
+      if(replayCursor!==null&&replayCursor<current.calls.length){
+        const previous=current.calls[replayCursor++];
+        if(previous.stage!==stage||previous.scopeId!==callScope||previous.requestHash!==requestHash||previous.attempt!==attempt)throw new Error('workflow_replay_mismatch');
+        if(previous.status==='completed'){
+          const response=await ports.store.loadResponse?.(input.ownerId,runId,previous.callId);
+          if(response){assertAnonymous(response.value,names);return structuredClone(response.value);}
+          if(previous.errorCode)throw new Error(previous.errorCode);
+          throw new Error('workflow_result_missing');
+        }
+        const continuation=current.calls[replayCursor];
+        if(attempt===1&&continuation?.attempt===2&&continuation.status==='completed'&&continuation.requestHash===requestHash&&continuation.scopeId===callScope)continue;
+        if(attempt===1&&options.retryUnknownCalls&&networkRetries<current.policy.maxNetworkRetries){networkRetries++;continue;}
+        throw new Error('workflow_unknown_call_requires_decision');
+      }
+      if(now()-current.startedAt>=current.policy.maxRunMs)throw new Error('workflow_deadline');
+      await authorize();
       const images=stage==='recognize'?1:0;
       const call = reserveCall(current.policy,current.calls,stage,requestHash,new TextEncoder().encode(serialized).byteLength,now(),current.startedAt,attempt,
-        stage==='recognize'?String(data.pageId):scopeId,images);
+        callScope,images);
       current.calls.push(call); await save();
+      if(replayCursor!==null)replayCursor++;
       const controller = new AbortController();
       let timer: ReturnType<typeof setTimeout> | undefined;
       let onAbort: () => void = () => {};
+      let receiptSaved=false;
       try {
         check();
         const interrupted = new Promise<never>((_,reject) => {
@@ -114,13 +151,19 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
         });
         const response: ModelResponse = await Promise.race([ports.model.call(structuredClone(request),controller.signal),interrupted]);
         recordUsage(call,response.usage?.totalTokens,now());
-        await save(); check();
+        try{if(JSON.stringify(response.value)?.length>100_000)return invalid();assertAnonymous(response.value,names);}
+        catch(error){call.errorCode=error instanceof Error?error.message:'workflow_invalid_output';await save();throw error;}
+        current.machineSnapshot=actor.getPersistedSnapshot();
+        if(ports.store.completeCall)await ports.store.completeCall(input.ownerId,current,call.callId,response);else await save();
+        receiptSaved=true;
+        check();
         if (current.calls.reduce((sum,c) => sum + (c.usage ?? c.reservedTokens),0) > current.policy.maxTokens) throw new Error('workflow_budget_exceeded');
-        if (JSON.stringify(response.value)?.length > 100_000) return invalid();
-        assertAnonymous(response.value,names);
         return response.value;
       } catch (error) {
-        if (call.status === 'pending') { call.status = 'unknown'; call.finishedAt = now(); await save(); }
+        if (call.status === 'pending'||(call.status==='completed'&&!receiptSaved&&!call.errorCode)) {
+          call.status = 'unknown'; call.finishedAt = now();const code=error instanceof Error?error.message:'';
+          call.errorCode=/^(workflow_|model_|paper_)[a-z_]+$/.test(code)?code:'workflow_failed';await save();
+        }
         // Only explicitly classified network failures retry once; timeouts retain unknown status and pause.
         if (error instanceof Error && error.message === 'workflow_network_error' && attempt === 1 && networkRetries < current.policy.maxNetworkRetries) {
           networkRetries++; continue;
@@ -141,7 +184,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
     subject: input.workspace.exam.subjectName, original: modelUnit(unitId),...(repair?{repair}:{}) }));
   try {
     await next('preflight'); await next('authorizing');
-    if(shape.hasTargets&&ports.authorize)await ports.authorize(input,current.policy,signal??new AbortController().signal);
+    if(!(options.resume&&ports.store.durable))await authorize();
     await next('rendering'); await next('recognizing');
     await checkpoint('recognition',async () => {
       if (cached) { current.analysisCacheHit = true; current.units = validateUnits(cached.units,input); current.draftFacts = cached.draftFacts;
@@ -284,12 +327,13 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
   } catch (error) {
     const code = error instanceof Error ? error.message : 'workflow_failed';
     current.errorCode = /^(workflow_|model_|paper_)[a-z_]+$/.test(code) ? code : 'workflow_failed';
-    const event = code === 'workflow_cancelled' ? 'CANCEL' : ['workflow_request_timeout','workflow_deadline','workflow_network_error'].includes(code) ? 'PAUSE' : 'FAIL';
+    const event = code === 'workflow_cancelled' ? 'CANCEL' : ['workflow_request_timeout','workflow_deadline','workflow_network_error','workflow_storage_failed','workflow_unknown_call_requires_decision','workflow_result_missing'].includes(code) ? 'PAUSE' : 'FAIL';
     actor.send({ type: event }); current.state = actorState(actor);
     await save(); ports.onProgress?.(current.state);
   } finally {
     actor.stop();
-    if(shape.hasTargets&&ports.release){try{await ports.release(current.state==='cancelled'?'cancelled':current.state==='failed'||current.state==='recoverable'?'failed':'partial');}
+    if(shape.hasTargets&&ports.release){try{const status=await ports.release(current.state==='cancelled'?'cancelled':current.state==='failed'||current.state==='recoverable'?'failed':'partial',current);
+      if(status&&current.cloud){current.cloud.status=status;await ports.store.save(input.ownerId,current);}}
       catch{current.errorCode=current.errorCode??'workflow_release_pending';await ports.store.save(input.ownerId,current);}}
     if(ports.persistDiagnostics){try{await ports.persistDiagnostics(structuredClone(current));}catch{current.errorCode=current.errorCode??'workflow_diagnostic_write_failed';}}
   }

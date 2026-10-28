@@ -19,6 +19,8 @@ mod workflow_model;
 mod workflow_cloud;
 mod asset_checks;
 mod workflow_diagnostics;
+mod workflow_storage;
+mod workflow_storage_commands;
 
 #[derive(Default)]struct ExportState(AtomicBool);
 #[derive(Serialize)]#[serde(rename_all="camelCase")]
@@ -601,6 +603,7 @@ pub fn run() {
             configure_deepseek,
             call_deepseek,
             workflow_cloud::workflow_model_status,
+            workflow_storage_commands::workflow_store,
             workflow_cloud::workflow_pending,
             workflow_diagnostics::workflow_save_diagnostic,
             workflow_cloud::workflow_configure_cloud_model,

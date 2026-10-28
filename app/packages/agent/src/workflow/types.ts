@@ -17,6 +17,7 @@ export interface FrozenInput {
   schemaVersion: 1; ownerId: string; workspace: Workspace; mode: GenerationMode;
   settings: ContentSettings; knowledgeRevision: string; workflowVersion: string; promptVersion: string; contentHash: string;
   testScope?: { questionNumbers: string[] };
+  recognitionPolicy?:{keepFirstNumbers:string[]};
 }
 export interface ExportProfile {
   exportId: string; runId: string; layout: 'individual' | 'combined'; includeAnswers: boolean;
@@ -114,7 +115,11 @@ export interface CallRecord {
   scopeId: string;
   status: 'pending' | 'completed' | 'unknown'; reservedTokens: number; usage: number | null;
   startedAt: number; finishedAt?: number;
+  errorCode?:string;
 }
+export type CheckpointData=Pick<WorkflowRun,'units'|'facts'|'items'|'draftFacts'|'unitEvidence'|'targets'|'assignments'|'evidence'|'advice'|'teacherReport'|'skipped'|'validationAttempts'|'recognitionChecks'>;
+export interface WorkflowCloudBinding {jobId:string;requestKey:string;leaseUntil:number;expiresAt:number;status:'active'|'suspended'|'ended'}
+export interface WorkflowTaskContext {workspaceRevision?:number}
 export interface WorkflowRun {
   runId: string; contentHash: string; mode: GenerationMode; executionMode: ExecutionMode;
   workflowVersion: string; promptVersion: string; state: WorkflowState;
@@ -128,6 +133,8 @@ export interface WorkflowRun {
   checkpoints: string[]; errorCode?: string;
   validationAttempts: ValidationAttempt[];
   recognitionChecks:RecognitionCheck[];
+  frame?:{id:string;callStart:number;data:CheckpointData};
+  cloud?:WorkflowCloudBinding;
 }
 export interface ModelRequest { stage: ModelStage; instruction: string; data: Record<string, unknown> }
 export type InvokeModel = (stage: ModelStage, data: Record<string, unknown>) => Promise<unknown>;
@@ -139,6 +146,11 @@ export interface WorkflowModel {
   call(request: ModelRequest, signal: AbortSignal): Promise<ModelResponse>;
 }
 export interface WorkflowStore {
+  durable?:boolean;
+  beginRun?(input:FrozenInput,runId:string,context:WorkflowTaskContext,onLeaseLost:()=>void):Promise<void>;
+  endRun?(ownerId:string,runId:string):Promise<void>;
+  completeCall?(ownerId:string,run:WorkflowRun,callId:string,response:ModelResponse):Promise<void>;
+  loadResponse?(ownerId:string,runId:string,callId:string):Promise<ModelResponse|null>;
   save(ownerId: string, run: WorkflowRun): Promise<void>;
   load(ownerId: string, runId: string): Promise<WorkflowRun | null>;
   loadAnalysis(ownerId: string, cacheKey: string): Promise<AnalysisCache | null>;
@@ -150,8 +162,8 @@ export interface AnalysisCache {
 }
 export interface WorkflowPorts {
   model: WorkflowModel; store: WorkflowStore;
-  authorize?(input: FrozenInput, policy: BudgetPolicy, signal: AbortSignal): Promise<void>;
-  release?(outcome: 'partial' | 'failed' | 'cancelled'): Promise<void>;
+  authorize?(input: FrozenInput, policy: BudgetPolicy, signal: AbortSignal): Promise<WorkflowCloudBinding|void>;
+  release?(outcome: 'partial' | 'failed' | 'cancelled',run?:WorkflowRun): Promise<'suspended'|'ended'|void>;
   persistDiagnostics?(run:WorkflowRun):Promise<void>;
   prepareUnits(input: FrozenInput, signal: AbortSignal, invoke?: InvokeModel,report?:(check:RecognitionCheck)=>void): Promise<SourceUnit[]>;
   retrieve(query: string, signal: AbortSignal): Promise<EvidenceRef[]>;

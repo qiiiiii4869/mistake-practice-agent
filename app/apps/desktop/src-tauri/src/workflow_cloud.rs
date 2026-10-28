@@ -54,6 +54,11 @@ fn lock(state:&WorkflowCloudState)->Result<Guard<'_>,String>{if state.busy.swap(
     if question_numbers.is_empty()||question_numbers.len()>6||question_numbers.iter().any(|n|!numbers.contains(n)){
       return Err("invalid_input".into());}
     let numbers=question_numbers;
+    let local=if let Some(request_key)=request["requestKey"].as_str(){
+      let owner_id=owner.file_name().and_then(|s|s.to_str()).ok_or("session_required")?;
+      super::workflow_storage::load_task(&owner.join("workflow.sqlite"),owner_id,request_key)?
+    }else{Value::Null};
+    if !local.is_null()&&local["input"]["contentHash"]!=request["contentHash"]{return Err("workflow_stale_run".into());}
     super::workflow_model::validate_authorization(&request,pages.len(),numbers.len(),stored["snapshot"]["students"].as_array().ok_or("model_no_workspace")?.len())?;
     if pages.is_empty()||pages.len()>30||pages.iter().map(|p|p.data.len()).sum::<usize>()>8*1024*1024{return Err("invalid_model_request".into());}
     let mut images=HashMap::new();for p in pages{if p.id.len()>80||p.name.len()>300||images.contains_key(&p.id){return Err("invalid_model_request".into());}
@@ -68,6 +73,12 @@ fn lock(state:&WorkflowCloudState)->Result<Guard<'_>,String>{if state.busy.swap(
         return Err("account_invalid_response".into());}
     let num=|path:&str|credential.pointer(path).and_then(Value::as_u64).ok_or("account_invalid_response".to_owned());
     let lease_until=num("/leaseUntil")?;let expires_at=num("/expiresAt")?;let max_calls=num("/limits/maxCalls")?;let max_tokens=num("/limits/maxTokens")?;let seconds=num("/limits/maxRunSeconds")?;
+    let prior_calls=local["run"]["calls"].as_array().map_or(0,|a|a.len()as u64);
+    let prior_tokens=local["run"]["calls"].as_array().map_or(0,|a|a.iter().map(|c|c["usage"].as_u64().or(c["reservedTokens"].as_u64()).unwrap_or(0)).sum::<u64>());
+    if prior_calls>0&&(credential["calls"].as_u64().is_none()||credential["tokens"].as_u64().is_none()){return Err("workflow_resume_service_unavailable".into());}
+    let calls=prior_calls.max(credential["calls"].as_u64().unwrap_or(0));let tokens=prior_tokens.max(credential["tokens"].as_u64().unwrap_or(0));
+    let deadline=local["run"]["startedAt"].as_u64().zip(local["run"]["policy"]["maxRunMs"].as_u64()).map_or(now()+seconds*1000,|(a,b)|a.saturating_add(b));
+    if calls>=max_calls||tokens>=max_tokens||deadline<=now(){return Err("workflow_budget_exceeded".into());}
     if lease_until<=now()||max_calls>200||max_tokens>2000000||seconds>2700{return Err("account_invalid_response".into());}
     if super::account::user_folder(&app)?!=owner{return Err("session_required".into());}
     if state.epoch.load(Ordering::SeqCst)!=epoch{
@@ -76,7 +87,7 @@ fn lock(state:&WorkflowCloudState)->Result<Guard<'_>,String>{if state.busy.swap(
     }
     let(cancel,_)=watch::channel(false);
     let binding=ActiveRun{owner,job_id:job_id.clone(),key,
-      lease_until,expires_at,deadline:now()+seconds*1000,max_calls,max_tokens,calls:0,tokens:0,reported_tokens:0,pages:images,numbers,names,cancel};
+      lease_until,expires_at,deadline,max_calls,max_tokens,calls,tokens,reported_tokens:tokens,pages:images,numbers,names,cancel};
     let bound={let mut active=state.active.lock().map_err(|_|"state_unavailable")?;
       if state.epoch.load(Ordering::SeqCst)==epoch{*active=Some(binding);true}else{false}};
     if !bound{let _=super::account::workflow_request(&app,&format!("/v2/report-runs/{job_id}/finish"),Some(json!({"outcome":"cancelled"}))).await;return Err("workflow_cancelled".into());}

@@ -32,6 +32,7 @@ export function registerReportRoutes(app,{db,authenticated,administrator,modelKe
   }
   const active=run=>{if(run.state!=='reserved'||run.expires_at<=Date.now())fail('generation_expired',409);};
   function summary(run){return {jobId:run.job_id,state:run.state,mode:run.mode,contentHash:run.content_hash,
+    calls:run.calls,tokens:run.tokens,createdAt:run.created_at,
     limits:JSON.parse(run.policy_json),policyVersion:'report-policy-v1',leaseUntil:run.lease_until,expiresAt:run.expires_at,
     charged:run.state==='completed',outcome:run.outcome,...modelInfo()};}
   app.get('/v2/model-status',{preHandler:authenticated},async()=>modelInfo());

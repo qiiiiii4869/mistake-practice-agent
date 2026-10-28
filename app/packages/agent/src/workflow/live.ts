@@ -3,13 +3,13 @@ import { MemoryWorkflowStore } from './store.ts';
 import {workflowAudit} from './diagnostics.ts';
 import {recognizeWorkflowUnits} from './recognition.ts';
 export {recognizeWorkflowUnits} from './recognition.ts';
-import type { ModelResponse, WorkflowPorts, WorkflowState } from './types.ts';
+import type { ModelResponse, WorkflowPorts, WorkflowState,WorkflowStore,WorkflowCloudBinding } from './types.ts';
 
 export interface CloudModelStatus { configured:boolean;model:string;modelConfigVersion:string|null;deliveryEnabled:boolean }
 export type NativeInvoke = <T>(command:string,args?:Record<string,unknown>)=>Promise<T>;
 
 export function cloudWorkflowPorts(options:{invoke:NativeInvoke;requestKey:string;revision:number;modelConfigVersion:string;
-  keepFirstNumbers?:string[];store?:MemoryWorkflowStore;onProgress?:(state:WorkflowState)=>void}):WorkflowPorts{
+  keepFirstNumbers?:string[];store?:WorkflowStore;resumeCloud?:WorkflowCloudBinding;onProgress?:(state:WorkflowState)=>void}):WorkflowPorts{
   let jobId:string|null=null,stage:WorkflowState='idle',heartbeat:ReturnType<typeof setInterval>|undefined,beating=false;
   const native=options.invoke;
   const abortLocal=()=>{if(jobId)void native('workflow_abort',{jobId}).catch(()=>{});};
@@ -26,21 +26,25 @@ export function cloudWorkflowPorts(options:{invoke:NativeInvoke;requestKey:strin
       }},
     async authorize(input,policy,signal){
       const numbers=input.testScope?.questionNumbers??analyze(input.workspace).audit.questionNumbers;
-      const run=await native<{jobId:string}>('workflow_begin',{expectedRevision:options.revision,pages:input.workspace.paper?.pages??[],questionNumbers:numbers,
+      const run=await native<{jobId:string;leaseUntil?:number;expiresAt?:number}>('workflow_begin',{expectedRevision:options.revision,pages:input.workspace.paper?.pages??[],questionNumbers:numbers,
         request:{requestKey:options.requestKey,contentHash:input.contentHash,mode:input.mode,exportLayout:'individual',workflowVersion:input.workflowVersion,promptVersion:input.promptVersion,
           counts:{pages:input.workspace.paper?.pages.length??0,units:numbers.length,students:input.workspace.students.length},
           requestedBudget:{maxCalls:policy.maxCalls,maxTokens:policy.maxTokens,maxRunSeconds:Math.floor(policy.maxRunMs/1000)}}});
       jobId=run.jobId;
+      if(options.resumeCloud&&jobId!==options.resumeCloud.jobId){abortLocal();throw new Error('workflow_stale_cloud_job');}
       if(signal.aborted){abortLocal();throw new Error('workflow_cancelled');}
       heartbeat=setInterval(()=>{if(beating||!jobId)return;beating=true;
         void native('workflow_heartbeat',{jobId,stage}).catch(error=>{if(String(error)!=='account_network_failed')abortLocal();}).finally(()=>{beating=false;});},20000);
+      if(run.leaseUntil&&run.expiresAt)return {jobId:run.jobId,requestKey:options.requestKey,leaseUntil:run.leaseUntil,expiresAt:run.expiresAt,status:'active' as const};
     },
-    async release(outcome){
+    async release(outcome,run){
       if(heartbeat)clearInterval(heartbeat);
-      if(jobId){const id=jobId;jobId=null;await native('workflow_end',{jobId:id,outcome});}
+      const id=jobId??(options.resumeCloud?.status!=='ended'?options.resumeCloud?.jobId:null);jobId=null;
+      if(id){if(options.store?.durable&&run&&['cancelled','recoverable'].includes(run.state)){await native('workflow_abort',{jobId:id});return 'suspended' as const;}
+        await native('workflow_end',{jobId:id,outcome});return 'ended' as const;}
     },
     async persistDiagnostics(run){await native('workflow_save_diagnostic',{report:workflowAudit(run)});},
-    async prepareUnits(input,_signal,invoke,report){if(!invoke)throw new Error('workflow_authorization_required');return recognizeWorkflowUnits(input,invoke,options.keepFirstNumbers,report);},
+    async prepareUnits(input,_signal,invoke,report){if(!invoke)throw new Error('workflow_authorization_required');return recognizeWorkflowUnits(input,invoke,input.recognitionPolicy?.keepFirstNumbers??options.keepFirstNumbers,report);},
     async retrieve(query,signal){
       if(signal.aborted)throw new Error('workflow_cancelled');
       const hits=await native<{documentId:string;page:number;text:string}[]>('search_knowledge',{query});

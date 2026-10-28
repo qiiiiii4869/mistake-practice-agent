@@ -79,6 +79,18 @@ test('text-only reasoning policy has bounded output headroom while old clients r
     }
   }finally{await s.close();}
 });
+
+test('reopening one unfinished job returns prior counters without a second reservation or charge',async()=>{
+ const s=await setup({modelKey:secret});try{
+  const input=body(),created=await s.req('POST','/v2/report-runs',input,s.alice.token),id=created.data.jobId;
+  const beat=await s.req('POST',`/v2/report-runs/${id}/heartbeat`,{stage:'cloze',calls:5,tokens:7000},s.alice.token);assert.equal(beat.data.continue,true);
+  const again=await s.req('POST','/v2/report-runs',input,s.alice.token),credential=await s.req('POST',`/v2/report-runs/${id}/credential`,{},s.alice.token);
+  for(const run of [again.data,credential.data]){assert.equal(run.jobId,id);assert.equal(run.calls,5);assert.equal(run.tokens,7000);assert.equal(run.createdAt,created.data.createdAt);}
+  assert.equal(s.db.prepare("SELECT count(*) n FROM generations WHERE user_id=? AND state='reserved'").get(s.alice.user.id).n,1);
+  assert.equal(s.db.prepare('SELECT credits FROM users WHERE id=?').get(s.alice.user.id).credits,3);
+  assert.equal((await s.req('POST',`/v2/report-runs/${id}/heartbeat`,{stage:'blindFill',calls:4,tokens:7000},s.alice.token)).data.error,'workflow_counter_regression');
+ }finally{await s.close();}
+});
 test('production HTTPS, completion gate and exactly-once accounting remain explicit',async()=>{
   const s=await setup({modelKey:secret,allowLocalCredentials:false,deliveryEnabled:true});const {req,alice,db}=s;
   try{

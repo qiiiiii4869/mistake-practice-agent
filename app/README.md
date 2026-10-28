@@ -1,5 +1,7 @@
 # Windows 桌面端
 
+> 2026-10-28 阶段 C：云端内容测试已使用当前账号独立的workflow.sqlite；“本机已保存任务”可跨重开查看，未结束任务可继续，未知模型请求需明确勾选重试且不重置预算。模型返回与用量同事务写入，崩溃后重放已保存结果；考试/设置/知识库/模型变化拒绝混用。阶段B执行器也可持久化导出配置、失败和最终证据，PDF重试不调用模型。详见 [任务持久化说明](packages/agent/src/workflow/PERSISTENCE.md)。整场正式入口和扣次仍待阶段 F。
+
 > 2026-10-28 阶段 B：双模式 PDF 离线闭环已实现，支持个人/合订、同源答案页、独立教师报告、逐页 PDF.js 渲染 QA、最多两轮重排、失败文件重试与同盘新目录提交。运行 `npm --prefix app run workflow:pdf-demo` 生成合成样张，`npm --prefix app run test:workflow-pdf` 验证文件与故障恢复；详见 [PDF 执行器说明](packages/pdf/src/workflow/README.md)。本阶段不调用付费模型；普通用户桌面正式入口、SQLite 任务恢复和结算继续按 C/F 阶段接入。
 
 > 2026-10-28 登录构建修复：未设置 `MISTAKE_ACCOUNT_API_URL` 时，程序默认连接正式账号服务 `https://codeqiqi.com/mistake-agent/`，直接 Cargo 或 npm 构建均可用。开发时仍可通过编译环境变量覆盖地址；显式覆盖无效时拒绝登录，不自动改发到其他地址。第11题v10最终从原卷全新识题至听写3/3通过；下方记录为较早阶段快照。

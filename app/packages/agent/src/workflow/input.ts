@@ -1,7 +1,7 @@
 import { analyze, validateWorkspace, type Workspace } from '../../../core/src/index.ts';
 import { PROMPT_VERSION, WORKFLOW_VERSION, type ContentSettings, type ExportProfile, type FrozenInput, type GenerationMode } from './types.ts';
 
-function canonical(value: unknown): string {
+export function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value && typeof value === 'object') return `{${Object.entries(value).filter(([,v]) => v !== undefined)
     .sort(([a],[b]) => a.localeCompare(b, 'en')).map(([k,v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(',')}}`;
@@ -14,6 +14,7 @@ export async function digest(value: unknown): Promise<string> {
 export async function freezeInput(options: {
   ownerId: string; workspace: Workspace; mode: GenerationMode; knowledgeRevision?: string; settings?: Partial<ContentSettings>;
   testScope?: { questionNumbers: string[] };
+  recognitionPolicy?:{keepFirstNumbers:string[]};
 }): Promise<FrozenInput> {
   if (!/^[\w-]{1,100}$/.test(options.ownerId) || !['dictation','exercise'].includes(options.mode)) throw new Error('workflow_invalid_input');
   const workspace = validateWorkspace(structuredClone(options.workspace));
@@ -30,7 +31,10 @@ export async function freezeInput(options: {
     testScope={questionNumbers:[...numbers]};}
   const input = { schemaVersion: 1 as const, ownerId: options.ownerId, workspace, mode: options.mode,
     ...(testScope?{testScope}:{}),
+    ...(options.recognitionPolicy?{recognitionPolicy:structuredClone(options.recognitionPolicy)}:{}),
     settings, knowledgeRevision: options.knowledgeRevision ?? 'empty', workflowVersion: WORKFLOW_VERSION, promptVersion: PROMPT_VERSION };
+  if(input.recognitionPolicy){const values=input.recognitionPolicy.keepFirstNumbers,all=testScope?.questionNumbers??analyze(workspace).audit.questionNumbers;
+    if(!Array.isArray(values)||new Set(values).size!==values.length||values.some(n=>!all.includes(n)))throw new Error('workflow_invalid_scope');}
   return { ...input, contentHash: await digest(input) };
 }
 export async function assertFrozen(input: FrozenInput): Promise<void> {

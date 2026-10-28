@@ -35,7 +35,9 @@ export function exportWorkflowPdf(options){
   const promise=performExport(frozen).finally(()=>active.delete(key));active.set(key,{signature,promise});return promise;
 }
 async function performExport(options){
-  const {input,run,profile,signal,onProgress=()=>{}}=options;
+  const {input,run,profile,signal,onProgress=()=>{},workflowStore}=options;
+  if(workflowStore){const saved=await workflowStore.task(run.runId);if(!saved?.run||saved.run.contentHash!==run.contentHash||saved.run.state!=='contentReady')throw new Error('pdf_stored_content_required');
+    await workflowStore.listExports(run.runId);}
   const outputDir=resolve(options.outputDir),compiler=resolve(options.compiler),id=options.exportId??profile.exportId;
   if(!/^[a-zA-Z0-9-]{1,100}$/.test(id))throw new Error('pdf_invalid_export_id');
   const staging=options.stagingDir?resolve(options.stagingDir):join(outputDir,'.workflow-work',id);
@@ -47,6 +49,8 @@ async function performExport(options){
   let checkpoint={requestHash,revision:0,files:{},state:'staging'};
   if(await exists(join(staging,'checkpoint.json'))){checkpoint=JSON.parse(await readFile(join(staging,'checkpoint.json'),'utf8'));if(checkpoint.requestHash!==requestHash)throw new Error('pdf_stale_staging');}
   else{await json(join(staging,'request.json'),request);await json(join(staging,'checkpoint.json'),checkpoint);}
+  if(workflowStore){const existing=(await workflowStore.listExports(run.runId)).find(e=>e.profile.exportId===profile.exportId);
+    if(existing?.state!=='verified')await workflowStore.saveExport(run.runId,{profile,state:'exporting',staging});}
   const started=Date.now();let plan,qa;
   const checked=()=>{if(signal?.aborted)throw new Error('pdf_cancelled');if(plan&&Date.now()-started>plan.budget.timeoutMs)throw new Error('pdf_export_timeout');};
   try{
@@ -108,6 +112,7 @@ async function performExport(options){
       for(const f of manifest.outputs)if(hash(await readFile(join(target,f.relativePath)))!==f.sha256)throw new Error('pdf_output_conflict');
       const saved=JSON.parse(await readFile(join(target,'qa-report.json'),'utf8'));
       if(!saved.passed||saved.exportHash!==manifest.exportHash||saved.files.some(f=>!f.passed))throw new Error('pdf_output_conflict');
+      if(workflowStore)await workflowStore.saveExport(run.runId,{profile,state:'verified',folder:target,staging,manifest:previous,qa});
       return {state:'verified',path:target,manifest:previous,qa,staging,reused:true};
     }
     const publication={requestHash,exportHash:plan.exportHash};
@@ -120,12 +125,15 @@ async function performExport(options){
     await json(join(pending,'manifest.json'),manifest);await json(join(pending,'qa-report.json'),qa);await json(join(pending,'document-plan.json'),plan);
     await json(join(pending,'student-boundaries.json'),qa.files.filter(f=>f.filename!=='teacher-report.pdf').map(f=>({filename:f.filename,pages:f.pages.map(p=>({page:p.page,ownerId:p.ownerId,role:p.role}))})));
     checked();await rename(pending,target);checkpoint.state='verified';await json(join(staging,'checkpoint.json'),checkpoint);
+    if(workflowStore)await workflowStore.saveExport(run.runId,{profile,state:'verified',folder:target,staging,manifest,qa});
     await onProgress({stage:'verified',path:target});return {state:'verified',path:target,manifest,qa,staging,reused:false};
   }catch(error){checkpoint.state=signal?.aborted?'cancelled':'failed';checkpoint.error=/^[a-z_]+$/.test(error.message)?error.message:'pdf_export_failed';
     if(qa){qa.passed=false;qa.fatal={code:checkpoint.error,file:checkpoint.currentFile??null};await json(join(staging,'qa-report.json'),qa);}
-    await json(join(staging,'checkpoint.json'),checkpoint);throw Object.assign(new Error(checkpoint.error),{staging});}
+    await json(join(staging,'checkpoint.json'),checkpoint);
+    if(workflowStore)try{const old=(await workflowStore.listExports(run.runId)).find(e=>e.profile.exportId===profile.exportId);if(old?.state!=='verified')await workflowStore.saveExport(run.runId,{profile,state:signal?.aborted?'cancelled':'failed',staging});}catch{}
+    throw Object.assign(new Error(checkpoint.error),{staging});}
 }
 export async function retryWorkflowPdf(stagingDir,options={}){
   const request=JSON.parse(await readFile(join(stagingDir,'request.json'),'utf8'));
-  return exportWorkflowPdf({...request,stagingDir,signal:options.signal,onProgress:options.onProgress});
+  return exportWorkflowPdf({...request,stagingDir,signal:options.signal,onProgress:options.onProgress,workflowStore:options.workflowStore});
 }

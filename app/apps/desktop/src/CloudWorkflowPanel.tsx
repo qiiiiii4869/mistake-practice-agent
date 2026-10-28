@@ -1,7 +1,7 @@
 import React from 'react';
 import {invoke} from '@tauri-apps/api/core';
 import {analyze,type Workspace} from '../../../packages/core/src';
-import {freezeInput,runWorkflow,MemoryWorkflowStore,type GenerationMode,type WorkflowRun,type WorkflowState} from '../../../packages/agent/src/workflow';
+import {freezeInput,runWorkflow,SqliteWorkflowStore,type TaskSummary,type StoredTask,type GenerationMode,type WorkflowRun,type WorkflowState} from '../../../packages/agent/src/workflow';
 import {cloudWorkflowPorts,type CloudModelStatus} from '../../../packages/agent/src/workflow/live';
 import {failureMessages,validationMessages,recognitionMessages} from '../../../packages/agent/src/workflow/diagnostics';
 import {partitionValidationAttempts} from '../../../packages/agent/src/workflow/teachingAdvice';
@@ -24,6 +24,12 @@ export function workflowMessage(error:unknown):string{
     paper_document_failed:'本机无法展开试卷文件，尚未调用模型。请先检查文件能否正常打开，或另存为 PDF 后重试。',
     paper_document_limit:'试卷展开后超过页数或大小限制，请压缩文件或拆分后重试。',paper_word_unsupported:'此 Word 包含不支持的图形或外部资源，请另存为 PDF。',
     agent_cancelled:'已停止本机试卷处理，尚未调用模型。',
+    workflow_storage_failed:'任务保存失败，已停止后续调用；重开后可从最后一次成功写入的位置恢复。',workflow_storage_unavailable:'无法访问本机任务库，请重试。',
+    workflow_storage_conflict:'任务已被其他窗口更新，请刷新任务列表。',workflow_busy:'本账号已有任务正在执行，请先停止原任务。',workflow_lease_lost:'本机执行权已失效，已停止后续请求。',
+    workflow_storage_corrupt:'保存的任务或调用结果校验失败，已拒绝恢复。',workflow_result_missing:'已完成调用的本机结果缺失，已停止，避免重复调用。',
+    workflow_unknown_call_requires_decision:'有请求结果未知。请先查看已保存结果；确认可能重复产生模型费用后，再选择重试未知请求。',
+    workflow_stale_run:'任务与当前输入、版本或模型配置不同，请新建测试，旧结果仍保留。',workflow_deadline:'原任务时间预算已结束，已保存内容仍可查看。',
+    workflow_resume_service_unavailable:'云端尚未支持恢复用量核对，请先更新账号服务；已保存结果仍可查看。',
     workflow_diagnostic_write_failed:'任务已结束，Key 已清理，但匿名诊断保存失败；当前结果仍可查看，请保留此页面。',
     workflow_invalid_output:'模型输出未通过结构检查。',model_output_truncated:'模型输出被截断，已停止，请缩小测试范围。',
     model_privacy_blocked:'题干或资料包含学生姓名，已拦截模型请求。',invalid_input:'测试参数不符合限制，请核对题号与页数。',
@@ -36,14 +42,20 @@ export function CloudWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
   const [pages,setPages]=React.useState('1'),[keepFirst,setKeepFirst]=React.useState(''),[busy,setBusy]=React.useState(false),[blank,setBlank]=React.useState(false);
   const [result,setResult]=React.useState<WorkflowRun|null>(null),[message,setMessage]=React.useState('先检查云端模型配置，再选择少量题号测试。');
   const [pendingJob,setPendingJob]=React.useState<string|null>(null);
-  const controller=React.useRef<AbortController|null>(null),store=React.useRef(new MemoryWorkflowStore());
+  const [tasks,setTasks]=React.useState<TaskSummary[]>([]),[restored,setRestored]=React.useState<StoredTask|null>(null),[retryUnknown,setRetryUnknown]=React.useState(false);
+  const controller=React.useRef<AbortController|null>(null),store=React.useMemo(()=>new SqliteWorkflowStore(invoke,account.user.id),[account.user.id]);
   const disabled=locked||busy;
   const validationGroups=result?partitionValidationAttempts(result):{unresolved:[],resolved:[]};
   const refresh=async()=>{try{const value=await invoke<CloudModelStatus>('workflow_model_status');setStatus(value);
     const pending=await invoke<{jobId:string|null}>('workflow_pending').catch(()=>({jobId:null}));setPendingJob(pending.jobId);return value;
     }catch(error){setMessage(workflowMessage(error));return null;}};
-  React.useEffect(()=>{void refresh();return()=>controller.current?.abort();},[]);
-  React.useEffect(()=>{if(!controller.current){setResult(null);setBlank(false);setSelected(analyze(workspace).questions.find(q=>q.weakStudents>0)?.number??'');}},[workspace]);
+  const refreshTasks=async()=>{try{setTasks(await store.list());}catch(error){setMessage(workflowMessage(error));}};
+  React.useEffect(()=>{void refresh();void refreshTasks();return()=>controller.current?.abort();},[store]);
+  React.useEffect(()=>{if(!controller.current){setResult(null);setRestored(null);setBlank(false);setSelected(analyze(workspace).questions.find(q=>q.weakStudents>0)?.number??'');}},[workspace]);
+  async function viewTask(runId:string){setBusy(true);onBusy(true);try{const task=await store.task(runId);if(!task)throw new Error('workflow_run_not_found');
+    setRestored(task);setResult(task.run);setMode(task.input.mode);setSelected(task.input.testScope?.questionNumbers.join('、')??'');setRetryUnknown(false);
+    setMessage(task.run?.state==='contentReady'||task.run?.state==='partial'?'已读取本机保存结果，没有领取 Key 或调用模型。':'已读取未结束任务，可查看已保存内容；继续时沿用原调用账本和预算。');
+  }catch(error){setMessage(workflowMessage(error));}finally{setBusy(false);onBusy(false);}}
   async function configure(){setBusy(true);onBusy(true);try{const value=await invoke<CloudModelStatus>('workflow_configure_cloud_model',{modelKey:modelKey.trim()});setStatus(value);setMessage('已保存到云端受限文件；普通客户端无需输入 Key。');}
     catch(error){setMessage(workflowMessage(error));}finally{setModelKey('');setBusy(false);onBusy(false);}}
   async function inspectPaper(){
@@ -54,29 +66,32 @@ export function CloudWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
     }catch(error){setMessage(workflowMessage(error));}
     finally{controller.current=null;setBusy(false);onBusy(false);}
   }
-  async function run(){
+  async function run(resuming=false){
     if(controller.current)return;const signal=new AbortController();controller.current=signal;setBusy(true);onBusy(true);setResult(null);
     try{
-      if(!blank)throw new Error('paper_required');
+      if(!resuming&&!blank)throw new Error('paper_required');
+      if(resuming&&(!restored||restored.context.workspaceRevision!==revision))throw new Error('workflow_stale_run');
       const configured=await refresh();if(!configured?.configured)throw new Error('model_unconfigured');
       const chosen=selected.split(/[,，、\s]+/).filter(Boolean),pageNumbers=pages.split(/[,，、\s]+/).filter(Boolean).map(Number);
       if(!chosen.length||chosen.length>6||new Set(chosen).size!==chosen.length||chosen.some(n=>!numbers.includes(n)))throw new Error('workflow_invalid_scope');
       if(!pageNumbers.length||pageNumbers.some(n=>!Number.isInteger(n)||n<1||n>30)||new Set(pageNumbers).size!==pageNumbers.length)throw new Error('invalid_input');
-      if(!workspace.paper)throw new Error('paper_required');
-      const paper=await renderPaperFiles(workspace.paper,numbers,setMessage,signal.signal);
-      if(pageNumbers.some(n=>n>paper.pages.length))throw new Error('invalid_input');
-      const testPages=pageNumbers.map(n=>paper.pages[n-1]);
       const library=await invoke<KnowledgeLibrary>('list_knowledge');
-      const input=await freezeInput({ownerId:account.user.id,workspace:{...workspace,paper:{pages:testPages,questions:[]}},mode,
-        knowledgeRevision:String(library.revision),testScope:{questionNumbers:chosen}});
-      const requestKey=crypto.randomUUID();
-      const ports=cloudWorkflowPorts({invoke,requestKey,revision,modelConfigVersion:configured.modelConfigVersion??'unknown',store:store.current,
+      let input;
+      if(resuming){input=restored!.input;if(input.knowledgeRevision!==String(library.revision))throw new Error('workflow_stale_run');}
+      else{if(!workspace.paper)throw new Error('paper_required');
+        const paper=await renderPaperFiles(workspace.paper,numbers,setMessage,signal.signal);
+        if(pageNumbers.some(n=>n>paper.pages.length))throw new Error('invalid_input');
+        input=await freezeInput({ownerId:account.user.id,workspace:{...workspace,paper:{pages:pageNumbers.map(n=>paper.pages[n-1]),questions:[]}},mode,
+          knowledgeRevision:String(library.revision),testScope:{questionNumbers:chosen},recognitionPolicy:{keepFirstNumbers:keepFirst.split(/[,，、\s]+/).filter(Boolean)}});}
+      const requestKey=resuming?restored!.run?.runId??'':crypto.randomUUID();
+      const ports=cloudWorkflowPorts({invoke,requestKey,revision,modelConfigVersion:configured.modelConfigVersion??'unknown',store,resumeCloud:resuming?restored?.run?.cloud:undefined,
         keepFirstNumbers:keepFirst.split(/[,，、\s]+/).filter(Boolean),onProgress:stage=>setMessage(`正在${stages[stage]??stage}…`)});
-      const run=await runWorkflow({input,ports,runId:requestKey,signal:signal.signal});setResult(run);
+      const run=await runWorkflow({input,ports,runId:requestKey,signal:signal.signal,resume:resuming,retryUnknownCalls:resuming&&retryUnknown,taskContext:{workspaceRevision:revision}});setResult(run);
+      const saved=await store.task(requestKey);setRestored(saved);void refreshTasks();
       const passed=run.items.filter(item=>item.status==='passed').length;
       setMessage(run.errorCode?workflowMessage(run.errorCode):run.state==='contentReady'?`测试内容已生成并校验，有效条目 ${passed} 个；任务已结束，本机 Key 已清理。`:`已有 ${passed} 个有效条目，部分个人目标未覆盖，请查看失败摘要；任务已结束，本机 Key 已清理。`);
     }catch(error){setMessage(workflowMessage(error));}
-    finally{controller.current=null;setBusy(false);onBusy(false);void account.refresh();}
+    finally{controller.current=null;setBusy(false);onBusy(false);void account.refresh();void refreshTasks();}
   }
   return <section className="card" aria-label="云端模型双模式测试">
     <div className="card-heading"><h2>云端模型 · 双模式内容测试</h2><span className="badge">{status?.configured?'云端已配置':'待配置'}</span></div>
@@ -84,6 +99,16 @@ export function CloudWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
     <p className="notice">当前仅测试识题和听写／补练，不生成教师建议。教师报告在整场考试处理结束后，结合全班逐题正确率、知识点映射和成绩分布统一生成。测试尚未交付新版 PDF，结束后释放预占，不扣成功次数；真实模型调用仍消耗服务商额度。</p>
     <button className="secondary small" disabled={disabled} onClick={()=>void refresh()}>检查云端模型</button>
     <button className="secondary small" disabled={disabled} onClick={()=>void inspectPaper()}>检查本机试卷文件</button>
+    <details><summary>本机已保存任务（{tasks.length}）</summary><p className="help">按软件账号隔离保存，重开仍保留；查看结果不会调用模型。旧考试或设置改变后可查看旧结果，不能混入当前任务。</p>
+      <button className="secondary small" disabled={disabled} onClick={()=>void refreshTasks()}>刷新本机任务</button>
+      {tasks.map(t=><div key={t.runId}><span>{t.examName} · {t.mode==='dictation'?'听写':'补练'} · {t.state??'已创建'} · 调用 {t.callCount} 次 · 未知 {t.unknownCalls} 次 </span><button className="secondary small" disabled={disabled} onClick={()=>void viewTask(t.runId)}>查看保存结果</button></div>)}
+    </details>
+    {restored?.run&&!['contentReady','partial'].includes(restored.run.state)&&<div className="notice" aria-label="恢复已保存任务">
+      <p>恢复原任务 {restored.run.runId.slice(0,8)}；当前已知用量和未知请求预留均保留，不重置预算。</p>
+      {restored.run.calls.some(c=>c.status!=='completed')&&<label><input type="checkbox" aria-label="确认重试未知模型请求" checked={retryUnknown} onChange={e=>setRetryUnknown(e.target.checked)} disabled={disabled}/> 已知未知请求可能已经计费，仍选择重试；不自动重复。</label>}
+      <button disabled={disabled||restored.context.workspaceRevision!==revision} onClick={()=>void run(true)}>继续已保存任务</button>
+      {restored.context.workspaceRevision!==revision&&<p>当前考试或设置已变化，只能查看原任务，请新建测试。</p>}
+    </div>}
     {pendingJob&&<div className="notice"><p>账号有未结束的云端任务。若上次测试已中断，可释放预占后重试。</p><button className="secondary small" disabled={disabled} onClick={async()=>{
       setBusy(true);onBusy(true);try{await invoke('workflow_end',{jobId:pendingJob,outcome:'cancelled'});setPendingJob(null);setMessage('已清理本机凭证并释放未完成任务。');await account.refresh();}
       catch(error){setMessage(workflowMessage(error));}finally{setBusy(false);onBusy(false);}

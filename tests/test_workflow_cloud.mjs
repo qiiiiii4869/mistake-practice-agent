@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {freezeInput,runWorkflow} from '../app/packages/agent/src/workflow/index.ts';
+import {freezeInput,runWorkflow,MemoryWorkflowStore} from '../app/packages/agent/src/workflow/index.ts';
 import {cloudWorkflowPorts,recognizeWorkflowUnits} from '../app/packages/agent/src/workflow/live.ts';
 import {mockWorkflowModel,workflowWorkspace} from './workflow_fixture.mjs';
 import {transcriptionKey} from '../app/packages/agent/src/workflow/recognition.ts';
@@ -51,6 +51,20 @@ test('cancelling pending cloud request signals native abort before release and i
   let start;const ready=new Promise(r=>{start=r;});const s=await context({hang:true,started:start}),controller=new AbortController();
   const pending=runWorkflow({...s,signal:controller.signal});await ready;controller.abort();const run=await pending;
   assert.equal(run.state,'cancelled');assert.equal(s.keyPresent(),false);assert.ok(s.requests.some(r=>r.command==='workflow_abort'));assert.equal(s.requests.find(r=>r.command==='workflow_end').args.outcome,'cancelled');
+});
+
+test('durable cloud pause drops credentials without finishing the job, and resume binds the original request',async()=>{
+ const input=await freezeInput({ownerId:'owner',workspace:workflowWorkspace(),mode:'dictation',testScope:{questionNumbers:['2']}}),requests=[];
+ const store=new MemoryWorkflowStore();store.durable=true;
+ const invoke=async(command,args)=>{requests.push({command,args});if(command==='workflow_begin')return {jobId,leaseUntil:Date.now()+90000,expiresAt:Date.now()+7200000};if(command==='workflow_end'||command==='workflow_abort')return {};throw Error('unexpected');};
+ const ports=cloudWorkflowPorts({invoke,requestKey:jobId,revision:1,modelConfigVersion:'v1',store});
+ const binding=await ports.authorize(input,{maxCalls:40,maxTokens:2000000,maxRunMs:2700000},new AbortController().signal);
+ assert.equal(binding.jobId,jobId);assert.equal(await ports.release('cancelled',{state:'cancelled'}),'suspended');
+ assert.ok(requests.some(r=>r.command==='workflow_abort'));assert.ok(!requests.some(r=>r.command==='workflow_end'));
+ const resumed=cloudWorkflowPorts({invoke,requestKey:jobId,revision:1,modelConfigVersion:'v1',store,resumeCloud:binding});
+ await resumed.authorize(input,{maxCalls:40,maxTokens:2000000,maxRunMs:2700000},new AbortController().signal);
+ assert.equal(requests.filter(r=>r.command==='workflow_begin')[1].args.request.requestKey,jobId);
+ assert.equal(await resumed.release('partial',{state:'contentReady'}),'ended');
 });
 test('ambiguous and duplicated recognition is isolated; explicit keep-first rule never renumbers other questions',async()=>{
   const input=await freezeInput({ownerId:'owner',workspace:workflowWorkspace(),mode:'dictation',testScope:{questionNumbers:['2']}});

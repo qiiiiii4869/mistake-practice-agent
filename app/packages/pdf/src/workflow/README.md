@@ -2,7 +2,7 @@
 
 `plan.ts` 是不依赖文件系统的 TypeScript 文档计划与 Typst 模板；`tools/workflow-pdf-engine.mjs` 是本机 Node 参考执行器，`tools/workflow-pdf-worker.mjs` 使用项目锁定的 PDF.js 与其本地 `@napi-rs/canvas` 依赖，在独立工作线程中逐页检查和渲染。现有旧版人工审核 PDF 导出保持原接口。
 
-这是阶段 B 的可运行离线链路。普通用户桌面入口、SQLite 工作流任务恢复与正式计次分别继续按阶段 C/F 接入。执行器不访问账号服务或模型，PDF 通过也不会触发结算。
+这是阶段 B 的可运行离线链路。阶段 C 已接 `workflowStore` 可选参数，将导出配置、失败/最终状态及证据保存到账号任务库，重开可继续重试；普通用户桌面整场入口和正式计次仍按阶段 F 接入。执行器不访问账号服务或模型，PDF 通过也不会触发结算。
 
 ## 运行
 
