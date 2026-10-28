@@ -7,6 +7,8 @@ use std::sync::{
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{Manager, WebviewWindow};
 
+const DEFAULT_ACCOUNT_API_URL: &str = "https://codeqiqi.com/mistake-agent/";
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct User {
@@ -67,7 +69,10 @@ fn valid_id(id: &str) -> bool {
     id.len() == 36 && id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
 }
 fn endpoint() -> Result<reqwest::Url, String> {
-    let value = option_env!("MISTAKE_ACCOUNT_API_URL").ok_or("account_server_unconfigured")?;
+    configured_endpoint(option_env!("MISTAKE_ACCOUNT_API_URL"))
+}
+fn configured_endpoint(configured: Option<&str>) -> Result<reqwest::Url, String> {
+    let value = configured.unwrap_or(DEFAULT_ACCOUNT_API_URL);
     let url = reqwest::Url::parse(value).map_err(|_| "account_server_unconfigured")?;
     let local_http = url.scheme() == "http"
         && matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"));
@@ -812,6 +817,27 @@ pub(crate) fn clear_saved_pending(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn default_account_server_works_without_a_build_override_and_invalid_overrides_fail_closed() {
+        let production = configured_endpoint(None).unwrap();
+        assert_eq!(
+            join_endpoint(production, "/v1/auth/login").unwrap().as_str(),
+            "https://codeqiqi.com/mistake-agent/v1/auth/login"
+        );
+        assert_eq!(
+            configured_endpoint(Some("http://127.0.0.1:8787/")).unwrap().as_str(),
+            "http://127.0.0.1:8787/"
+        );
+        for invalid in [
+            "", "http://example.test/", "https://example.test/mistake-agent",
+            "https://name:password@example.test/", "https://example.test/?target=other",
+            "https://example.test/#other",
+        ] {
+            assert_eq!(configured_endpoint(Some(invalid)), Err("account_server_unconfigured".into()));
+        }
+        let expected = configured_endpoint(option_env!("MISTAKE_ACCOUNT_API_URL"));
+        assert_eq!(endpoint(), expected);
+    }
     #[test]
     fn shared_website_api_keeps_its_configured_prefix() {
         let base: reqwest::Url = "https://example.test/mistake-agent/".parse().unwrap();
