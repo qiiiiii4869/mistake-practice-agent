@@ -50,6 +50,7 @@ export interface ExerciseItem {
   itemId:string;type:'single_choice'|'multiple_choice'|'short_answer'|'calculation';targetIds:string[];
   sourceNumbers:string[];stem:string;options:string[];materialRefs:string[];answer:string;
   rubric:string[];explanation:string;solveResult:{answer:string;explanation:string}|null;
+  estimatedMinutes:number;questionCount:number;
   checks:{structure:boolean;scope:boolean;independentSolve:boolean;conditions:boolean;originality:boolean};
   status:'pending'|'verified'|'isolated';attempts:number;
 }
