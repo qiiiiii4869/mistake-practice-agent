@@ -10,7 +10,11 @@ const standardFontDataUrl = new URL('./pdf-assets/standard_fonts/', document.bas
 export async function extractPdf(file: File, progress: (page: number, total: number) => void): Promise<KnowledgeDocument> {
   if (!file.name.toLowerCase().endsWith('.pdf') || file.size > 40 * 1024 * 1024 || !file.size) throw new Error('knowledge_pdf_limit');
   const bytes = new Uint8Array(await file.arrayBuffer());
-  if (!new TextDecoder('latin1').decode(bytes.slice(0, 1024)).includes('%PDF-')) throw new Error('knowledge_pdf_failed');
+  // Do not embed the PDF magic string in this module: Tauri's content-based
+  // MIME detector also scans JavaScript and can mislabel the entire JS asset.
+  const magic = [0x25, 0x50, 0x44, 0x46, 0x2d];
+  if (!bytes.subarray(0, 1024).some((_, offset, prefix) => magic.every((value, index) => prefix[offset + index] === value)))
+    throw new Error('knowledge_pdf_failed');
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   const id = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
   const task = getDocument({ data: bytes, cMapUrl, standardFontDataUrl, useWasm: false,

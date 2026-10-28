@@ -18,7 +18,8 @@
     "pdfjs-dist": "6.4.299",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "xstate": "5.33.3"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.12.4",

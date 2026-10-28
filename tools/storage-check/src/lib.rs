@@ -8,6 +8,8 @@ mod knowledge;
 mod practice;
 #[path = "../../../app/apps/desktop/src-tauri/src/model.rs"]
 mod model;
+#[path = "../../../app/apps/desktop/src-tauri/src/workflow_model.rs"]
+mod workflow_model;
 #[path = "../../../app/apps/desktop/src-tauri/src/model_http.rs"]
 mod model_http;
 #[path = "../../../app/apps/desktop/src-tauri/src/pdf_export.rs"]

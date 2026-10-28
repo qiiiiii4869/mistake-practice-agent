@@ -1,5 +1,42 @@
 # 软件账号与次数服务
 
+> 2026-10-28 当前发布：`20261028-cloze-v10`，增加客户端v10输出预算兼容（16384）；原v7/v8/v9预算、数据库版本、Key与计次规则保留。14项测试在本机/Ubuntu通过，原网站与账号健康。读取正文和听写质量规则由客户端执行，账号服务器不接收题干或模型正文。
+
+> 2026-10-28 最新发布：`20261028-fact-repair-v8`；v7/v8任务均返回maxOutputTokens=16384，旧版本维持4096。数据库、Key文件与扣次规则保留，14项测试在本机/Ubuntu通过。客户端v8修复知识点核验逐项保留与定向重试；服务器只保留预算和任务元数据。
+
+> 2026-10-28 当前发布：`20261028-text-only-v7`，在原服务器原子切换。仅调整v7任务的maxOutputTokens为16384，旧提示词版本保留4096；总预算、Key文件、数据库版本6与扣次规则不变。14项测试在本机/Ubuntu通过，原网站及账号服务健康。管理员此前已配置真实Key，用户无需重填；下方尚未配置的表述是初次上线时记录。
+
+> 2026-10-28：v2 工作流授权、共享模型 Key 配置与下发、心跳、任务查询和幂等结束接口已部署到生产服务器，数据库升级为版本 6。线上版本为 `20261028-workflow-v6-1793161758`；下方版本 5 的部署描述是历史快照，旧版计次与手填 Key 入口保留兼容。真实模型 Key 尚未配置。
+
+## v2 共享模型授权
+
+Key 保存在云端 `MODEL_KEY_FILE` 指定的受限文件中，不进入账号数据库、次数流水或源码。管理员在桌面“生成报告 → 云端模型 · 双模式内容测试 → 管理员：配置云端模型 Key”中经 HTTPS 保存；普通用户看不到此输入。生产 systemd 配置使用 `/var/lib/user-store/shared-model-key`，目录 0700、文件 0600，服务用户为 `mistake-agent`。也支持从受限进程环境读取 `SHARED_MODEL_KEY` 作为首次配置；不将真实值写入示例文件或终端日志。
+
+| 接口 | 行为 |
+|---|---|
+| `GET /v2/model-status` | 登录后查看是否配置及配置版本；不返回 Key |
+| `POST /v2/admin/model-config` | 管理员设置/轮换 Key；返回结果不含 Key |
+| `POST /v2/report-runs` | 核验账号、余额与范围；共用既有 generations 预占，一账号同时一批 |
+| `POST /v2/report-runs/:id/credential` | 仅活动任务所有者经 HTTPS 领取 Key；仅 Rust 接收 |
+| `POST /v2/report-runs/:id/heartbeat` | 每约20秒续验，正常客户端90秒失去授权则停止；不上传学生和题目 |
+| `GET /v2/report-runs/:id` | 查询任务归属、预算和完成状态，不返回 Key |
+| `GET /v2/active-report-run` | 查找本账号中断的任务，供显式释放预占 |
+| `POST /v2/report-runs/:id/finish` | 失败/部分完成/取消释放；正式完成的扣次幂等 |
+
+响应统一 `Cache-Control: no-store`，Fastify 不记录请求或响应正文。生产必须 `ALLOW_LOCAL_CREDENTIALS=false`；本机临时服务测试可设为 true，且仅允许回环主机。端点和模型固定为 DeepSeek 官方 `deepseek-flash`，服务器不代理推理，不接收学生名单、试卷、逐题成绩或生成正文。
+
+桌面 Key 只进入单任务 Rust 内存，使用 `Zeroizing<String>` 清理所管理的 Key 缓冲区；任务结束先清理本机，再等待云端释放，因此断网不阻止清理。取消、模型鉴权/额度错误、授权或绝对时限到期、账号失效、登出、页面重新加载和窗口销毁均停止/清理；迟到的旧任务结束事件不会清掉新任务的 Key。Key 不回传 React，不写 SQLite、检查点、日志或 PDF。HTTP/TLS/操作系统仍可能保留临时内存副本，这不是对换页文件、内存转储或被修改客户端的物理擦除保证。共享 Key 已下发后不能阻止恶意客户端自行复制；若要求客户电脑始终拿不到 Key，需改成服务器代理。
+
+新入口当前只测试内容，完成后使用 `outcome=partial` 释放预占，不扣成功次数；服务商模型请求仍有成本。`WORKFLOW_DELIVERY_ENABLED=false` 为默认值，服务端拒绝新流程成功扣次，避免尚未验收 PDF 时提前结算。后续 PDF 验收和跨模式计次政策明确后再开启正式交付；旧 v1 客户端保持原收费逻辑，v1 finish 不能结算 v2 任务。
+
+部署前先停止服务并备份账号库与现有服务配置，发布新源码与依赖，更新 systemd 环境中的 `MODEL_KEY_FILE`，再启动。版本 5 升级 6 会先创建本地 SQLite 快照并事务创建 `report_runs`；保留账号 ID、余额、历史流水及旧接口。回滚应使用部署前快照和旧发布目录，不能直接让旧程序打开版本 6 库；回滚前需处理升级后新增的数据，避免覆盖。
+
+本地与 Ubuntu 上均通过 13 项服务端测试，包含 v2 配置权限、Key 不进普通响应/数据库、HTTPS、归属、预占、租约、冻结、到期、预算、幂等和旧接口兼容。已使用服务器既有 SSH 密钥完成上线；没有设置真实 Key 或调用付费模型。负责人可在软件管理员入口填写真实 Key，经 HTTPS 写入服务器受限文件。
+
+生产发布目录为 `/opt/mistake-agent/releases/20261028-workflow-v6-1793161758`，`current` 已原子切换。以 `/etc/systemd/system/mistake-agent-accounts.service.d/workflow-v6.conf` 增加三个工作流环境设置，保留原 service 文件和 Caddy 配置。完整备份位于 `/var/lib/user-store/workflow-deploy-backups/20261028-workflow-v6-1793161758/`，其中有 `accounts-before.sqlite3`、`previous.service` 和旧发布目录记录。升级前后 users、sessions、generations、credit_ledger、account_audit 逐表差异均为 0；数据库完整性与外键检查通过，保留 2 个账号、1 个管理员、总余额10次和1条流水。
+
+公网健康检查为200，v1账号接口和v2模型状态接口未登录均返回401，原网站返回200。部署审计仅含计数与状态，保存在项目忽略目录 `output/cloud-workflow-v6-deployment-audit.json`。部署工具为 `deploy/activate-workflow-v6.sh` 和 `deploy/verify-upgrade.mjs`；审计通过 SQLite 内部比较行数据，只输出差异计数，不输出密码、会话令牌或用户明细。
+
 支持用户名密码注册/登录、退出、服务器端登录会话、剩余次数查询、管理员加次、密码查看/修改和次数流水。适用于 Ubuntu 单机部署，数据库为服务器上的 SQLite，不需要另装数据库服务。学生名单、成绩、试卷、知识库和补练正文不会上传到账号服务。
 
 ## 规则

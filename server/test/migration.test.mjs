@@ -17,7 +17,7 @@ test('upgrades the basic user store, preserving password hashes and balances wit
     const db=openDatabase(path),user=db.prepare('SELECT * FROM users').get();
     assert.equal(user.username,'teacher_a');assert.equal(user.password_hash,hash);assert.equal(user.credits,7);assert.equal(user.role,'user');assert.match(user.id,/^[a-f0-9-]{36}$/);
     assert.equal(db.prepare('PRAGMA quick_check').get().quick_check,'ok');
-    assert.equal(db.prepare('PRAGMA user_version').get().user_version,5);
+    assert.equal(db.prepare('PRAGMA user_version').get().user_version,6);
     assert.throws(()=>db.prepare('UPDATE users SET credits=?').run(1.5));
     db.close();
     const backups=readdirSync(folder).filter(name=>name.includes('.before-v1-'));assert.equal(backups.length,1);

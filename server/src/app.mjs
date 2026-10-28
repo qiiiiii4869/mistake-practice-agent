@@ -4,6 +4,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { openDatabase, transaction, expireJobs, publicUser } from './database.mjs';
 import { hashPassword, verifyAccountPassword, tokenHash } from './password.mjs';
+import { registerReportRoutes } from './report-runs.mjs';
 
 const error = (code, statusCode = 400) => { throw Object.assign(new Error(code), { statusCode }); };
 const object = (properties, required = Object.keys(properties)) => ({ type: 'object', additionalProperties: false, required, properties });
@@ -12,7 +13,8 @@ const password = { type: 'string', minLength: 10, maxLength: 128 };
 const uuid = { type: 'string', pattern: '^[a-f0-9-]{36}$' };
 const credentials = object({ username, password });
 
-export async function createApp({ databasePath = './data/accounts.sqlite', sessionHours = 12, rateLimits = true, trustedProxy = ['127.0.0.1', '::1'] } = {}) {
+export async function createApp({ databasePath = './data/accounts.sqlite', sessionHours = 12, rateLimits = true, trustedProxy = ['127.0.0.1', '::1'],
+  modelKey = '', modelKeyFile, deliveryEnabled = false, allowLocalCredentials = false } = {}) {
   const db = openDatabase(databasePath);
   const app = Fastify({ logger: false, bodyLimit: 16 * 1024, trustProxy: trustedProxy,
     ajv: { customOptions: { removeAdditional: false, coerceTypes: false } } });
@@ -26,7 +28,7 @@ export async function createApp({ databasePath = './data/accounts.sqlite', sessi
   });
   app.setErrorHandler((err, _request, reply) => {
     const status = err.validation ? 400 : err.statusCode ?? 500;
-    const code = err.validation || (err.code?.startsWith('FST_') && status === 400) ? 'invalid_input' : status===429 ? 'rate_limited' : status >= 500 && err.message !== 'server_busy' ? 'server_error' : err.message;
+    const code = err.validation || (err.code?.startsWith('FST_') && status === 400) ? 'invalid_input' : status===429 ? 'rate_limited' : status >= 500 && !['server_busy','model_unconfigured','model_configuration_failed'].includes(err.message) ? 'server_error' : err.message;
     reply.code(status).send({ error: code });
   });
   app.setNotFoundHandler((_request, reply) => reply.code(404).send({ error: 'not_found' }));
@@ -46,6 +48,7 @@ export async function createApp({ databasePath = './data/accounts.sqlite', sessi
     await authenticated(request);
     if (request.account.role !== 'admin') error('admin_required', 403);
   }
+  registerReportRoutes(app,{ db, authenticated, administrator, modelKey, modelKeyFile, deliveryEnabled, allowLocalCredentials });
   function sessionFor(user,loginPassword=null) {
     const token = randomBytes(32).toString('hex'), now = Date.now(), expiresAt = now + sessionHours * 3600_000;
     let current;
@@ -111,6 +114,7 @@ export async function createApp({ databasePath = './data/accounts.sqlite', sessi
     expireJobs(db);
     const job = db.prepare('SELECT * FROM generations WHERE id=? AND user_id=?').get(request.params.id, request.account.id);
     if (!job) error('generation_not_found', 404);
+    if (db.prepare('SELECT job_id FROM report_runs WHERE job_id=?').get(job.id)) error('workflow_v2_required',409);
     if (job.state === 'completed') return { charged: true, user: publicUser(db, db.prepare('SELECT * FROM users WHERE id=?').get(request.account.id)) };
     if (job.state === 'cancelled' && !request.body.success) return { charged: false, user: publicUser(db, request.account) };
     if (job.state !== 'reserved') error('generation_expired', 409);

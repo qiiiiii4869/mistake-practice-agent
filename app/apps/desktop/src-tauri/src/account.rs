@@ -154,6 +154,8 @@ async fn send_request(
             "current_password_required",
             "current_password_incorrect",
             "password_change_conflict",
+            "model_unconfigured","model_configuration_failed","https_required","workflow_delivery_not_enabled",
+            "workflow_export_not_verified","workflow_counter_regression","workflow_budget_exceeded","workflow_lease_expired","workflow_v2_required",
         ];
         return Err(if allowed.contains(&code) {
             code.into()
@@ -233,6 +235,7 @@ fn pending_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     Ok(user_folder(app)?.join("pending-generation.json"))
 }
 fn clear_private_state(app: &tauri::AppHandle) -> Result<(), String> {
+    super::workflow_cloud::clear(&app.state::<super::workflow_cloud::WorkflowCloudState>());
     if let Some(login) = app.get_webview_window("zhixue-login") {
         login.close().map_err(|_| "window_close_failed")?;
     }
@@ -248,6 +251,13 @@ fn clear_private_state(app: &tauri::AppHandle) -> Result<(), String> {
     probe.captcha_seen.store(false, Ordering::SeqCst);
     *probe.progress.lock().map_err(|_| "state_unavailable")? = None;
     Ok(())
+}
+
+pub(crate) async fn workflow_request(app: &tauri::AppHandle,path:&str,body:Option<Value>)->Result<Value,String>{
+    let state=app.state::<AccountState>();require_session(&state)?;
+    let value=request(path,body,Some(&token(&state)?)).await?;
+    if value.get("user").is_some(){update(&state,&value)?;}
+    Ok(value)
 }
 
 #[tauri::command]

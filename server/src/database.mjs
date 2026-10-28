@@ -44,7 +44,7 @@ export function openDatabase(path) {
   const db = new DatabaseSync(path);
   try {
   db.exec('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA secure_delete=ON;');
-  if(db.prepare('PRAGMA user_version').get().user_version>5)throw new Error('unsupported_account_database_version');
+  if(db.prepare('PRAGMA user_version').get().user_version>6)throw new Error('unsupported_account_database_version');
   upgradeBasicUserStore(db,path);
   db.exec(usersSchema);
   if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name==='password_plain'))db.exec('ALTER TABLE users ADD COLUMN password_plain TEXT;');
@@ -92,7 +92,21 @@ export function openDatabase(path) {
         CREATE INDEX account_audit_target ON account_audit(target_id,created_at DESC);`);
     });
   }
-  db.exec('PRAGMA user_version=5;');
+  if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='report_runs'").get()) {
+    if (path !== ':memory:' && db.prepare('PRAGMA user_version').get().user_version > 0) {
+      const backup = resolve(path) + `.before-v6-${Date.now()}-${randomUUID()}.sqlite3`;
+      db.prepare('VACUUM INTO ?').run(backup); chmodSync(backup,0o600);
+    }
+    transaction(db,() => db.exec(`CREATE TABLE report_runs (
+      job_id TEXT PRIMARY KEY REFERENCES generations(id) ON DELETE CASCADE,
+      content_hash TEXT NOT NULL,mode TEXT NOT NULL CHECK(mode IN ('dictation','exercise')),
+      export_layout TEXT NOT NULL,workflow_version TEXT NOT NULL,prompt_version TEXT NOT NULL,
+      policy_json TEXT NOT NULL,lease_until INTEGER NOT NULL,heartbeat_at INTEGER NOT NULL,
+      calls INTEGER NOT NULL DEFAULT 0,tokens INTEGER NOT NULL DEFAULT 0,
+      outcome TEXT,manifest_digest TEXT,finish_json TEXT
+    ) STRICT; PRAGMA user_version=6;`));
+  }
+  db.exec('PRAGMA user_version=6;');
   return db;
   }catch(error){db.close();throw error;}
 }
