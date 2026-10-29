@@ -1,5 +1,21 @@
 # Windows 桌面端
 
+## 双模式识题适配器（2026-10-29，尚未接入生成界面）
+
+`packages/agent/src/workflow/sourceAdapters.ts` 提供资源预检、文件展开、逐页双次识题与有限第三次复核的注入接口。对齐模块保留成绩题号，对不可靠读取、重复题号、失效排除规则及不完整跨页/共用材料作隔离；没有识别结果也不会删去原始失分目标。排除规则随内容冻结，改变规则会改变内容摘要。模型请求仅包含页面、允许题号和固定提示词，账号/学生名单不进入识题请求。
+
+在支持 TypeScript 类型擦除的 Node 24 下运行 `node tools/check_workflow_sources_real.mjs <当前账号workspace.sqlite路径>`（仓库根目录）。脚本只读成绩库，识题返回为协议检查片段，输出仅汇总检查数；不会调用真实模型、生成教学内容或修改数据库。本适配器不代表完整新工作流已交付，当前正式生成按钮继续使用原有路径。
+
+## Windows 便携包（2026-10-28）
+
+柔和蓝紫界面已经构建到原生程序。新增 `build-portable.ps1`：在 PowerShell 7 中运行，默认使用本机已有的 GNU Rust 工具链和 `~/mingw64/bin`，绕过本机缺少 MSVC 链接器的问题；不修改系统默认 Rust 工具链。需要 Node.js >=24.16.0，必要时通过 `-NodeDirectory` 指定路径。
+
+```powershell
+pwsh -NoProfile -File .\build-portable.ps1 -OutputDirectory D:\Releases\mistake-app-new
+```
+
+脚本依次构建前端、校验并准备 Typst、以正式账号 API 地址和 `custom-protocol` 编译原生程序，输出完整文件夹及 ZIP、使用说明和 SHA256 清单。默认 `debug` 供本机测试，也可传 `-Profile release`；此为便携包，不是安装向导。输出位置必须不存在，避免覆盖已有包。包中只包含程序、WebView2Loader、Typst 及许可证，不收集本机账号或学生资料。解压整个 ZIP 后运行 `mistake-agent-desktop.exe`；仍需系统 WebView2 Runtime 和中文字体。
+
 > 2026-10-27 当前状态：桌面已增加软件账号登录、同窗口管理员工作台、按批计次及普通用户冻结/恢复/删除，账号后端已上线。下文 10 月 25/26 日逐批说明保留历史；最新启动、部署、验收边界和下一步见根目录 [上午交接报告](../2026-10-27上午工作交接报告.md) 与 [账号服务说明](../server/README.md)。当前云端版用 `start-windows.ps1` 启动，重编译前需设置 `MISTAKE_ACCOUNT_API_URL=https://codeqiqi.com/mistake-agent/`，不能省略账号地址。
 
 Tauri 2 + React + TypeScript。已支持教师内置登录、考试与任教班级选择、全班逐题得分读取、扩展文件导入、单场 SQLite 存储、教师设置与薄弱题统计。已接空白卷延迟识别、知识库检索、DeepSeek 出题审核及本机 PDF 导出；真实模型质量和安装包待验收。

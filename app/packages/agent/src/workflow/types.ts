@@ -1,8 +1,8 @@
 import type { ExamIdentity, Student, TeacherSettings } from '../../../core/src/index.ts';
 import type { PaperPage } from '../../../paper/src/index.ts';
 
-export const WORKFLOW_VERSION = '2.0.0-foundation';
-export const PROMPT_VERSION = '2.0.0-draft';
+export const WORKFLOW_VERSION = '2.0.0-foundation.2';
+export const PROMPT_VERSION = '2.0.0-source.1';
 export type WorkflowMode = 'dictation' | 'exercise';
 export type ExportLayout = 'individual' | 'combined';
 export interface ContentSettings {
@@ -15,6 +15,7 @@ export interface FrozenInput {
   paperFiles: PaperPage[]; mode: WorkflowMode; contentSettings: ContentSettings;
   knowledgeRevision: number; workflowVersion: string; promptVersion: string; contentHash: string;
   rawWeakQuestions: {localStudentId: string; numbers: string[]; availability: Student['availability']}[];
+  paperExclusions:{sourceFileId:string;pageIndex:number;number:string;occurrence:number}[];
 }
 export interface ExportProfile {
   schemaVersion: 2; runId: string; contentHash: string; layout: ExportLayout; includeAnswers: boolean;
@@ -30,6 +31,7 @@ export interface SourceUnit {
   unitId:string;sourceNumbers:string[];pageIds:string[];material:string;stem:string;options:string[];
   recognitionChecks:{readHashes:string[];alignmentStatus:'pending'|'aligned'|'isolated'};
   availability:'recognized_by_machine'|'incomplete'|'unsupported';
+  materialGroup?:string|null;
 }
 export interface CallRecord {
   callId:string;stage:string;unitIds:string[];requestHash:string;attempt:number;

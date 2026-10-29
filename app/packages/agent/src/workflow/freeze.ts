@@ -14,7 +14,7 @@ async function hash(value:unknown):Promise<string>{
 function deepFreeze<T>(value:T):T{
   if(value&&typeof value==='object'){Object.values(value).forEach(deepFreeze);Object.freeze(value);}return value;
 }
-export async function freezeInput(workspace:Workspace,ownerId:string,mode:WorkflowMode,knowledgeRevision:number,settings:ContentSettings):Promise<FrozenInput>{
+export async function freezeInput(workspace:Workspace,ownerId:string,mode:WorkflowMode,knowledgeRevision:number,settings:ContentSettings,paperExclusions:FrozenInput['paperExclusions']=[]):Promise<FrozenInput>{
   if(!ownerId.trim()||ownerId.length>100||!['dictation','exercise'].includes(mode)||!Number.isSafeInteger(knowledgeRevision)||knowledgeRevision<0)throw new Error('workflow_invalid_input');
   if(Object.keys(settings).some(k=>!['difficulty','includePartialCredit','partialCreditThreshold','maxBlanks','maxExercises','minCoverage'].includes(k))||!['basic','same','advanced'].includes(settings.difficulty)||typeof settings.includePartialCredit!=='boolean'
     ||!Number.isFinite(settings.partialCreditThreshold)||settings.partialCreditThreshold<0||settings.partialCreditThreshold>100
@@ -26,9 +26,13 @@ export async function freezeInput(workspace:Workspace,ownerId:string,mode:Workfl
   // Use the selected settings to freeze loss targets, including true zero scores.
   const analysis=analyze({...checked,settings:{...checked.settings,...settings}});
   if(analysis.audit.questionNumbers.length>80)throw new Error('workflow_unit_limit');
+  if(!Array.isArray(paperExclusions)||paperExclusions.length>30||paperExclusions.some(rule=>!rule
+    ||Object.keys(rule).some(k=>!['sourceFileId','pageIndex','number','occurrence'].includes(k))
+    ||!checked.paper?.pages.some(p=>p.id===rule.sourceFileId)||!analysis.audit.questionNumbers.includes(rule.number)
+    ||!Number.isSafeInteger(rule.pageIndex)||rule.pageIndex<1||rule.pageIndex>30||!Number.isSafeInteger(rule.occurrence)||rule.occurrence<1||rule.occurrence>20))throw new Error('workflow_invalid_exclusion');
   const value={schemaVersion:2 as const,ownerId,examIdentity:checked.exam,students:checked.students,
     paperFiles:checked.paper?.pages??[],mode,contentSettings:settings,knowledgeRevision,
-    workflowVersion:WORKFLOW_VERSION,promptVersion:PROMPT_VERSION,
+    workflowVersion:WORKFLOW_VERSION,promptVersion:PROMPT_VERSION,paperExclusions,
     rawWeakQuestions:analysis.students.map(s=>({localStudentId:s.id,numbers:s.weakQuestions,availability:s.availability as FrozenInput['rawWeakQuestions'][number]['availability']}))};
   const copy=structuredClone(value);
   return deepFreeze({...copy,contentHash:await hash(copy)});

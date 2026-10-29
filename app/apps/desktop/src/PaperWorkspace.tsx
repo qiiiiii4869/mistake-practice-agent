@@ -55,7 +55,11 @@ export function PaperWorkspace({ paper, numbers, locked, onBusy, save }: Props) 
   return <section className="card" id="paper-review" aria-label="试卷题干核对">
     <div className="card-heading"><h2>上传空白卷</h2><span className="muted">已保存 {paper?.pages.length ?? 0} 个文件或页面</span></div>
     <p className="help">上传时只保存到本机，不识别、不调用模型。支持照片、Word（.docx）和 PDF；文档在点击生成时才在本机展开为页面。请上传无学生姓名的空白试卷；点击“生成结果”后统一读取、核对、检索知识库并出题。</p>
-    <label className="file-input">添加照片、Word 或 PDF<input aria-label="添加试卷照片" type="file" multiple accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp,.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={disabled} onChange={e => void importPages(e)}/></label>
+    <div className="actions">
+      <label className="file-input">添加 PDF 试卷<input aria-label="添加 PDF 试卷" type="file" multiple accept=".pdf,application/pdf" disabled={disabled} onChange={e => void importPages(e)}/></label>
+      <label className="file-input">添加照片或 Word<input aria-label="添加试卷照片" type="file" multiple accept=".jpg,.jpeg,.png,.webp,.docx" disabled={disabled} onChange={e => void importPages(e)}/></label>
+    </div>
+    <p className="help">PDF 请使用“添加 PDF 试卷”。单个文件最多 6 MB；本场所有文件编码后合计最多 8 MB。</p>
     {!!paper?.pages.length&&<ul aria-label="已上传空白卷文件">{paper.pages.map((file,i)=><li key={file.id}>{i+1}. {file.name} <span className="muted">· 已保存</span></li>)}</ul>}
     <details><summary>手动查看或修正题干（可选）</summary>
     <div className="fields">

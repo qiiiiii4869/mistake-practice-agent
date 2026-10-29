@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { invoke } from '@tauri-apps/api/core';
 import { errorMessage, type ConnectionReport, type LoginStatus } from '../../../packages/zhixue/src';
 import './styles.css';
+import './soft-theme.css';
 import { ScoreWorkspace } from './ScoreWorkspace';
 import { AccountGate, useAccount } from './AccountGate';
 import { AdminWorkspace } from './AdminWorkspace';
@@ -73,7 +74,7 @@ function App() {
   const current=pages.find(item=>item.id===page)!;
   function navigate(next:typeof page){setPage(next);window.location.hash=next;window.scrollTo({top:0,behavior:'auto'});}
   return <div className="workspace-shell">
-    <aside className="workspace-sidebar"><div className="sidebar-brand"><span className="sidebar-logo"><GraduationCap size={20}/></span><div><b>错题智能推送</b><small>教师工作台</small></div></div>
+    <aside className="workspace-sidebar"><div className="sidebar-brand"><span className="sidebar-logo"><GraduationCap size={20}/></span><div><b>错题app</b><small>教师工作台</small></div></div>
       <div className="sidebar-label">工作空间</div><nav className="workspace-nav" aria-label="功能入口">{pages.map(item=><button key={item.id} type="button" aria-current={page===item.id?'page':undefined} className={page===item.id?'active':''} onClick={()=>navigate(item.id)}><item.icon size={18} strokeWidth={1.8}/><span>{item.label}</span>{page===item.id&&<ChevronRight className="nav-arrow" size={15}/>}</button>)}</nav>
       <div className="sidebar-bottom"><span className="sidebar-dot"/>本机工作区</div>
     </aside>
@@ -97,7 +98,7 @@ function App() {
     </div>
     <ScoreWorkspace report={report} loginOpen={login.open} parentBusy={busy} onBusy={setBusy} page={page} onPageChange={navigate}/>
     <div hidden={page!=='billing'}><section className="recharge-layout" aria-label="充值信息"><div className="recharge-details"><span className="recharge-label">账户次数</span><h2>生成次数</h2><div className="recharge-balance"><strong>{user.credits}</strong><span>次</span></div><p>当前可用 {user.available} 次{user.reserved>0?`，${user.reserved} 次处理中`:''}</p><div className="recharge-divider"/><h3>充值方式</h3><p>请联系管理员充值，到账后可在此查看余额。</p><div className="recharge-note">成功生成一批补练扣 1 次；失败不扣次。</div></div><div className="recharge-code"><div className="qr-placeholder"><QrCode size={52} strokeWidth={1.2}/><span>暂无收款二维码</span></div><b>扫码充值</b><p>充值完成后请联系管理员确认</p></div></section></div>
-    <div className="workspace-footer">错题智能推送 <span>·</span> 教学资料保存在本机</div>
+    <div className="workspace-footer">错题app <span>·</span> 教学资料保存在本机</div>
   </main></div>;
 }
 

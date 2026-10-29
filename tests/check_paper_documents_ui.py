@@ -29,8 +29,11 @@ def main():
     initial=workspace();initial['paper']={'pages':[],'questions':[]}
     page.add_init_script(MOCK+'\nwindow.testStored='+json.dumps({'revision':1,'snapshot':initial})+';'+EXTRA+DEEPSEEK_MOCK)
     page.goto(f'http://127.0.0.1:{server.server_port}/');paper=page.get_by_role('region',name='试卷题干核对',exact=True);agent=page.get_by_role('region',name='出题流程演示',exact=True)
-    paper.get_by_label('添加试卷照片',exact=True).set_input_files({'name':name,'mimeType':mime,'buffer':data});expect(paper.get_by_role('status')).to_contain_text('空白卷已保存到本机')
+    upload=paper.get_by_label('添加 PDF 试卷' if mime=='application/pdf' else '添加试卷照片',exact=True)
+    if mime=='application/pdf':expect(upload).to_have_attribute('accept','.pdf,application/pdf')
+    upload.set_input_files({'name':name,'mimeType':mime,'buffer':data});expect(paper.get_by_role('status')).to_contain_text('空白卷已保存到本机')
     assert page.evaluate('testStored.snapshot.paper.pages[0].data').startswith('data:application/');assert page.evaluate('testDeepseekCalls.length')==0
+    page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告',exact=True).click()
     agent.get_by_text('DeepSeek 模型设置',exact=True).click();agent.get_by_label('DeepSeek API Key',exact=True).fill('sk-synthetic-document-key');agent.get_by_role('button',name='启用 DeepSeek',exact=True).click();agent.get_by_label('确认空白卷不含学生姓名',exact=True).check();agent.get_by_role('button',name='生成结果',exact=True).click()
     if name=='external.docx':
      expect(agent.get_by_test_id('agent-message')).to_contain_text('请另存为 PDF');assert page.evaluate('testDeepseekCalls.length')==0
