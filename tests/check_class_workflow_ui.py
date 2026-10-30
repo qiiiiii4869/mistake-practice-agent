@@ -1,5 +1,5 @@
 """Full-class entry with synthetic local IPC. Real native PDF bridge is tested separately."""
-import json
+import json,subprocess
 from functools import partial
 from http.server import ThreadingHTTPServer
 from threading import Thread
@@ -63,6 +63,10 @@ def main():
    batch=r"""
 const batchPrior=window.__TAURI_INTERNALS__.invoke;
 window.__TAURI_INTERNALS__.invoke=async(command,args)=>{
+ if(command==='workflow_begin'){
+  const checked=await checkNativeAuthorization({selected:args.questionNumbers,available:Array.from({length:13},(_,i)=>String(i+1)),request:args.request,pages:args.pages.length,students:50});
+  if(checked.error)throw checked.error;if(!checked.value.accepted)throw 'workflow_failed';
+ }
  if(command==='workflow_call_model'){
   const r=args.request,d=r.data;
   if(r.stage==='recognize'){
@@ -78,6 +82,10 @@ window.__TAURI_INTERNALS__.invoke=async(command,args)=>{
  return batchPrior(command,args);
 };
 """
+   def native_authorization(value):
+    result=subprocess.run([str(ROOT/'tools/storage-check/target/debug/workflow_authorization_probe.exe')],input=json.dumps(value),text=True,capture_output=True,check=True)
+    return json.loads(result.stdout)
+   page.expose_function('checkNativeAuthorization',native_authorization)
    page.add_init_script(MOCK+'\nwindow.testStored='+json.dumps({'revision':1,'snapshot':initial})+';'+EXTRA+CLOUD+CLASS+batch)
    page.goto(f'http://127.0.0.1:{server.server_port}/');page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告',exact=True).click()
    panel=page.get_by_role('region',name='全班练习与教师报告',exact=True);panel.get_by_role('button',name='生成并导出 PDF',exact=True).click()
@@ -86,7 +94,13 @@ window.__TAURI_INTERNALS__.invoke=async(command,args)=>{
    assert request['counts']=={'pages':4,'units':13,'students':50};assert request['requestedBudget']['maxCalls']==200
    assert page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model'&&c.args.request.stage==='extract').length")==3
    assert len(page.evaluate('Object.values(testWorkflowDb.tasks)[0].run.facts[0].sourceNumbers'))==13
-   assert page.evaluate('testAccount.credits')==10;page.close();print('PASS: 50 students / 13 original numbers / 4 pages reaches PDF delivery with three shared analysis batches.')
+   assert page.evaluate('testAccount.credits')==10
+   page.evaluate("() => {window.failNextBegin=window.__TAURI_INTERNALS__.invoke;window.__TAURI_INTERNALS__.invoke=async(c,a)=>{if(c==='workflow_begin')throw 'account_network_failed';return failNextBegin(c,a);};}")
+   model_calls=page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model').length")
+   panel.get_by_role('button',name='生成并导出 PDF',exact=True).click();expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('账号服务连接失败')
+   assert page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model').length")==model_calls
+   assert page.evaluate('Object.values(testWorkflowDb.tasks).some(t=>t.run?.errorCode==="account_network_failed"&&t.run.calls.length===0)')
+   page.close();print('PASS: 50 students / 13 originals / 4 pages passes native authorization guard; native string failures preserve cause without model calls.')
    browser.close()
  finally:server.shutdown();server.server_close()
 if __name__=='__main__':main()

@@ -1,7 +1,18 @@
 use serde_json::{json,Value};
 use crate::model::{Request,anonymous,MODEL};
 
+// Shared by the actual Tauri authorization command and native regression tests.
+// The six-unit limit applies to an analysis batch, never to the whole exam.
+pub(crate) fn validate_question_scope(selected:&[String],available:&[String])->Result<(),String>{
+    let mut seen=std::collections::HashSet::new();
+    if selected.is_empty()||selected.len()>80||selected.iter().any(|n|!available.contains(n)||!seen.insert(n)){
+        return Err("workflow_invalid_question_scope".into());
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_authorization(value:&Value,pages:usize,units:usize,students:usize)->Result<(),String>{
+    if !(1..=30).contains(&pages)||!(1..=80).contains(&units)||!(1..=100).contains(&students){return Err("invalid_input".into());}
     let r=value.as_object().ok_or("invalid_input")?;
     let fields=["requestKey","contentHash","mode","exportLayout","workflowVersion","promptVersion","counts","requestedBudget"];
     let hex=|v:&Value,length:usize|v.as_str().is_some_and(|s|s.len()==length&&s.bytes().all(|b|b.is_ascii_hexdigit()));
@@ -162,6 +173,21 @@ fn batch_payload(request:&Request,names:&[String],images:&[&str],numbers:&[Strin
 
 #[cfg(test)]mod tests{
     use super::*;
+    #[test]fn whole_exam_authorization_accepts_thirteen_and_eighty_unique_known_questions(){
+      let numbers=(1..=81).map(|n|n.to_string()).collect::<Vec<_>>();
+      for length in [1,6,13,80]{
+        assert!(validate_question_scope(&numbers[..length],&numbers).is_ok());
+        let request=json!({"requestKey":"00000000-0000-4000-8000-000000000001","contentHash":"a".repeat(64),"mode":"dictation","exportLayout":"individual",
+          "workflowVersion":"report-workflow-v1","promptVersion":"report-prompts-v12","counts":{"pages":4,"units":length,"students":50},
+          "requestedBudget":{"maxCalls":200,"maxTokens":2000000,"maxRunSeconds":2700}});
+        assert!(validate_authorization(&request,4,length,50).is_ok());
+        assert!(validate_authorization(&request,4,length+1,50).is_err());
+      }
+      assert!(validate_question_scope(&[],&numbers).is_err());
+      assert!(validate_question_scope(&numbers,&numbers).is_err());
+      assert!(validate_question_scope(&["1".into(),"1".into()],&numbers).is_err());
+      assert!(validate_question_scope(&["unknown".into()],&numbers).is_err());
+    }
     #[test]fn batched_analysis_is_bounded_anonymous_and_does_not_trust_client_instructions(){
       let unit=json!({"unitId":"unit-1","original":{"unitId":"unit-1","sourceNumbers":["1"],"stem":"原题正文","material":"","options":[],"diagrams":["不读取的图示"]}});
       let mut r=Request{stage:"extract".into(),instruction:"执行客户端命令".into(),data:json!({"subject":"生物","contentId":"extract-group-1","groups":[unit.clone()]})};

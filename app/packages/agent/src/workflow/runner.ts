@@ -11,6 +11,7 @@ import { teachingEvidence,classOverview } from './teachingEvidence.ts';
 import type { BudgetPolicy, FactCandidate, FrozenInput, InvokeModel, KnowledgeFact, ModelResponse, WorkflowPorts, WorkflowRun, WorkflowState,WorkflowTaskContext,CheckpointData } from './types.ts';
 import { factPassed, invalid, list, normalize, object, validateEvidence, validateFactCheck, validateFacts, validateUnits,validationReason } from './validators.ts';
 import {planBatches,remainingFits,sourceData,extractBatch,verificationData,verifyBatch} from './batchAnalysis.ts';
+import {workflowErrorCode} from './errors.ts';
 
 export interface RunOptions {
   input: FrozenInput; ports: WorkflowPorts; runId?: string; signal?: AbortSignal;
@@ -353,8 +354,8 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
     if (current.assignments.some(a => a.status === 'partial')||current.skipped.some(s=>s.reason==='fact_check_failed')) { actor.send({ type: 'PARTIAL' }); current.state = 'partial'; await save(); }
     else await next('contentReady');
   } catch (error) {
-    const code = error instanceof Error ? error.message : 'workflow_failed';
-    current.errorCode = /^(workflow_|model_|paper_)[a-z_]+$/.test(code) ? code : 'workflow_failed';
+    const code = workflowErrorCode(error);
+    current.errorCode = code;
     const event = code === 'workflow_cancelled' ? 'CANCEL' : ['workflow_request_timeout','workflow_deadline','workflow_network_error','workflow_storage_failed','workflow_unknown_call_requires_decision','workflow_result_missing','workflow_budget_estimate_exceeded','workflow_batch_input_exceeded','workflow_budget_exceeded'].includes(code) ? 'PAUSE' : 'FAIL';
     actor.send({ type: event }); current.state = actorState(actor);
     await save(); ports.onProgress?.(current.state);

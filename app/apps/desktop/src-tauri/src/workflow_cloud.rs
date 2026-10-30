@@ -51,8 +51,7 @@ fn lock(state:&WorkflowCloudState)->Result<Guard<'_>,String>{if state.busy.swap(
     let numbers:Vec<String>=stored["snapshot"]["students"].as_array().ok_or("model_no_workspace")?.iter()
       .filter_map(|s|s["questions"].as_array()).flatten().filter_map(|q|q["number"].as_str().map(str::to_owned)).collect();
     let numbers:Vec<String>={let mut n=numbers;n.sort();n.dedup();n};
-    if question_numbers.is_empty()||question_numbers.len()>6||question_numbers.iter().any(|n|!numbers.contains(n)){
-      return Err("invalid_input".into());}
+    super::workflow_model::validate_question_scope(&question_numbers,&numbers)?;
     let numbers=question_numbers;
     let local=if let Some(request_key)=request["requestKey"].as_str(){
       let owner_id=owner.file_name().and_then(|s|s.to_str()).ok_or("session_required")?;

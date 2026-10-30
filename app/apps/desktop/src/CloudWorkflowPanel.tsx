@@ -37,6 +37,9 @@ export function workflowMessage(error:unknown):string{
     workflow_resume_service_unavailable:'云端尚未支持恢复用量核对，请先更新账号服务；已保存结果仍可查看。',
     workflow_diagnostic_write_failed:'任务已结束，Key 已清理，但匿名诊断保存失败；当前结果仍可查看，请保留此页面。',
     workflow_invalid_output:'模型输出未通过结构检查。',model_output_truncated:'模型输出被截断，已停止，请缩小测试范围。',
+    workflow_invalid_question_scope:'原题号范围与已导入成绩不一致，或存在重复题号；尚未调用模型，请刷新考试后重试。',
+    account_invalid_response:'账号服务返回格式不符合当前版本，请检查服务版本。',invalid_model_request:'试卷或生成请求未通过本机检查，尚未发送该次模型请求。',
+    workflow_failed:'生成在准备阶段未完成，请查看本机任务记录定位具体原因。',
     model_privacy_blocked:'题干或资料包含学生姓名，已拦截模型请求。',invalid_input:'测试参数不符合限制，请核对题号与页数。',
     model_network_failed:'模型连接失败，已停止本批调用。',workflow_release_pending:'本机 Key 已清理，但云端预占释放尚未确认。'} as Record<string,string>)[code]??`本次未完成（${/^[a-z_]+$/.test(code)?code:'请求失败'}）。`;
 }
