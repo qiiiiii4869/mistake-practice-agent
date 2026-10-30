@@ -43,6 +43,7 @@ export function workflowMessage(error:unknown,stage?:WorkflowState):string{
     workflow_failed:'生成在准备阶段未完成，请查看本机任务记录定位具体原因。',
     workflow_saved_recognition_missing:'已保存的识题回包不足，已停止离线复核；不会自动重新调用模型。',
     workflow_paper_exam_mismatch:'成绩与试卷的周次不一致，请先换成同一场考试的成绩和试卷；尚未调用模型。',
+    knowledge_invalid_query:'知识库检索词为空或超过100字，已停止。已保存的识题和提炼结果仍保留。',
     model_privacy_blocked:'题干或资料包含学生姓名，已拦截模型请求。',invalid_input:'测试参数不符合限制，请核对题号与页数。',
     model_network_failed:'模型连接失败，已停止本批调用。',workflow_release_pending:'本机 Key 已清理，但云端预占释放尚未确认。'} as Record<string,string>)[code]??`本次未完成（${/^[a-z_]+$/.test(code)?code:'请求失败'}）。`;
 }

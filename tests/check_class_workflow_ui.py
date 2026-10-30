@@ -60,6 +60,10 @@ def main():
     expect(panel.get_by_text('仅有成绩统计兜底说明，尚无知识点讲评报告',exact=False)).to_be_visible(timeout=15000)
     expect(panel.get_by_text('本次没有生成有效练习。',exact=False)).to_be_visible()
     expect(panel.get_by_role('button',name='导出已有结果 PDF',exact=True)).to_have_count(0)
+    page.evaluate("() => {window.__TAURI_INTERNALS__.invoke=noFactsPrior;window.queryFailurePrior=noFactsPrior;window.testCloudModelVersion='0123456789abcdf0';window.__TAURI_INTERNALS__.invoke=async(c,a)=>{if(c==='search_knowledge')throw 'knowledge_invalid_query';return queryFailurePrior(c,a);};}")
+    panel.get_by_role('button',name='生成并导出 PDF',exact=True).click()
+    expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('知识库检索词为空或超过100字',timeout=15000)
+    assert page.evaluate('Object.values(testWorkflowDb.tasks).some(t=>t.run?.errorCode==="knowledge_invalid_query"&&t.run.errorStage==="retrieving")')
     assert not errors,errors;page.close()
     print('PASS:',mode,layout,'whole-class scope, settings, teacher report, PDF-only retry/cancel, resource preflight and no deduction.')
    page=browser.new_page();initial=workspace();base=initial['students'][0];q=base['questions'][0]

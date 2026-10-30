@@ -230,7 +230,11 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
     await next('retrieving');
     for (const unit of current.units.filter(u => !cached && current.draftFacts[u.unitId])) {
       await checkpoint(`retrieve:${unit.unitId}`,async () => {
-        const query = current.draftFacts[unit.unitId].map(f => f.knowledgePoint).join(' ');
+        // Old checkpoints may contain facts:[]. Complete that checkpoint locally
+        // so a saved retrieval frame cannot block its valid neighbours on resume.
+        const facts = current.draftFacts[unit.unitId];
+        if (!facts.length) { current.unitEvidence[unit.unitId] = []; return; }
+        const query = facts.map(f => f.knowledgePoint).join(' ');
         current.unitEvidence[unit.unitId] = validateEvidence(await ports.retrieve(query,signal ?? new AbortController().signal));
       });
     }
@@ -245,7 +249,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
       });
       for(const [i,ids]of current.verificationBatches!.entries())await checkpoint(`verify-batch:${i}`,()=>verifyBatch(current,ids,invoke,input.workspace.exam.subjectName,save));
     }
-    for (const unit of current.units.filter(u => !cached && current.draftFacts[u.unitId])) {
+    for (const unit of current.units.filter(u => !cached && current.draftFacts[u.unitId]?.length)) {
       if(batched)continue;
       await checkpoint(`verify:${unit.unitId}`,async () => {
         const id=(slot:number)=>`${unit.unitId}-fact-${slot}`;

@@ -27,8 +27,9 @@ export async function extractBatch(run:WorkflowRun,unitIds:string[],invoke:Invok
  try{returned=groupValues(await invoke('extract',{subject,contentId:`extract-batch-${unitIds.join('-')}`,groups:units.map(u=>({unitId:u.unitId,original:sourceData(u)}))}),unitIds);}
  catch(error){if(!validFailure(error))throw error;returned=new Map();}
  for(const u of units){
-  try{const facts=validateFacts(returned.get(u.unitId));run.draftFacts[u.unitId]=facts;
-   if(!facts.length)run.skipped.push({sourceNumbers:[...u.sourceNumbers],reason:'text_evidence_insufficient'});
+  try{const facts=validateFacts(returned.get(u.unitId));
+   if(facts.length)run.draftFacts[u.unitId]=facts;
+   else run.skipped.push({sourceNumbers:[...u.sourceNumbers],reason:'text_evidence_insufficient'});
   }catch(error){if(!validFailure(error))throw error;run.skipped.push({sourceNumbers:[...u.sourceNumbers],reason:'fact_extraction_failed'});}
  }
 }

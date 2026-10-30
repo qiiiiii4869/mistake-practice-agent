@@ -78,6 +78,43 @@ test('one malformed fact does not discard the other original questions in the ba
  const s=await batchFixture({change:(r,response)=>{if(r.stage==='extract'&&response.value.groups.some(g=>g.unitId==='unit-1'))response.value.groups.find(g=>g.unitId==='unit-1').facts[0].candidateAnswers=['不在知识句中'];return response;}});
  const run=await runWorkflow(s);assert.equal(run.state,'partial');assert.equal(run.facts.length,12);assert(run.assignments.every(a=>a.uncoveredNumbers.includes('1')));
 });
+test('one empty fact group skips retrieval and verification while valid neighbours continue',async()=>{
+ const queries=[];
+ const s=await batchFixture({change:(r,response)=>{
+  if(r.stage==='extract')for(const group of response.value.groups??[])if(group.unitId==='unit-4')group.facts=[];
+  return response;
+ }});
+ s.ports.retrieve=async query=>{assert(query.trim());assert([...query].length<=100);queries.push(query);return [];};
+ const run=await runWorkflow(s);assert.equal(run.state,'partial',run.errorCode);assert.equal(run.errorCode,undefined);
+ assert.equal(run.draftFacts['unit-4'],undefined);assert.equal(queries.length,12);assert.equal(run.facts.length,12);
+ assert(run.assignments.every(a=>a.uncoveredNumbers.includes('4')));
+ assert(run.skipped.some(s=>s.reason==='text_evidence_insufficient'&&s.sourceNumbers.includes('4')));
+ assert(s.model.calls.filter(c=>c.stage==='verifyFact').every(c=>c.data.groups.every(g=>g.unitId!=='unit-4')));
+});
+test('all empty fact groups make no retrieval, verification or item requests and stay visibly incomplete',async()=>{
+ const s=await batchFixture({change:(r,response)=>{
+  if(r.stage==='extract')for(const group of response.value.groups??[])group.facts=[];
+  return response;
+ }});
+ s.ports.retrieve=async()=>{throw Error('empty extraction must not search');};
+ const run=await runWorkflow(s);assert.equal(run.state,'partial',run.errorCode);assert.equal(run.facts.length,0);assert.equal(run.items.length,0);
+ assert(s.model.calls.every(c=>c.stage==='extract'));assert.equal(Object.keys(run.draftFacts).length,0);
+ assert(run.assignments.every(a=>a.uncoveredNumbers.length===13));assert.equal(run.teacherReport.generatedBy,'template');
+});
+test('a legacy empty retrieval frame is completed locally on resume without repeating extraction',async()=>{
+ const s=await batchFixture(),store=s.ports.store,runId='legacy-empty-retrieval';
+ s.ports.retrieve=async query=>{if(query.includes('合成知识D'))throw 'knowledge_invalid_query';return [];};
+ const first=await runWorkflow({...s,runId});assert.equal(first.state,'failed');assert.equal(first.errorCode,'knowledge_invalid_query');
+ assert.equal(first.frame.id,'retrieve:unit-4');assert.equal(first.calls.length,3);
+ // Simulate the exact old writer shape, without touching any real task/database.
+ const saved=structuredClone(first);saved.draftFacts['unit-4']=[];saved.frame.data.draftFacts['unit-4']=[];
+ await store.save(s.input.ownerId,saved);
+ const queries=[];s.ports.retrieve=async query=>{assert(query.trim());queries.push(query);return [];};
+ const resumed=await runWorkflow({...s,runId,resume:true});assert.equal(resumed.state,'partial',resumed.errorCode);
+ assert.equal(resumed.facts.length,12);assert.equal(resumed.frame,undefined);assert(resumed.checkpoints.includes('retrieve:unit-4'));
+ assert.deepEqual(resumed.unitEvidence['unit-4'],[]);assert.equal(queries.length,9);
+ assert.equal(s.model.calls.filter(c=>c.stage==='extract').length,3);
+});
 test('cancel after a committed batch response reuses it on resume without re-reading accepted content',async()=>{
  const store=new MemoryWorkflowStore(),controller=new AbortController(),complete=store.completeCall.bind(store);let cancelled=false;
  store.completeCall=async(owner,run,id,response)=>{await complete(owner,run,id,response);if(run.calls.at(-1).stage==='verifyFact'&&!cancelled){cancelled=true;controller.abort();}};
