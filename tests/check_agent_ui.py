@@ -4,6 +4,7 @@ from functools import partial
 from http.server import ThreadingHTTPServer
 from threading import Thread
 from playwright.sync_api import expect, sync_playwright
+from check_desktop_ui import open_workflow_tools
 from check_desktop_ui import MOCK, QuietHandler, ROOT
 
 def workspace():
@@ -39,7 +40,7 @@ def main():
             initial=json.dumps({'revision':1,'snapshot':workspace()})
             page.add_init_script(MOCK+'\nwindow.testStored=JSON.parse(sessionStorage.getItem("synthetic-workspace")??'+json.dumps(initial)+');'+EXTRA)
             page.goto(f'http://127.0.0.1:{server.server_port}/')
-            page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click()
+            page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click();open_workflow_tools(page)
             agent=page.get_by_role('region',name='出题流程演示',exact=True)
             expect(agent).to_be_visible()
             expect(agent).to_contain_text('不能作为正式补练导出')
@@ -76,7 +77,7 @@ def main():
             agent.get_by_role('button',name='保存本场出题与审核',exact=True).click()
             expect(agent.get_by_test_id('agent-message')).to_contain_text('已保存本场出题与审核')
             assert page.evaluate('testStored.snapshot.practice.variants[0].review')=='approved'
-            page.reload()
+            page.reload();open_workflow_tools(page)
             expect(agent.get_by_role('article')).to_have_count(2)
             expect(agent.get_by_label('教师审核 q1-v1',exact=True)).to_have_value('approved')
             first.get_by_text('修改演示题（修改后需重新自检与审核）',exact=True).click()
@@ -102,12 +103,12 @@ def main():
             print('PASS: privacy failure preserves prior result, absent evidence and unsupported question types cannot generate.')
             agent.get_by_label('第 1 题题型',exact=True).select_option('text');run.click()
             expect(agent.get_by_role('article')).to_have_count(2)
-            page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click()
+            page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click();open_workflow_tools(page)
             current=page.get_by_role('region',name='本场教师设置',exact=True)
             current.get_by_text('本场教师设置',exact=True).click()
             current.get_by_label('每人题数上限',exact=True).fill('1')
             current.get_by_role('button',name='保存设置并重算',exact=True).click()
-            page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click()
+            page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click();open_workflow_tools(page)
             expect(agent.get_by_role('article')).to_have_count(0)
             assert page.evaluate('testStored.snapshot.practice===undefined') is True
             keyword.fill('光合作用');run.click()

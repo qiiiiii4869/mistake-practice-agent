@@ -16,3 +16,5 @@ mod model_http;
 mod pdf_export;
 #[path = "../../../app/apps/desktop/src-tauri/src/workflow_storage.rs"]
 mod workflow_storage;
+#[path = "../../../app/apps/desktop/src-tauri/src/workflow_export_process.rs"]
+mod workflow_export_process;

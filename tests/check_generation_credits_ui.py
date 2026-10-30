@@ -4,6 +4,7 @@ from functools import partial
 from http.server import ThreadingHTTPServer
 from threading import Thread
 from playwright.sync_api import sync_playwright,expect
+from check_desktop_ui import open_workflow_tools
 from check_desktop_ui import ROOT,MOCK,QuietHandler
 from check_agent_ui import workspace,EXTRA
 from check_deepseek_ui import DEEPSEEK_MOCK
@@ -30,7 +31,7 @@ def main():
   with sync_playwright() as p:
    browser=p.chromium.launch(channel='msedge',headless=True);page=browser.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
    page.add_init_script(MOCK+'\nwindow.testStored='+json.dumps({'revision':1,'snapshot':workspace()})+';'+EXTRA+DEEPSEEK_MOCK+COUNTS)
-   page.goto(f'http://127.0.0.1:{server.server_port}/');page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click();agent=page.get_by_role('region',name='出题流程演示',exact=True)
+   page.goto(f'http://127.0.0.1:{server.server_port}/');page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click();open_workflow_tools(page);agent=page.get_by_role('region',name='出题流程演示',exact=True)
    agent.get_by_text('DeepSeek 模型设置',exact=True).click();agent.get_by_label('DeepSeek API Key',exact=True).fill('sk-synthetic-credit-only');agent.get_by_role('button',name='启用 DeepSeek',exact=True).click()
    agent.get_by_label('确认空白卷不含学生姓名',exact=True).check();agent.get_by_role('button',name='生成结果',exact=True).click()
    expect(agent.get_by_test_id('agent-message')).to_contain_text('同一批不会重复扣次')

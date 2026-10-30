@@ -4,6 +4,7 @@ import {readFile,writeFile,mkdir,rename,copyFile,access} from 'node:fs/promises'
 import {resolve,join,dirname} from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
 import {buildDocumentPlan,renderDocument} from '../app/packages/pdf/src/workflow/plan.ts';
+import {canonical} from '../app/packages/agent/src/workflow/input.ts';
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const active=new Map();
 const exists=path=>access(path).then(()=>true,()=>false);
@@ -30,7 +31,7 @@ export function inspectPdf({filename,document,metadata,renderDir,budget,foreignN
 }
 export function exportWorkflowPdf(options){
   const frozen={...options,input:structuredClone(options.input),run:structuredClone(options.run),profile:structuredClone(options.profile),sourceNames:structuredClone(options.sourceNames??{})};
-  const key=resolve(options.outputDir)+'/'+(options.exportId??options.profile.exportId),signature=hash(JSON.stringify({input:frozen.input,run:frozen.run,profile:frozen.profile,syntheticPreview:options.syntheticPreview,sourceNames:frozen.sourceNames}));
+  const key=resolve(options.outputDir)+'/'+(options.exportId??options.profile.exportId),signature=hash(canonical({input:frozen.input,run:frozen.run,profile:frozen.profile,syntheticPreview:options.syntheticPreview,sourceNames:frozen.sourceNames}));
   if(active.has(key)){const item=active.get(key);if(item.signature!==signature)return Promise.reject(new Error('pdf_export_busy'));return item.promise;}
   const promise=performExport(frozen).finally(()=>active.delete(key));active.set(key,{signature,promise});return promise;
 }
@@ -43,7 +44,7 @@ async function performExport(options){
   const staging=options.stagingDir?resolve(options.stagingDir):join(outputDir,'.workflow-work',id);
   if(options.stagingDir&&dirname(staging)!==join(outputDir,'.workflow-work'))throw new Error('pdf_invalid_staging');
   const request={input,run,profile,syntheticPreview:options.syntheticPreview===true,sourceNames:options.sourceNames??{},outputDir,compiler,exportId:id,keepRenders:options.keepRenders===true};
-  const requestHash=hash(JSON.stringify(request));
+  const requestHash=hash(canonical(request));
   await buildDocumentPlan(input,run,profile,{syntheticPreview:request.syntheticPreview,sourceNames:request.sourceNames});
   await mkdir(staging,{recursive:true});
   let checkpoint={requestHash,revision:0,files:{},state:'staging'};

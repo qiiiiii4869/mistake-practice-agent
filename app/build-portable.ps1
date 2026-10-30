@@ -43,6 +43,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $taskBuild 'mistake-agent-desktop.exe'),(Join-Path $taskBuild 'WebView2Loader.dll') -Destination $taskDestination
     New-Item -ItemType Directory -Path (Join-Path $taskDestination 'resources\typst') -Force | Out-Null
     foreach ($taskName in @('typst.exe','LICENSE','NOTICE')) { Copy-Item -LiteralPath (Join-Path $taskResources $taskName) -Destination (Join-Path $taskDestination 'resources\typst') }
+    Copy-Item -LiteralPath (Join-Path $taskBuild 'resources\workflow-runtime') -Destination (Join-Path $taskDestination 'resources') -Recurse
     Copy-Item -LiteralPath (Join-Path $taskRoot 'THIRD_PARTY_NOTICES.md') -Destination $taskDestination
     @"
 错题智能推送 · Windows x64 便携版
@@ -53,8 +54,8 @@ try {
 请保留同目录 WebView2Loader.dll 和 resources 文件夹。
 需要 Windows 10/11 x64、Microsoft Edge WebView2 Runtime 和系统中文字体。
 账号连接正式服务 https://codeqiqi.com/mistake-agent/，使用原账号登录。
-本包包含柔和蓝紫界面、独立 PDF 试卷入口及云端工作流开发测试面板。
-整场正式生成、PDF 桌面交付和最终计次仍未完整接入，请以界面说明为准。
+本包包含柔和蓝紫界面、独立 PDF 试卷入口、全班练习与教师报告生成入口。
+PDF 导出组件已随包附带，不需要另装 Node。计次结算尚未启用，请以界面说明为准。
 本包不含账号数据库、学生资料、登录令牌或模型密钥。
 本机原账号资料继续保存在原来的 Windows 用户数据目录。
 此包是便携版本，不包含安装向导；debug 为测试构建。

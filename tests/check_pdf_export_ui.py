@@ -4,6 +4,7 @@ from functools import partial
 from http.server import ThreadingHTTPServer
 from threading import Thread
 from playwright.sync_api import sync_playwright,expect
+from check_desktop_ui import open_workflow_tools
 from check_desktop_ui import MOCK,QuietHandler,ROOT
 from check_agent_ui import EXTRA
 EXPORT=r"""
@@ -23,7 +24,7 @@ def main():
    browser=p.chromium.launch(channel='msedge',headless=True);page=browser.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
    snapshot=json.loads((ROOT/'tests/fixtures/practice-workspace-synthetic.json').read_text(encoding='utf-8'));snapshot['practice']['mode']='real'
    page.add_init_script(MOCK+'\nwindow.testStored='+json.dumps({'revision':7,'snapshot':snapshot})+';'+EXTRA+EXPORT)
-   page.goto(f'http://127.0.0.1:{server.server_port}/');page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click();agent=page.get_by_role('region',name='出题流程演示',exact=True)
+   page.goto(f'http://127.0.0.1:{server.server_port}/');page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click();open_workflow_tools(page);agent=page.get_by_role('region',name='出题流程演示',exact=True)
    export=agent.get_by_role('button',name='导出 PDF',exact=True);expect(export).to_be_enabled();export.click()
    expect(agent.get_by_test_id('agent-message')).to_contain_text('已导出 1 份 PDF')
    assert page.evaluate('testExports[0]')=={'expectedRevision':7,'layout':'class','includeAnswers':True}

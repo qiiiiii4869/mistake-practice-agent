@@ -17,3 +17,4 @@ Expand-Archive -LiteralPath $taskZip -DestinationPath $taskExtract -Force
 $taskSource = Join-Path $taskExtract 'typst-x86_64-pc-windows-msvc'
 foreach ($taskName in @('typst.exe','LICENSE','NOTICE')) { Copy-Item -LiteralPath (Join-Path $taskSource $taskName) -Destination (Join-Path $taskResources $taskName) -Force }
 Write-Output 'Verified Typst 0.15.1 runtime prepared.'
+& (Join-Path $PSScriptRoot 'prepare-workflow-runtime.ps1')

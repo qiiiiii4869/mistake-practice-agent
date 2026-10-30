@@ -21,6 +21,8 @@ mod asset_checks;
 mod workflow_diagnostics;
 mod workflow_storage;
 mod workflow_storage_commands;
+mod workflow_export;
+mod workflow_export_process;
 
 #[derive(Default)]struct ExportState(AtomicBool);
 #[derive(Serialize)]#[serde(rename_all="camelCase")]
@@ -560,6 +562,7 @@ pub fn run() {
         .manage(ProbeState::default())
         .manage(DeepseekState::default())
         .manage(workflow_cloud::WorkflowCloudState::default())
+        .manage(workflow_export::WorkflowExportState::default())
         .manage(ExportState::default())
         .manage(account::AccountState::default())
         .on_page_load(|webview,_|{if webview.label()=="main"{if let Some(state)=webview.app_handle().try_state::<workflow_cloud::WorkflowCloudState>(){workflow_cloud::clear(&state);}}})
@@ -612,6 +615,9 @@ pub fn run() {
             workflow_cloud::workflow_call_model,
             workflow_cloud::workflow_end,
             workflow_cloud::workflow_abort,
+            workflow_export::workflow_pdf_status,
+            workflow_export::workflow_pdf_export,
+            workflow_export::workflow_pdf_cancel,
             export_practice_pdf
         ])
         .setup(|app| {

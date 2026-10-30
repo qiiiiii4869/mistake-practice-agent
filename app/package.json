@@ -17,6 +17,7 @@
     "workflow:pdf-demo": "cd .. && node tools/run_workflow_pdf_demo.mjs",
     "test:workflow-pdf": "npm run typecheck --workspace @mistake-agent/desktop && cd .. && node --test tests/test_workflow_pdf.mjs tests/test_workflow_pdf_export.mjs",
     "test:workflow-storage": "npm run typecheck --workspace @mistake-agent/desktop && cd .. && cargo build --quiet --manifest-path tools/storage-check/Cargo.toml --bin workflow_store_probe && node --test tests/test_workflow_persistence.mjs tests/test_workflow_persistent_pdf.mjs",
-    "prepare:runtime": "powershell -NoProfile -File apps/desktop/scripts/prepare-runtime.ps1"
+    "test:workflow-desktop-export": "npm run typecheck --workspace @mistake-agent/desktop && cd .. && cargo build --locked --manifest-path tools/storage-check/Cargo.toml --bin workflow_store_probe --bin workflow_export_probe && node --test tests/test_workflow_desktop_export.mjs",
+    "prepare:runtime": "pwsh -NoProfile -File apps/desktop/scripts/prepare-runtime.ps1"
   }
 }

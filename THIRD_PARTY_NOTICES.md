@@ -1,5 +1,7 @@
 # 第三方源码
 
+桌面 PDF 导出随包附带 Node.js 运行时，仅执行固定的本地导出桥与检查程序。运行时版本与二进制摘要记录在 `resources/workflow-runtime/runtime-manifest.json`，对应版本的完整 Node.js 及内含第三方许可保留在同目录 `NODE-LICENSE.txt`。PDF.js、XState、@napi-rs/canvas 及平台二进制沿用锁定 npm 依赖并保留发行包许可。未捆绑或分发系统中文字体。
+
 `vendor/zhixuewang-python/` 包含 `anwenhu/zhixuewang-python` 的固定源码快照，供原有 Python 验证脚本及离线测试使用。
 
 - 上游仓库：<https://github.com/anwenhu/zhixuewang-python>

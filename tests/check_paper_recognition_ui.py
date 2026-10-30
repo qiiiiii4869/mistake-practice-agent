@@ -4,6 +4,7 @@ from functools import partial
 from http.server import ThreadingHTTPServer
 from threading import Thread
 from playwright.sync_api import expect,sync_playwright
+from check_desktop_ui import open_workflow_tools
 from check_desktop_ui import MOCK,QuietHandler,ROOT
 from check_agent_ui import workspace,EXTRA
 from check_deepseek_ui import DEEPSEEK_MOCK
@@ -38,7 +39,7 @@ def main():
    assert page.evaluate('testStored.snapshot.paper.questions.length')==0
    assert page.evaluate('testDeepseekCalls.length')==0
    expect(paper.get_by_role('button',name='识别当前已保存照片',exact=True)).to_have_count(0)
-   page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click()
+   page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click();open_workflow_tools(page)
    agent.get_by_text('DeepSeek 模型设置',exact=True).click();agent.get_by_label('DeepSeek API Key',exact=True).fill('sk-synthetic-deferred-key');agent.get_by_role('button',name='启用 DeepSeek',exact=True).click()
    run=agent.get_by_role('button',name='生成结果',exact=True);expect(run).to_be_disabled();agent.get_by_label('确认空白卷不含学生姓名',exact=True).check();expect(run).to_be_enabled()
    page.evaluate('testEvents=[]');run.click();expect(agent.get_by_test_id('agent-message')).to_contain_text('生成完成：2 道题')

@@ -23,5 +23,15 @@ fn main() {
             let entry=entry.expect("resource entry");if entry.path().is_file(){std::fs::copy(entry.path(),destination.join(entry.file_name())).expect("copy runtime resource");}
         }
     }else{println!("cargo:warning=PDF compiler resource absent; run prepare-runtime.ps1 before distribution");}
+    fn copy_tree(source:&std::path::Path,destination:&std::path::Path){
+        std::fs::create_dir_all(destination).expect("create PDF runtime directory");
+        for entry in std::fs::read_dir(source).expect("PDF runtime resources"){
+            let entry=entry.expect("runtime entry");let target=destination.join(entry.file_name());
+            if entry.path().is_dir(){copy_tree(&entry.path(),&target)}else{std::fs::copy(entry.path(),target).expect("copy PDF runtime resource");}
+        }
+    }
+    let runtime=std::path::Path::new("resources/workflow-runtime");
+    println!("cargo:rerun-if-changed={}",runtime.display());
+    if runtime.is_dir(){let out=std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());copy_tree(runtime,&out.ancestors().nth(3).unwrap().join("resources/workflow-runtime"));}
     tauri_build::build()
 }

@@ -81,6 +81,15 @@ window.__TAURI_INTERNALS__ = {invoke: async (command, args) => {
 """
 
 
+def open_workflow_tools(page):
+    from playwright.sync_api import TimeoutError
+    tools=page.get_by_test_id('workflow-extra-tools')
+    try: tools.wait_for(state='attached',timeout=1500)
+    except TimeoutError: return
+    if tools.is_visible() and tools.get_attribute('open') is None:
+        tools.locator('summary').first.click()
+
+
 class QuietHandler(SimpleHTTPRequestHandler):
     def log_message(self, *_):
         pass

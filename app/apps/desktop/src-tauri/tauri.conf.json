@@ -31,7 +31,8 @@
   "bundle": {
     "active": false,
     "resources": {
-      "resources/typst/": "resources/typst/"
+      "resources/typst/": "resources/typst/",
+      "resources/workflow-runtime/": "resources/workflow-runtime/"
     }
   }
 }

@@ -4,6 +4,7 @@ from functools import partial
 from http.server import ThreadingHTTPServer
 from threading import Thread
 from playwright.sync_api import expect, sync_playwright
+from check_desktop_ui import open_workflow_tools
 from check_desktop_ui import MOCK, QuietHandler, ROOT
 from check_agent_ui import workspace, EXTRA
 
@@ -72,7 +73,7 @@ def main():
             initial=json.dumps({'revision':1,'snapshot':workspace()})
             page.add_init_script(MOCK+'\nwindow.testStored='+initial+';'+EXTRA+CLOUD)
             page.goto(f'http://127.0.0.1:{server.server_port}/')
-            page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click()
+            page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click();open_workflow_tools(page)
             panel=page.get_by_role('region',name='云端模型双模式测试',exact=True)
             expect(panel).to_be_visible()
             expect(panel.get_by_text('只读取题干与各小问正文。图示、表格及其中的标签和数据不读取；依赖图表的小问跳过，其余文字知识点仍可生成。',exact=True)).to_be_visible()
@@ -101,8 +102,8 @@ def main():
                 assert page.evaluate('testCloudCalls.filter(c=>c.command==="workflow_begin").at(-1).args.request.mode')==mode
                 assert page.evaluate('testAccount.credits')==10
             assert '模拟学生甲' not in page.evaluate('JSON.stringify(testCloudCalls.filter(c=>c.command!=="workflow_store"))')
-            page.reload()
-            page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click()
+            page.reload();open_workflow_tools(page)
+            page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click();open_workflow_tools(page)
             panel=page.get_by_role('region',name='云端模型双模式测试',exact=True)
             panel.get_by_text('本机已保存任务',exact=False).click()
             expect(panel.get_by_role('button',name='查看保存结果',exact=True)).to_have_count(2)
@@ -149,8 +150,8 @@ def main():
             expect(panel.get_by_test_id('workflow-cloud-message')).to_contain_text('已停止内容测试')
             assert not page.evaluate('testCloudKeyPresent')
             expect(panel.get_by_role('button',name='继续已保存任务',exact=True)).to_be_visible()
-            page.reload()
-            page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click()
+            page.reload();open_workflow_tools(page)
+            page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click();open_workflow_tools(page)
             panel=page.get_by_role('region',name='云端模型双模式测试',exact=True)
             panel.get_by_text('本机已保存任务',exact=False).click()
             panel.get_by_role('button',name='查看保存结果',exact=True).first.click()

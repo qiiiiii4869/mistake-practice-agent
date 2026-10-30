@@ -15,10 +15,14 @@ const stages:Partial<Record<WorkflowState,string>>={preflight:'预检',authorizi
 export function workflowMessage(error:unknown):string{
   const code=error instanceof Error?error.message:String(error);
   return ({model_unconfigured:'云端尚未配置模型 Key，请由管理员保存云端配置。',account_service_failed:'账号服务器尚未支持新工作流接口，请先部署新版服务。',
+    pdf_runtime_missing:'本机缺少 PDF 导出组件或系统中文字体，请使用包含导出组件的新版程序。',pdf_content_incomplete:'部分内容或教师报告未完成，尚不能导出全班文件。',
+    pdf_export_busy:'已有 PDF 正在导出，请等待或停止当前导出。',pdf_cancelled:'已停止 PDF 导出，已有生成内容保留，可重试。',pdf_qa_failed:'PDF 检查未通过，尚未发布文件，可重试导出。',
+    pdf_compile_failed:'PDF 编译失败，生成内容保留，可重试导出。',pdf_font_or_layout_warning:'PDF 字体或版式存在问题，尚未发布文件。',pdf_runtime_unavailable:'PDF 导出组件无法启动，请重新安装完整程序。',
+    pdf_export_timeout:'PDF 导出超过时限，已有进度保留，可重试。',pdf_bridge_failed:'PDF 导出中断，生成内容保留，请查看导出记录后重试。',
     account_network_failed:'账号服务连接失败；本机 Key 会清除，云端预占最迟到期释放。',model_auth_failed:'模型服务拒绝了云端 Key，请管理员更新配置。',
     credits_exhausted:'当前账号没有可用次数，不能领取模型授权。',generation_busy:'账号已有活动任务，请结束或等待原任务到期。',
     model_quota_exhausted:'模型服务余额或额度耗尽，已停止并清理本机 Key。',workflow_lease_expired:'任务授权已失效，已停止并清理本机 Key。',
-    workflow_budget_exceeded:'达到本批调用或 Token 上限，已停止。',workflow_budget_estimate_exceeded:'本次范围超过调用预算，请减少测试题号或页数。',
+    workflow_budget_exceeded:'达到本批调用或 Token 上限，已停止。',workflow_budget_estimate_exceeded:'本场规模超过当前调用预算，尚未开始生成；本机资料保留。',
     workflow_request_timeout:'模型请求超时，停止后续调用；该请求的用量可能未知。',workflow_cancelled:'已停止内容测试。',
     paper_required:'请先上传空白卷并确认不含学生姓名。',storage_conflict:'考试版本已变化，请重新打开测试入口。',workflow_invalid_scope:'请选择当前考试内的 1～6 个测试题号。',
     paper_document_failed:'本机无法展开试卷文件，尚未调用模型。请先检查文件能否正常打开，或另存为 PDF 后重试。',

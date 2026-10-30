@@ -4,6 +4,7 @@ from functools import partial
 from http.server import ThreadingHTTPServer
 from threading import Thread
 from playwright.sync_api import expect,sync_playwright
+from check_desktop_ui import open_workflow_tools
 from check_desktop_ui import MOCK,QuietHandler,ROOT
 from check_agent_ui import workspace,EXTRA
 
@@ -38,7 +39,7 @@ def main():
             initial=json.dumps({'revision':1,'snapshot':workspace()})
             page.add_init_script(MOCK+'\nwindow.testStored='+initial+';'+EXTRA+DEEPSEEK_MOCK)
             page.goto(f'http://127.0.0.1:{server.server_port}/')
-            page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click()
+            page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click();open_workflow_tools(page)
             agent=page.get_by_role('region',name='出题流程演示',exact=True)
             agent.get_by_text('DeepSeek 模型设置',exact=True).click()
             key=agent.get_by_label('DeepSeek API Key',exact=True)

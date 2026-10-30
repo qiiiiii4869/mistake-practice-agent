@@ -4,6 +4,7 @@ from functools import partial
 from http.server import ThreadingHTTPServer
 from threading import Thread
 from playwright.sync_api import sync_playwright,expect
+from check_desktop_ui import open_workflow_tools
 from check_desktop_ui import MOCK,ROOT
 from check_knowledge_ui import CspHandler
 from check_agent_ui import workspace,EXTRA
@@ -33,7 +34,7 @@ def main():
     if mime=='application/pdf':expect(upload).to_have_attribute('accept','.pdf,application/pdf')
     upload.set_input_files({'name':name,'mimeType':mime,'buffer':data});expect(paper.get_by_role('status')).to_contain_text('空白卷已保存到本机')
     assert page.evaluate('testStored.snapshot.paper.pages[0].data').startswith('data:application/');assert page.evaluate('testDeepseekCalls.length')==0
-    page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告',exact=True).click()
+    page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告',exact=True).click();open_workflow_tools(page)
     agent.get_by_text('DeepSeek 模型设置',exact=True).click();agent.get_by_label('DeepSeek API Key',exact=True).fill('sk-synthetic-document-key');agent.get_by_role('button',name='启用 DeepSeek',exact=True).click();agent.get_by_label('确认空白卷不含学生姓名',exact=True).check();agent.get_by_role('button',name='生成结果',exact=True).click()
     if name=='external.docx':
      expect(agent.get_by_test_id('agent-message')).to_contain_text('请另存为 PDF');assert page.evaluate('testDeepseekCalls.length')==0

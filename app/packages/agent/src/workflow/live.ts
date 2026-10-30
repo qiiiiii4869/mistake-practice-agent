@@ -9,7 +9,7 @@ export interface CloudModelStatus { configured:boolean;model:string;modelConfigV
 export type NativeInvoke = <T>(command:string,args?:Record<string,unknown>)=>Promise<T>;
 
 export function cloudWorkflowPorts(options:{invoke:NativeInvoke;requestKey:string;revision:number;modelConfigVersion:string;
-  keepFirstNumbers?:string[];store?:WorkflowStore;resumeCloud?:WorkflowCloudBinding;onProgress?:(state:WorkflowState)=>void}):WorkflowPorts{
+  keepFirstNumbers?:string[];store?:WorkflowStore;resumeCloud?:WorkflowCloudBinding;exportLayout?:'individual'|'combined';onProgress?:(state:WorkflowState)=>void}):WorkflowPorts{
   let jobId:string|null=null,stage:WorkflowState='idle',heartbeat:ReturnType<typeof setInterval>|undefined,beating=false;
   const native=options.invoke;
   const abortLocal=()=>{if(jobId)void native('workflow_abort',{jobId}).catch(()=>{});};
@@ -27,7 +27,7 @@ export function cloudWorkflowPorts(options:{invoke:NativeInvoke;requestKey:strin
     async authorize(input,policy,signal){
       const numbers=input.testScope?.questionNumbers??analyze(input.workspace).audit.questionNumbers;
       const run=await native<{jobId:string;leaseUntil?:number;expiresAt?:number}>('workflow_begin',{expectedRevision:options.revision,pages:input.workspace.paper?.pages??[],questionNumbers:numbers,
-        request:{requestKey:options.requestKey,contentHash:input.contentHash,mode:input.mode,exportLayout:'individual',workflowVersion:input.workflowVersion,promptVersion:input.promptVersion,
+        request:{requestKey:options.requestKey,contentHash:input.contentHash,mode:input.mode,exportLayout:options.exportLayout??'individual',workflowVersion:input.workflowVersion,promptVersion:input.promptVersion,
           counts:{pages:input.workspace.paper?.pages.length??0,units:numbers.length,students:input.workspace.students.length},
           requestedBudget:{maxCalls:policy.maxCalls,maxTokens:policy.maxTokens,maxRunSeconds:Math.floor(policy.maxRunMs/1000)}}});
       jobId=run.jobId;

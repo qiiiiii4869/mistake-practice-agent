@@ -1,6 +1,7 @@
 import { useAccount } from './AccountGate';
 import { AgentWorkspace } from './AgentWorkspace';
 import { CloudWorkflowPanel } from './CloudWorkflowPanel';
+import { ClassWorkflowPanel } from './ClassWorkflowPanel';
 import { PaperWorkspace } from './PaperWorkspace';
 import { KnowledgeWorkspace } from './KnowledgeWorkspace';
 import { Users, UserCheck, FileText, UserMinus, type LucideIcon } from 'lucide-react';
@@ -241,9 +242,11 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy, page, on
       }}>保存设置并重算</button></details>}
       <p className="notice" aria-live="polite" data-testid="report-workspace-message">{message}</p>
     </section>}
+    {snapshot&&<ClassWorkflowPanel key={'class:'+snapshot.exam.id+':'+snapshot.exam.classId} workspace={snapshot} revision={stored.revision} locked={locked} onBusy={onBusy}/>}
     <KnowledgeWorkspace/>
-    {snapshot&&<CloudWorkflowPanel key={snapshot.exam.id+':'+snapshot.exam.classId} workspace={snapshot} revision={stored.revision} locked={locked} onBusy={onBusy}/>}
     {ready&&!snapshot&&<section className="empty-section"><h2>暂无本场报告</h2><p>导入考试和空白卷后，可以在这里生成和审核补练。</p><button className="secondary" onClick={()=>onPageChange('import')}>前往信息导入</button></section>}
+    {snapshot&&<details data-testid="workflow-extra-tools"><summary>小范围测试与旧版工具</summary>
+    <CloudWorkflowPanel key={snapshot.exam.id+':'+snapshot.exam.classId} workspace={snapshot} revision={stored.revision} locked={locked} onBusy={onBusy}/>
     {snapshot && <AgentWorkspace workspace={snapshot} revision={stored.revision} locked={locked} onBusy={onBusy} prepare={async (paper,expectedRevision)=>{
       const next=validateWorkspace({...latestStored.current.snapshot!,paper,practice:undefined});
       const result=await invoke<StoredWorkspace>('save_workspace',{expectedRevision,snapshot:next});
@@ -252,6 +255,7 @@ export function ScoreWorkspace({ report, loginOpen, parentBusy, onBusy, page, on
       setStored({revision:result.revision,snapshot:restored});setSettings(restored.settings);
       return {workspace:restored,revision:result.revision};
     }} save={practice=>persist({...latestStored.current.snapshot!,practice})}/>}
+    </details>}
     </div>
   </>;
 }
