@@ -8,6 +8,7 @@ import {templateClassTeachingReport,validateClassTeachingReport} from './teachin
 import {createWorkflowActor,actorState} from './machine.ts';
 import {sameStatistics} from './statisticsIntegrity.ts';
 import {MAX_WORKFLOW_CALLS} from './budget.ts';
+import {minimumFacts,minimumCloze,minimumExercise,usableFact,validateMinimumReport} from './minimumChecks.ts';
 import type {WorkflowStore,WorkflowRun,FrozenInput,ModelResponse,AnalysisCache,WorkflowTaskContext,ExportProfile} from './types.ts';
 
 type Invoke=<T>(command:string,args?:Record<string,unknown>)=>Promise<T>;
@@ -21,6 +22,7 @@ export async function validateStoredTask(task:StoredTask,ownerId:string,runId:st
   await assertFrozen(task.input);
   if(task.input.ownerId!==ownerId||!Number.isSafeInteger(task.revision)||task.revision<0)invalid();
   const r=task.run;if(!r)return structuredClone(task);
+  const minimum=task.input.validationLevel==='minimum';
   if(r.runId!==runId||r.contentHash!==task.input.contentHash||r.mode!==task.input.mode||r.workflowVersion!==task.input.workflowVersion||r.promptVersion!==task.input.promptVersion
     ||!['mock','real'].includes(r.executionMode)||!Array.isArray(r.calls)||!Number.isSafeInteger(r.policy.maxCalls)||r.policy.maxCalls<1||r.policy.maxCalls>MAX_WORKFLOW_CALLS||r.calls.length>r.policy.maxCalls||r.calls.length>MAX_WORKFLOW_CALLS)invalid();
   if(r.machineSnapshot){const actor=createWorkflowActor(r.mode,r.machineSnapshot);try{actor.start();if(actorState(actor)!==r.state||actor.getSnapshot().context.mode!==r.mode)invalid();}finally{actor.stop();}}
@@ -30,7 +32,7 @@ export async function validateStoredTask(task:StoredTask,ownerId:string,runId:st
     if(Object.keys(r.frame.data).length!==keys.length||Object.keys(r.frame.data).some(k=>!keys.includes(k)))invalid();
     await validateStoredTask({...task,run:{...r,...r.frame.data,frame:undefined}},ownerId,runId);}
   const ids=new Set();for(const c of r.calls){if(ids.has(c.callId)||!['pending','completed','unknown'].includes(c.status)||!Number.isSafeInteger(c.reservedTokens)||c.reservedTokens<0||(c.usage!==null&&(!Number.isSafeInteger(c.usage)||c.usage<0)))invalid();ids.add(c.callId);}
-  validateUnits(r.units,task.input);for(const facts of Object.values(r.draftFacts))validateFacts({facts});
+  validateUnits(r.units,task.input);for(const facts of Object.values(r.draftFacts)){if((minimum?minimumFacts:validateFacts)({facts}).length!==facts.length)invalid();}
   for(const batches of [r.analysisBatches,r.verificationBatches])if(batches!==undefined){
     if(!Array.isArray(batches)||batches.length>80)invalid();const used=new Set<string>();
     for(const group of batches){if(!Array.isArray(group)||!group.length||group.length>6)invalid();
@@ -38,9 +40,10 @@ export async function validateStoredTask(task:StoredTask,ownerId:string,runId:st
     }
   }
   for(const refs of Object.values(r.unitEvidence))validateEvidence(refs);
-  const factIds=new Set();for(const f of r.facts){validateFacts({facts:[f]});validateFactCheck(f.factCheck);validateEvidence(f.evidenceRefs);if(factIds.has(f.factId)||!factPassed(f))invalid();factIds.add(f.factId);}
+  const factIds=new Set();for(const f of r.facts){if((minimum?minimumFacts:validateFacts)({facts:[f]}).length!==1)invalid();validateFactCheck(f.factCheck);validateEvidence(f.evidenceRefs);if(factIds.has(f.factId)||!usableFact(f,minimum)||minimum&&(f.reviewStatus!=='unchecked'||Object.values(f.factCheck).some(Boolean)))invalid();factIds.add(f.factId);}
   const itemIds=new Set();for(const i of r.items){const f=r.facts.find(f=>f.factId===i.factId);if(!f||itemIds.has(i.itemId)||i.mode!==r.mode)invalid();itemIds.add(i.itemId);
-    if(i.mode==='dictation')validateCloze(i,f,i.itemId,i.attempts);else validateExercise(i,f,r.units,i.itemId,i.attempts);
+    if(minimum){if(i.status!=='draft'||i.checks.independent||i.checks.scope)invalid();if(i.mode==='dictation')minimumCloze(i,f,i.itemId,i.attempts);else minimumExercise(i,f,i.itemId,i.attempts);}
+    else {if(i.status==='draft')invalid();if(i.mode==='dictation')validateCloze(i,f,i.itemId,i.attempts);else validateExercise(i,f,r.units,i.itemId,i.attempts);}
     if(i.status==='passed'&&!Object.values(i.checks).every(v=>v===true))invalid();}
   if(r.checkpoints.includes('targets')&&!await same(r.targets,selectTargets(task.input,r.facts)))invalid();
   if(r.checkpoints.includes('assignments')&&!await same(r.assignments,assignStudents(task.input,r.targets,r.items,r.facts)))invalid();
@@ -50,7 +53,8 @@ export async function validateStoredTask(task:StoredTask,ownerId:string,runId:st
     // Return the values recomputed from the frozen scores, without editing the database.
     r.evidence=computed;
   }
-  if(r.teacherReport){const report=r.teacherReport,checked=report.generatedBy==='template'?templateClassTeachingReport(r.evidence):validateClassTeachingReport({overview:report.overview,followUp:report.followUp,groupActions:report.groupActions,
+  if(r.teacherReport&&minimum){validateMinimumReport(r.teacherReport);if(!await same(r.advice,r.teacherReport.priorities))invalid();}
+  if(r.teacherReport&&!minimum){const report=r.teacherReport,checked=report.generatedBy==='template'?templateClassTeachingReport(r.evidence):validateClassTeachingReport({overview:report.overview,followUp:report.followUp,groupActions:report.groupActions,
     advice:report.priorities.map(a=>({evidenceIds:a.evidenceIds,focus:a.focus,classroomAction:a.classroomAction,followUp:a.followUp}))},r.evidence);if(!await same(report,checked)||!await same(r.advice,report.priorities))invalid();}
   return structuredClone(task);
 }

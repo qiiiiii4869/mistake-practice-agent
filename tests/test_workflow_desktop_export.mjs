@@ -4,7 +4,7 @@ import {spawn} from 'node:child_process';
 import {mkdir,readFile} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {SqliteWorkflowStore,runWorkflow} from '../app/packages/agent/src/workflow/index.ts';
+import {SqliteWorkflowStore,runWorkflow,freezeInput} from '../app/packages/agent/src/workflow/index.ts';
 import {setupWorkflow} from './workflow_fixture.mjs';
 import {sqliteProbeTransport} from '../tools/workflow-store-transport.mjs';
 
@@ -15,8 +15,9 @@ function native(config){return new Promise((resolve,reject)=>{
  child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>err+=b);child.on('error',reject);
  child.on('close',code=>{try{assert.equal(code,0,err);resolve(JSON.parse(out));}catch(e){reject(e);}});child.stdin.end(JSON.stringify(config)+'\n');
 });}
-async function saved(mode='dictation',{mock=false}={}){
+async function saved(mode='dictation',{mock=false,minimum=false}={}){
  const s=await setupWorkflow({mode});
+ if(minimum)s.input=await freezeInput({ownerId:s.input.ownerId,workspace:s.input.workspace,mode,validationLevel:'minimum'});
  // Metadata is deliberately real to exercise the production gate with synthetic
  // callbacks only. This is an integration contract test, never content acceptance.
  if(!mock)s.model.executionMode='real';
@@ -36,6 +37,13 @@ for(const mode of ['dictation','exercise'])test(`native packaged export ${mode}:
 test('native export refuses synthetic workflow metadata before PDF delivery',async()=>{
  const s=await saved('dictation',{mock:true}),result=await native({database:s.database,runtime,request:{type:'start',ownerId:s.owner,runId:s.runId,compiler,outputDir:join(root,s.runId),layout:'individual',includeAnswers:true}});
  assert.equal(result.error,'pdf_content_incomplete');
+});
+test('original native PDF export accepts minimum drafts without inventing independent checks',async()=>{
+ const s=await saved('dictation',{minimum:true}),result=await native({database:s.database,runtime,request:{type:'start',ownerId:s.owner,runId:s.runId,compiler,outputDir:join(root,s.runId),layout:'individual',includeAnswers:true}});
+ assert.equal(result.error,undefined,JSON.stringify(result));assert.equal(result.value.fileCount,4);assert.equal(result.value.settlementStatus,'not_requested');
+ const transport=sqliteProbeTransport(s.database);try{const store=new SqliteWorkflowStore(transport.invoke,s.owner),task=await store.task(s.runId);
+  assert.equal(task.input.validationLevel,'minimum');assert(task.run.items.every(i=>i.status==='draft'&&!i.checks.independent));assert.equal(task.run.calls.length,s.calls);
+ }finally{await transport.close();}
 });
 test('native cancellation stops the export and leaves generation receipts untouched',async()=>{
  const s=await saved(),result=await native({database:s.database,runtime,cancelAfterMs:300,request:{type:'start',ownerId:s.owner,runId:s.runId,compiler,outputDir:join(root,s.runId),layout:'individual',includeAnswers:true}});

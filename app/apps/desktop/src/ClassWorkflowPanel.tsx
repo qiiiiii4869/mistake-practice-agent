@@ -20,6 +20,7 @@ export function ClassWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
  const account=useAccount(),store=React.useMemo(()=>new SqliteWorkflowStore(invoke,account.user.id),[account.user.id]);
  const [mode,setMode]=React.useState<GenerationMode>('dictation'),[maxItems,setMaxItems]=React.useState(16),[difficulty,setDifficulty]=React.useState(workspace.settings.difficulty);
  const [layout,setLayout]=React.useState<'individual'|'combined'>('individual'),[answers,setAnswers]=React.useState(true);
+ const [minimum,setMinimum]=React.useState(()=>localStorage.getItem('workflow-minimum-checks')!=='off');
  const [busy,setBusy]=React.useState(false),[message,setMessage]=React.useState('按本场失分目标生成全班材料，学生练习与教师报告分别保存。');
  const [tasks,setTasks]=React.useState<TaskSummary[]>([]),[task,setTask]=React.useState<StoredTask|null>(null),[exports,setExports]=React.useState<SavedExport[]>([]);
  const [delivery,setDelivery]=React.useState<Delivery|null>(null),[retryUnknown,setRetryUnknown]=React.useState(false);
@@ -64,7 +65,7 @@ export function ClassWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
    if(!workspace.paper?.pages.length)throw new Error('paper_required');
    setMessage('正在本机准备整份试卷…');
    const paper=await renderPaperFiles(workspace.paper,analyze(workspace).audit.questionNumbers,setMessage,controller.current!.signal);
-   input=await freezeInput({ownerId:account.user.id,workspace:{...workspace,paper:{pages:paper.pages,questions:[]}},mode,knowledgeRevision:knowledgeVersion(library.revision,workspace.exam.subjectName),settings:{maxItems,difficulty}});
+   input=await freezeInput({ownerId:account.user.id,workspace:{...workspace,paper:{pages:paper.pages,questions:[]}},mode,knowledgeRevision:knowledgeVersion(library.revision,workspace.exam.subjectName),settings:{maxItems,difficulty},...(minimum?{validationLevel:'minimum' as const}:{})});
   }
   const runId=resuming?task!.run!.runId:crypto.randomUUID();activeRun.current=runId;
   const labels:Record<string,string>={preflight:'检查生成条件',authorizing:'连接生成服务',recognizing:'读取整份试卷',aligning:'核对原题',extracting:'提炼知识点',retrieving:'检索可选资料',verifyingFacts:'核对知识句',clozing:'生成听写',validatingCloze:'独立盲填检查',generatingExercises:'生成补练题',solving:'独立解题',validatingExercise:'核对题目',assembling:'分配个人练习',aggregatingEvidence:'计算全班统计',writingGuidance:'生成独立教师报告',validatingGuidance:'检查教师报告'};
@@ -89,11 +90,12 @@ export function ClassWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
    <label><input aria-label="全班附答案页" type="checkbox" disabled={disabled} checked={answers} onChange={e=>setAnswers(e.target.checked)}/>附独立答案页</label>
   </div>
   <p className="help">数量是上限，错题少就少安排；教师报告始终单独导出。当前生成消耗模型额度，次数结算尚未启用。</p>
+  <label><input aria-label="宽松检查" type="checkbox" disabled={disabled} checked={minimum} onChange={e=>{setMinimum(e.target.checked);localStorage.setItem('workflow-minimum-checks',e.target.checked?'on':'off');}}/>宽松检查（临时）：跳过多次识题一致性、事实复核和独立作答，仅保留基本格式。导出为未经严格核验的草稿。</label>
   <div className="actions"><button disabled={disabled} onClick={()=>void generate()}>生成并导出 PDF</button><button className="secondary" disabled={!busy} onClick={()=>{controller.current?.abort();void invoke('workflow_pdf_cancel').catch(()=>{});}}>停止本次处理</button>
    {canExport&&<button className="secondary" disabled={disabled} onClick={()=>void withBusy(()=>exported(run!.runId))}>导出已有结果 PDF</button>}
   </div>
   <p role="status" className="notice" data-testid="class-workflow-message">{message}</p>
-  {run&&<div aria-label="全班生成结果"><p>{task?.input.workspace.exam.name} · {task?.input.workspace.students.length} 人</p><p>状态：{({contentReady:'内容已就绪',partial:'部分完成',failed:'生成失败',cancelled:'已停止',recoverable:'待恢复'} as Record<string,string>)[run.state]??'处理中'}；有效条目 {run.items.filter(i=>i.status==='passed').length} 个；未覆盖目标 {run.assignments.reduce((sum,a)=>sum+a.uncoveredTargets.length,0)} 个；未覆盖原题 {new Set(run.assignments.flatMap(a=>a.uncoveredNumbers)).size} 道。</p>
+  {run&&<div aria-label="全班生成结果"><p>{task?.input.workspace.exam.name} · {task?.input.workspace.students.length} 人{task?.input.validationLevel==='minimum'?' · 宽松草稿（未经严格核验）':''}</p><p>状态：{({contentReady:'内容已就绪',partial:'部分完成',failed:'生成失败',cancelled:'已停止',recoverable:'待恢复'} as Record<string,string>)[run.state]??'处理中'}；{task?.input.validationLevel==='minimum'?'草稿':'有效'}条目 {run.items.filter(i=>i.status==='passed'||i.status==='draft').length} 个；未覆盖目标 {run.assignments.reduce((sum,a)=>sum+a.uncoveredTargets.length,0)} 个；未覆盖原题 {new Set(run.assignments.flatMap(a=>a.uncoveredNumbers)).size} 道。</p>
    {!!task?.input.testScope&&<p>此为单题测试结果，不能作为全班 PDF 导出。</p>}
    {run.items.length===0&&<p className="notice">本次没有生成有效练习。{run.facts.length===0?'知识点尚未建立，不能据此形成知识点讲评结论。':'候选内容未能通过检查。'}已保存的识题回包可先离线复核，无需立即重新调用模型。</p>}
    <p>教师报告：{run.teacherReport?run.facts.length===0?'仅有成绩统计兜底说明，尚无知识点讲评报告':'已生成，导出时独立保存':'尚未完成'}</p>

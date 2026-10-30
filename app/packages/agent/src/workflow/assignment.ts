@@ -1,16 +1,18 @@
 import { analyze } from '../../../core/src/index.ts';
 import type { ContentItem, FrozenInput, KnowledgeFact, StudentAssignment, StudentTargets } from './types.ts';
 import { factPassed, normalize } from './validators.ts';
+import {usableFact,usableItem} from './minimumChecks.ts';
 
-export function mergeFacts(facts: KnowledgeFact[]): KnowledgeFact[] {
+export function mergeFacts(facts: KnowledgeFact[],minimum=false): KnowledgeFact[] {
   const merged = new Map<string,KnowledgeFact>();
-  for (const fact of facts.filter(factPassed)) {
+  for (const fact of facts.filter(f=>usableFact(f,minimum))) {
     const key = JSON.stringify([normalize(fact.completeStatement),normalize(fact.context??''),fact.conditions.map(normalize).sort()]);
     const prior = merged.get(key);
     if (!prior) { merged.set(key,structuredClone(fact)); continue; }
     prior.sourceNumbers = [...new Set([...prior.sourceNumbers,...fact.sourceNumbers])];
     prior.unitIds = [...new Set([...prior.unitIds,...fact.unitIds])];
     prior.evidenceRefs = [...prior.evidenceRefs,...fact.evidenceRefs].filter((e,i,a) => a.findIndex(x => x.documentId === e.documentId && x.page === e.page && x.text === e.text) === i);
+    if(minimum)prior.evidenceRefs=prior.evidenceRefs.slice(0,6);
     if (prior.evidenceRefs.length) prior.sourceMode = 'library';
   }
   return [...merged.values()];
@@ -34,7 +36,7 @@ export function assignStudents(input: FrozenInput, targets: StudentTargets[], it
     const chosen: ContentItem[] = [];
     let used = 0;
     for (const factId of target.selectedTargets) {
-      const item = items.find(i => i.mode === input.mode && i.factId === factId && i.status === 'passed');
+      const item = items.find(i => i.mode === input.mode && i.factId === factId && usableItem(i,input.validationLevel==='minimum'));
       if (!item) continue;
       const cost = item.mode === 'dictation' ? item.parts.filter(p => p.type === 'blank').length : 1;
       if (used + cost > input.settings.maxItems) continue;
@@ -46,6 +48,7 @@ export function assignStudents(input: FrozenInput, targets: StudentTargets[], it
       || target.selectedTargets.some(id => facts.find(f => f.factId === id)?.sourceNumbers.includes(n) && uncoveredTargets.includes(id)));
     const coverage = target.selectedTargets.length ? (target.selectedTargets.length - uncoveredTargets.length) / target.selectedTargets.length : 0;
     const status: StudentAssignment['status'] = student.availability !== 'scored' ? 'unavailable' : !target.rawWeakNumbers.length ? 'no_targets'
+      : input.validationLevel==='minimum' ? 'ready'
       : chosen.length > 0 && coverage >= input.settings.coverageThreshold && !uncoveredNumbers.some(n => !facts.some(f => f.sourceNumbers.includes(n))) ? 'ready' : 'partial';
     return { ...structuredClone(target), itemIds: chosen.map(i => i.itemId), uncoveredTargets, uncoveredNumbers, coverage, status };
   });

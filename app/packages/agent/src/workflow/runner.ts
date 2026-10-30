@@ -12,6 +12,7 @@ import type { BudgetPolicy, FactCandidate, FrozenInput, InvokeModel, KnowledgeFa
 import { factPassed, invalid, list, normalize, object, validateEvidence, validateFactCheck, validateFacts, validateUnits,validationReason } from './validators.ts';
 import {planBatches,remainingFits,sourceData,extractBatch,verificationData,verifyBatch} from './batchAnalysis.ts';
 import {workflowErrorCode} from './errors.ts';
+import {minimumFacts,minimumCloze,minimumExercise,minimumReport} from './minimumChecks.ts';
 
 export interface RunOptions {
   input: FrozenInput; ports: WorkflowPorts; runId?: string; signal?: AbortSignal;
@@ -39,7 +40,9 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
   if (ports.model.executionMode === 'real' && (!ports.authorize || !ports.release)) throw new Error('workflow_authorization_required');
   if (!/^[\w-]{1,100}$/.test(runId)) throw new Error('workflow_invalid_run_id');
   const shape = preflight(input),batched=!input.testScope&&shape.units>6;
-  const estimated = estimateBudget(input.mode,shape.hasTargets ? shape.pages : 0,shape.hasTargets ? shape.units : 0,batched);
+  const minimum=input.validationLevel==='minimum';
+  const estimated = minimum?{...estimateBudget(input.mode,shape.hasTargets?shape.pages:0,0,true),maxCalls:300}
+    :estimateBudget(input.mode,shape.hasTargets ? shape.pages : 0,shape.hasTargets ? shape.units : 0,batched);
   const policy = { ...estimated, ...options.policy };
   for (const [key,value] of Object.entries(policy)) {
     if (!Number.isSafeInteger(value) || value < (key === 'maxNetworkRetries' ? 0 : 1) || value > estimated[key as keyof BudgetPolicy])
@@ -73,6 +76,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
   const analysisKey = ports.model.cacheKey ? await digest({ ownerId: input.ownerId, exam: input.workspace.exam,
     paper: input.workspace.paper, numbers: [...new Set(input.workspace.students.flatMap(s => s.questions.map(q => q.number)))],
     scope: input.testScope,
+    validationLevel:input.validationLevel,
     recognitionPolicy:input.recognitionPolicy,
     knowledgeRevision: input.knowledgeRevision, modelConfiguration: ports.model.cacheKey, executionMode: ports.model.executionMode,
     workflowVersion: input.workflowVersion, promptVersion: input.promptVersion }) : null;
@@ -185,7 +189,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
     const u = current.units.find(u => u.unitId === unitId)!;
     return { unitId, sourceNumbers: u.sourceNumbers, stem: u.stem, material: u.material, options: u.options };
   };
-  const extract = async (unitId: string,repair?:{facts:FactCandidate[];checks:KnowledgeFact['factCheck'][]}): Promise<FactCandidate[]> => validateFacts(await invoke('extract',{
+  const extract = async (unitId: string,repair?:{facts:FactCandidate[];checks:KnowledgeFact['factCheck'][]}): Promise<FactCandidate[]> => (minimum?minimumFacts:validateFacts)(await invoke('extract',{
     subject: input.workspace.exam.subjectName, original: modelUnit(unitId),...(current.unitEvidence[unitId]?.length?{evidence:current.unitEvidence[unitId]}:{}),...(repair?{repair}:{}) }));
   try {
     await next('preflight'); await next('authorizing');
@@ -214,14 +218,14 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
         const size=(units:typeof current.units)=>new TextEncoder().encode(JSON.stringify(modelRequest('extract',{subject:input.workspace.exam.subjectName,contentId:'extract-batch-plan',groups:units.map(u=>({unitId:u.unitId,original:sourceData(u),...(current.unitEvidence[u.unitId]?.length?{evidence:current.unitEvidence[u.unitId]}:{})}))}))).length;
         current.analysisBatches=planBatches(current.units.filter(u=>u.availability==='usable'),size,current.policy.maxInputBytes);
         const usable=current.units.filter(u=>u.availability==='usable').length;
-        remainingFits(current,current.analysisBatches.length+3*Math.ceil(usable/2)+12*shape.units+2);
+        remainingFits(current,current.analysisBatches.length+(minimum?3*usable:3*Math.ceil(usable/2)+12*shape.units)+2);
       });
-      for(const [i,ids]of current.analysisBatches!.entries())await checkpoint(`extract-batch:${i}`,()=>extractBatch(current,ids,invoke,input.workspace.exam.subjectName));
+      for(const [i,ids]of current.analysisBatches!.entries())await checkpoint(`extract-batch:${i}`,()=>extractBatch(current,ids,invoke,input.workspace.exam.subjectName,minimum));
     }
     for (const unit of current.units.filter(u => !cached && u.availability === 'usable')) {
       if(batched)continue;
       await checkpoint(`extract:${unit.unitId}`,async () => {
-        for (let attempt = 0; attempt < 2; attempt++) {
+        for (let attempt = 0; attempt < (minimum?1:2); attempt++) {
           try {
             const facts=await extract(unit.unitId);
             if(facts.length)current.draftFacts[unit.unitId]=facts;
@@ -247,7 +251,15 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
       });
     }
     await next('verifyingFacts');
-    if(batched&&!cached){
+    if(minimum&&!cached)await checkpoint('minimum-fact-drafts',async()=>{
+      // TEMPORARILY DISABLED: fact verification and its repair loops.
+      for(const unit of current.units)for(const [index,fact]of(current.draftFacts[unit.unitId]??[]).entries()){
+        const evidence=current.unitEvidence[unit.unitId]??[];
+        current.facts.push({...fact,factId:`${unit.unitId}-fact-${index+1}`,sourceNumbers:[...unit.sourceNumbers],unitIds:[unit.unitId],evidenceRefs:structuredClone(evidence),
+          sourceMode:evidence.length?'library':'paper',reviewStatus:'unchecked',factCheck:{accurate:false,supported:false,inScope:false}});
+      }
+    });
+    if(batched&&!cached&&!minimum){
       await checkpoint('verification-batch-plan',async()=>{
         const units=current.units.filter(u=>current.draftFacts[u.unitId]?.length);
         const size=(values:typeof current.units)=>new TextEncoder().encode(JSON.stringify(modelRequest('verifyFact',{subject:input.workspace.exam.subjectName,contentId:'verify-batch-plan',groups:verificationData(current,values.map(u=>u.unitId))}))).length;
@@ -260,7 +272,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
       for(const [i,ids]of current.verificationBatches!.entries())await checkpoint(`verify-batch:${i}`,()=>verifyBatch(current,ids,invoke,input.workspace.exam.subjectName,save));
     }
     for (const unit of current.units.filter(u => !cached && current.draftFacts[u.unitId]?.length)) {
-      if(batched)continue;
+      if(batched||minimum)continue;
       await checkpoint(`verify:${unit.unitId}`,async () => {
         const id=(slot:number)=>`${unit.unitId}-fact-${slot}`;
         let pending=current.draftFacts[unit.unitId].map((fact,index)=>({fact,slot:index+1}))
@@ -307,7 +319,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
         if (pending.length) current.skipped.push({ sourceNumbers: unit.sourceNumbers, reason: 'fact_check_failed' });
       });
     }
-    await next('merging'); await checkpoint('merge',async () => { current.facts = mergeFacts(current.facts); });
+    await next('merging'); await checkpoint('merge',async () => { current.facts = mergeFacts(current.facts,minimum); });
     if (analysisKey && !cached && shape.hasTargets && !current.skipped.length) await ports.store.saveAnalysis(input.ownerId,analysisKey,{
       units: current.units, facts: current.facts, draftFacts: current.draftFacts, unitEvidence: current.unitEvidence });
     await next('selectingTargets'); await checkpoint('targets',async () => { current.targets = selectTargets(input,current.facts); });
@@ -322,13 +334,23 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
     const targetIds = new Set(current.targets.flatMap(t => t.selectedTargets));
     if(batched){
       const pending=current.facts.filter(f=>targetIds.has(f.factId)&&!current.checkpoints.includes(`item:${f.factId}`));
-      const remaining=pending.reduce((sum,f)=>sum+Math.max(0,4-current.calls.filter(c=>c.scopeId===f.factId&&c.attempt===1).length),0);
+      const remaining=pending.reduce((sum,f)=>sum+Math.max(0,(minimum?1:4)-current.calls.filter(c=>c.scopeId===f.factId&&c.attempt===1).length),0);
       remainingFits(current,remaining+Math.max(0,2-current.calls.filter(c=>c.stage==='guidance'&&c.attempt===1).length));
     }
     for (const fact of current.facts.filter(f => targetIds.has(f.factId))) {
       await checkpoint(`item:${fact.factId}`,async () => {
         const scopedInvoke: InvokeModel = (stage,data) => invoke(stage,{ ...data,contentId: fact.factId });
         const report=(failure:WorkflowRun['validationAttempts'][number])=>{current.validationAttempts.push(failure);};
+        if(minimum){
+          // TEMPORARILY DISABLED: exact restoration, content scope, candidate
+          // matching, blind filling / independent solving and content retries.
+          try{
+            const raw=input.mode==='dictation'?await scopedInvoke('cloze',{statement:fact.completeStatement,context:fact.context??'',conditions:fact.conditions,candidateAnswers:fact.candidateAnswers,attempt:1,repair:null})
+              :await scopedInvoke('exercise',{fact:{knowledgePoint:fact.knowledgePoint,statement:fact.completeStatement,context:fact.context??'',conditions:fact.conditions},originals:current.units.filter(u=>fact.unitIds.includes(u.unitId)).map(u=>({stem:u.stem,material:u.material,options:u.options})),difficulty:input.settings.difficulty,attempt:1});
+            current.items.push(input.mode==='dictation'?minimumCloze(raw,fact,`cloze-${fact.factId}`,1):minimumExercise(raw,fact,`exercise-${fact.factId}`,1));
+          }catch(error){if(!(error instanceof Error)||error.message!=='workflow_invalid_output')throw error;current.skipped.push({sourceNumbers:fact.sourceNumbers,reason:'item_validation_failed'});}
+          return;
+        }
         const item = input.mode === 'dictation'
           ? await generateDictation(fact,scopedInvoke,{ generating: generatePhase, validating: () => next('validatingCloze') },report)
           : await generateExercise(fact,input,current.units,scopedInvoke,{ generating: generatePhase,
@@ -343,7 +365,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
       const seen = new Set<string>();
       for (const item of current.items) {
         const key = item.mode === 'exercise' ? normalize(item.stem + item.material) : JSON.stringify(item.parts);
-        if (seen.has(key)) { item.status = 'failed'; current.skipped.push({ sourceNumbers: item.sourceNumbers, reason: 'duplicate_item' }); }
+        if (!minimum&&seen.has(key)) { item.status = 'failed'; current.skipped.push({ sourceNumbers: item.sourceNumbers, reason: 'duplicate_item' }); }
         else if (item.status === 'passed') seen.add(key);
       }
       current.assignments = assignStudents(input,current.targets,current.items,current.facts);
@@ -353,6 +375,12 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
       check();actor.send({type:'SKIP_GUIDANCE'});current.state=actorState(actor);current.advice=[];current.teacherReport=null;await save();
     }else{
     await next('writingGuidance'); await checkpoint('advice',async () => {
+      if(minimum){
+        // TEMPORARILY DISABLED: strict narrative/coverage checks and retries.
+        if(current.evidence.mappedQuestions&&shape.hasTargets){current.teacherReport=minimumReport(await invoke('guidance',{...teachingReportInput(current.evidence),attempt:1}),current.evidence);}
+        else current.teacherReport=minimumReport({},current.evidence);
+        current.advice=current.teacherReport.priorities;return;
+      }
       // A single-question/subset test is only a content test. Teacher guidance
       // belongs to one final report of the entire frozen exam, never per item.
       if(current.evidence.mappedQuestions&&shape.hasTargets) {
@@ -366,7 +394,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
     });
     await next('validatingGuidance');
     }
-    if (current.assignments.some(a => a.status === 'partial')||current.skipped.some(s=>s.reason==='fact_check_failed')) { actor.send({ type: 'PARTIAL' }); current.state = 'partial'; await save(); }
+    if (!minimum&&(current.assignments.some(a => a.status === 'partial')||current.skipped.some(s=>s.reason==='fact_check_failed'))) { actor.send({ type: 'PARTIAL' }); current.state = 'partial'; await save(); }
     else await next('contentReady');
   } catch (error) {
     const code = workflowErrorCode(error);

@@ -1,5 +1,6 @@
 import type {FactCandidate,KnowledgeFact,SourceUnit,WorkflowRun,InvokeModel} from './types.ts';
 import {factPassed,invalid,list,object,validateFacts,validateFactCheck,validationReason} from './validators.ts';
+import {minimumFacts} from './minimumChecks.ts';
 
 export const sourceData=(u:SourceUnit)=>({unitId:u.unitId,sourceNumbers:u.sourceNumbers,stem:u.stem,material:u.material,options:u.options});
 export function planBatches(units:SourceUnit[],size:(units:SourceUnit[])=>number,limit:number,preferredLimit=limit,maxUnits=6):string[][]{
@@ -22,13 +23,16 @@ function groupValues(raw:unknown,expected:string[]):Map<string,unknown>{
  }return result;
 }
 function validFailure(error:unknown){return error instanceof Error&&error.message==='workflow_invalid_output';}
-export async function extractBatch(run:WorkflowRun,unitIds:string[],invoke:InvokeModel,subject:string):Promise<void>{
+export async function extractBatch(run:WorkflowRun,unitIds:string[],invoke:InvokeModel,subject:string,minimum=false):Promise<void>{
  const units=unitIds.map(id=>run.units.find(u=>u.unitId===id)!);
  let returned:Map<string,unknown>;
- try{returned=groupValues(await invoke('extract',{subject,contentId:`extract-batch-${unitIds.join('-')}`,groups:units.map(u=>({unitId:u.unitId,original:sourceData(u),...(run.unitEvidence[u.unitId]?.length?{evidence:run.unitEvidence[u.unitId]}:{})}))}),unitIds);}
+ try{const raw=await invoke('extract',{subject,contentId:`extract-batch-${unitIds.join('-')}`,groups:units.map(u=>({unitId:u.unitId,original:sourceData(u),...(run.unitEvidence[u.unitId]?.length?{evidence:run.unitEvidence[u.unitId]}:{})}))});
+  if(minimum){returned=new Map();for(const value of list(object(raw).groups,20,true)){if(!value||typeof value!=='object')continue;const id=(value as {unitId?:unknown}).unitId;if(typeof id==='string'&&unitIds.includes(id)&&!returned.has(id))returned.set(id,value);}}
+  else returned=groupValues(raw,unitIds);
+ }
  catch(error){if(!validFailure(error))throw error;returned=new Map();}
  for(const u of units){
-  try{const facts=validateFacts(returned.get(u.unitId));
+  try{const facts=(minimum?minimumFacts:validateFacts)(returned.get(u.unitId));
    if(facts.length)run.draftFacts[u.unitId]=facts;
    else run.skipped.push({sourceNumbers:[...u.sourceNumbers],reason:'text_evidence_insufficient'});
   }catch(error){if(!validFailure(error))throw error;run.skipped.push({sourceNumbers:[...u.sourceNumbers],reason:'fact_extraction_failed'});}

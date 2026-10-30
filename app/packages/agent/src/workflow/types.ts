@@ -14,6 +14,7 @@ export interface ContentSettings {
   maxItems: number; difficulty: 'basic' | 'same' | 'advanced'; coverageThreshold: number;
 }
 export interface FrozenInput {
+  validationLevel?:'minimum';
   schemaVersion: 1; ownerId: string; workspace: Workspace; mode: GenerationMode;
   settings: ContentSettings; knowledgeRevision: string; workflowVersion: string; promptVersion: string; contentHash: string;
   testScope?: { questionNumbers: string[] };
@@ -38,6 +39,7 @@ export interface FactCandidate {
   context?:string;
 }
 export interface KnowledgeFact extends FactCandidate {
+  reviewStatus?:'unchecked';
   factId: string; sourceNumbers: string[]; unitIds: string[]; evidenceRefs: EvidenceRef[];
   sourceMode: 'paper' | 'library'; factCheck: { accurate: boolean; supported: boolean; inScope: boolean };
 }
@@ -53,7 +55,7 @@ export type ValidationReason = 'invalid_structure' | 'unsupported_formula' | 'du
 export interface ValidationAttempt { factId:string;sourceNumbers:string[];stage:'verifyFact'|'cloze'|'blindFill'|'exercise'|'solve';attempt:number;reason:ValidationReason }
 export interface ClozeItem {
   itemId: string; mode: 'dictation'; factId: string; sourceNumbers: string[]; parts: ClozePart[];
-  correction: string; checks: ItemChecks; status: 'passed' | 'failed'; attempts: number;
+  correction: string; checks: ItemChecks; status: 'passed' | 'failed' | 'draft'; attempts: number;
   authoring?:'model'|'deterministic';
   context?:string;
 }
@@ -61,7 +63,7 @@ export interface ExerciseItem {
   itemId: string; mode: 'exercise'; factId: string; sourceNumbers: string[];
   type: 'single_choice' | 'multiple_choice' | 'short_answer' | 'calculation'; stem: string;
   options: { id: string; text: string }[]; material: string; answer: string[]; rubric: string[];
-  explanation: string; estimatedMinutes: number; checks: ItemChecks; status: 'passed' | 'failed'; attempts: number;
+  explanation: string; estimatedMinutes: number; checks: ItemChecks; status: 'passed' | 'failed' | 'draft'; attempts: number;
   numericAnswer?: { value: number; unit: string };
 }
 export type ContentItem = ClozeItem | ExerciseItem;
@@ -100,7 +102,7 @@ export interface ClassOverview{
 export interface TeachingAdvice {
   adviceId: string; evidenceIds: string[]; priority: number; focus: string;
   classroomAction: string; followUp: string; limitations: string[];
-  validationStatus: 'passed'; generatedBy: 'model' | 'template';
+  validationStatus: 'passed'|'draft'; generatedBy: 'model' | 'template';
 }
 export interface ClassTeachingReport{
   overview:string;priorities:TeachingAdvice[];groupActions:{bandId:string;action:string}[];followUp:string;

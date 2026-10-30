@@ -15,6 +15,7 @@ export async function digest(value: unknown): Promise<string> {
 export async function freezeInput(options: {
   ownerId: string; workspace: Workspace; mode: GenerationMode; knowledgeRevision?: string; settings?: Partial<ContentSettings>;
   testScope?: { questionNumbers: string[] };
+  validationLevel?:'minimum';
   recognitionPolicy?:{keepFirstNumbers:string[]};
 }): Promise<FrozenInput> {
   if (!/^[\w-]{1,100}$/.test(options.ownerId) || !['dictation','exercise'].includes(options.mode)) throw new Error('workflow_invalid_input');
@@ -30,7 +31,9 @@ export async function freezeInput(options: {
   if(options.testScope){const numbers=options.testScope.questionNumbers,all=analyze(workspace).audit.questionNumbers;
     if(!Array.isArray(numbers)||!numbers.length||numbers.length>6||new Set(numbers).size!==numbers.length||numbers.some(n=>!all.includes(n)))throw new Error('workflow_invalid_scope');
     testScope={questionNumbers:[...numbers]};}
+  if(options.validationLevel!==undefined&&options.validationLevel!=='minimum')throw new Error('workflow_invalid_settings');
   const input = { schemaVersion: 1 as const, ownerId: options.ownerId, workspace, mode: options.mode,
+    ...(options.validationLevel?{validationLevel:options.validationLevel}:{}),
     ...(testScope?{testScope}:{}),
     ...(options.recognitionPolicy?{recognitionPolicy:structuredClone(options.recognitionPolicy)}:{}),
     settings, knowledgeRevision: options.knowledgeRevision ?? 'empty', workflowVersion: WORKFLOW_VERSION, promptVersion: PROMPT_VERSION };
@@ -43,6 +46,7 @@ export async function assertFrozen(input: FrozenInput): Promise<void> {
   if (body.workflowVersion !== WORKFLOW_VERSION || body.promptVersion !== PROMPT_VERSION || await digest(body) !== contentHash)
     throw new Error('workflow_stale_input');
   validateWorkspace(body.workspace);
+  if(body.validationLevel!==undefined&&body.validationLevel!=='minimum')throw new Error('workflow_invalid_settings');
 }
 export async function exportProfile(input: FrozenInput, runId: string, layout: ExportProfile['layout'], includeAnswers = true): Promise<ExportProfile> {
   if (!['individual','combined'].includes(layout)) throw new Error('workflow_invalid_export');

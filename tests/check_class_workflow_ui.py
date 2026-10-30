@@ -9,6 +9,7 @@ from check_agent_ui import workspace,EXTRA
 from check_workflow_cloud_ui import CLOUD
 
 CLASS=r"""
+localStorage.setItem('workflow-minimum-checks','off');
 window.classExports={};window.classExportCalls=[];window.classPdfReady=true;window.classExportFail=false;window.classChooseCancel=false;
 const classPrior=window.__TAURI_INTERNALS__.invoke;
 const canon=v=>Array.isArray(v)?'['+v.map(canon).join(',')+']':v&&typeof v==='object'?'{'+Object.entries(v).filter(([,v])=>v!==undefined).sort(([a],[b])=>a.localeCompare(b,'en')).map(([k,v])=>JSON.stringify(k)+':'+canon(v)).join(',')+'}':JSON.stringify(v);
@@ -82,6 +83,13 @@ def main():
      panel.get_by_text('未通过项目的具体原因',exact=False).click()
      expect(panel.get_by_text('独立盲填发现多个合理答案',exact=False).first).to_be_visible()
      expect(panel.get_by_role('button',name='导出已有结果 PDF',exact=True)).to_have_count(0)
+    panel.get_by_label('宽松检查',exact=True).check();page.evaluate("testCloudBadCloze=true;testCloudModelVersion='0123456789abcdf9';classChooseCancel=true")
+    independent_before=page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model'&&['verifyFact','blindFill','solve'].includes(c.args.request.stage)).length")
+    panel.get_by_role('button',name='生成并导出 PDF',exact=True).click()
+    expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('取消选择保存位置',timeout=15000)
+    expect(panel.get_by_text('宽松草稿（未经严格核验）',exact=False)).to_be_visible()
+    assert page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model'&&['verifyFact','blindFill','solve'].includes(c.args.request.stage)).length")==independent_before
+    assert page.evaluate("Object.values(testWorkflowDb.tasks).some(t=>t.input.validationLevel==='minimum'&&t.run?.items.every(i=>i.status==='draft'))")
     assert not errors,errors;page.close()
     print('PASS:',mode,layout,'whole-class scope, settings, teacher report, PDF-only retry/cancel, resource preflight and no deduction.')
    page=browser.new_page();initial=workspace();base=initial['students'][0];q=base['questions'][0]

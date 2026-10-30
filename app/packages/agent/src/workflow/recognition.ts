@@ -85,6 +85,22 @@ function reason(readings:Reading[],number:string,keepFirst:string[]):Recognition
 export async function recognizeWorkflowUnits(input:FrozenInput,invoke:InvokeModel,keepFirst:string[]=[],report:(check:RecognitionCheck)=>void=()=>{}):Promise<SourceUnit[]>{
   const allNumbers=analyze(input.workspace).audit.questionNumbers,numbers=input.testScope?.questionNumbers??allNumbers;
   const records=new Map<string,{unit:SourceUnit;verified:boolean;conflict:boolean}>();
+  if(input.validationLevel==='minimum'){
+    // TEMPORARILY DISABLED: two independent matching reads and confidence gates.
+    for(const page of input.workspace.paper?.pages??[]){
+      const raw=object(await invoke('recognize',{pageId:page.id}));
+      for(const value of list(raw.questions,100,true)){
+        const q=object(value),number=typeof q.number==='number'?String(q.number):String(q.number??'');if(!numbers.includes(number))continue;
+        const rawStem=Array.isArray(q.paragraphs)?q.paragraphs.filter(p=>typeof p==='string'&&p.trim()).join('\n'):q.stem;
+        if(typeof rawStem!=='string'||!rawStem.trim()||absentTranscription(rawStem,number))continue;
+        const question={number,stem:sourceText(rawStem)};
+        const previous=records.get(question.number);
+        if(previous){if(question.stem.length>previous.unit.stem.length)previous.unit.stem=question.stem;previous.unit.pageIds=[...new Set([...previous.unit.pageIds,page.id])];continue;}
+        records.set(question.number,{unit:{unitId:`unit-${question.number}`,sourceNumbers:[question.number],pageIds:[page.id],stem:question.stem,material:'',options:[],availability:'usable',alignmentStatus:'recognized_by_machine'},verified:false,conflict:false});
+      }
+    }
+    return [...records.values()].map(r=>r.unit);
+  }
   for(const [pageIndex,page]of(input.workspace.paper?.pages??[]).entries()){
     const read=async(attempt:number,focusNumbers?:string[]):Promise<Reading>=>{
       try{return parse(await invoke('recognize',{pageId:page.id,...(focusNumbers?{focusNumbers}:{} )}),allNumbers,attempt);}

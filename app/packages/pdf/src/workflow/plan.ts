@@ -7,6 +7,7 @@ import { validateCloze,validateExercise,factPassed,validateFacts,validateFactChe
 import { typstContent } from '../math.ts';
 import {assertAnonymous} from '../../../agent/src/index.ts';
 import {biologySourceNames} from '../../../knowledge/src/biology.ts';
+import {minimumFacts,minimumCloze,minimumExercise,usableFact,validateMinimumReport} from '../../../agent/src/workflow/minimumChecks.ts';
 
 export const PDF_TEMPLATE_VERSION='workflow-pdf-v1';
 export type PageRole='practice'|'answers'|'teacher';
@@ -28,6 +29,7 @@ const same=async(a:unknown,b:unknown)=>await digest(a)===await digest(b);
 const compact=(s:string)=>s.replace(/\s/g,'');
 
 export async function validateExportContent(input:FrozenInput,run:WorkflowRun,profile:ExportProfile,synthetic=false){
+  const minimum=input.validationLevel==='minimum';
   await assertFrozen(input);
   assertAnonymous({facts:run.facts,items:run.items,report:run.teacherReport},input.workspace.students.map(s=>s.name));
   if(!['mock','real'].includes(run.executionMode))fail('pdf_invalid_execution_mode');
@@ -41,24 +43,26 @@ export async function validateExportContent(input:FrozenInput,run:WorkflowRun,pr
   const factIds=new Set<string>(),itemIds=new Set<string>();
   validateUnits(run.units,input);
   for(const fact of run.facts){
-    validateFacts({facts:[fact]});validateFactCheck(fact.factCheck);validateEvidence(fact.evidenceRefs);
-    if(factIds.has(fact.factId)||!factPassed(fact)||!fact.sourceNumbers.length||!fact.unitIds.length
+    (minimum?minimumFacts:validateFacts)({facts:[fact]});validateFactCheck(fact.factCheck);validateEvidence(fact.evidenceRefs);
+    if(factIds.has(fact.factId)||!usableFact(fact,minimum)||!fact.sourceNumbers.length||!fact.unitIds.length
       ||fact.unitIds.some(id=>!run.units.some(u=>u.unitId===id))
       ||fact.sourceNumbers.some(n=>!run.units.some(u=>fact.unitIds.includes(u.unitId)&&u.sourceNumbers.includes(n))))fail('pdf_invalid_fact');factIds.add(fact.factId);
   }
   for(const item of run.items){
     const fact=run.facts.find(f=>f.factId===item.factId);if(!fact||itemIds.has(item.itemId)||item.mode!==run.mode)fail('pdf_invalid_item');
     itemIds.add(item.itemId);
-    if(item.status!=='passed'||!Object.values(item.checks).every(v=>v===true))fail('pdf_invalid_item');
-    const checked=item.mode==='dictation'?validateCloze(item,fact,item.itemId,item.attempts):validateExercise(item,fact,run.units,item.itemId,item.attempts);
+    if(minimum?(item.status!=='draft'||item.checks.independent||item.checks.scope):(item.status!=='passed'||!Object.values(item.checks).every(v=>v===true)))fail('pdf_invalid_item');
+    const checked=minimum?(item.mode==='dictation'?minimumCloze(item,fact,item.itemId,item.attempts):minimumExercise(item,fact,item.itemId,item.attempts))
+      :item.mode==='dictation'?validateCloze(item,fact,item.itemId,item.attempts):validateExercise(item,fact,run.units,item.itemId,item.attempts);
     if(!await same(checked.sourceNumbers,item.sourceNumbers))fail('pdf_invalid_item');
   }
   const targets=selectTargets(input,run.facts),assignments=assignStudents(input,targets,run.items,run.facts);
-  if(!await same(targets,run.targets)||!await same(assignments,run.assignments)||assignments.some(a=>a.status==='partial'))fail('pdf_invalid_assignment');
+  if(!await same(targets,run.targets)||!await same(assignments,run.assignments)||!minimum&&assignments.some(a=>a.status==='partial'))fail('pdf_invalid_assignment');
   const evidence=teachingEvidence(input,run.facts);
   if(!await same(evidence,run.evidence))fail('pdf_invalid_evidence');
   const report=run.teacherReport!;
-  if(report.generatedBy==='template'){
+  if(minimum)validateMinimumReport(report);
+  else if(report.generatedBy==='template'){
     if(!await same(report,templateClassTeachingReport(evidence)))fail('pdf_invalid_teacher_report');
   }else{
     const checked=validateClassTeachingReport({overview:report.overview,followUp:report.followUp,groupActions:report.groupActions,
@@ -89,6 +93,7 @@ export async function buildDocumentPlan(input:FrozenInput,run:WorkflowRun,profil
   const documents:PlannedDocument[]=[],studentDocs:PlannedDocument[]=[];
   let sequence=0;
   const block=(doc:PlannedDocument,ownerId:string|null,role:PageRole,kind:PdfBlock['kind'],text:string,extra:Partial<PdfBlock>={})=>{
+    if(input.validationLevel==='minimum'&&kind==='title')text+=' · 宽松草稿（未经严格核验）';
     typstContent(text);const value={id:`b${++sequence}`,ownerId,role,kind,text,...extra};doc.blocks.push(value);return value;
   };
   const prose=(doc:PlannedDocument,ownerId:string|null,role:PageRole,text:string,extra:Partial<PdfBlock>={})=>{
@@ -104,7 +109,8 @@ export async function buildDocumentPlan(input:FrozenInput,run:WorkflowRun,profil
     prose(doc,student.id,'practice',run.mode==='dictation'?`本份共 ${blanks} 空，请根据知识句独立完成。`:
       `本份共 ${items.length} 题，参考用时 ${items.reduce((n,i)=>n+(i.mode==='exercise'?i.estimatedMinutes:0),0)} 分钟（仅为估算）。`);
     if(assignment.status==='unavailable')prose(doc,student.id,'practice',`本场${student.availability==='not_scanned'?'没扫':student.availability==='no_original_paper'?'无原卷':'暂无有效逐题成绩'}，不作错题判断，不安排自动补练。`);
-    else if(!items.length)prose(doc,student.id,'practice','本场没有纳入的失分知识目标。');
+    else if(!items.length)prose(doc,student.id,'practice',input.validationLevel==='minimum'&&assignment.rawWeakNumbers.length?'本次暂无可用练习草稿，不能据此认定没有失分目标。':'本场没有纳入的失分知识目标。');
+    if(input.validationLevel==='minimum'&&assignment.uncoveredNumbers.length)prose(doc,student.id,'practice',`尚无草稿对应的原题：${assignment.uncoveredNumbers.join('、')}。本份只列本次可用内容。`);
     items.forEach((item,index)=>{
       block(doc,student.id,'practice','heading',`${index+1}. ${item.mode==='dictation'?'知识句':({single_choice:'单项选择',multiple_choice:'多项选择',short_answer:'简答',calculation:'计算'}[item.type])}`,{itemId:item.itemId,newPage:revision>=1&&index>0});
       if(item.mode==='dictation'&&item.context)prose(doc,student.id,'practice',`背景：${item.context}`,{itemId:item.itemId});
