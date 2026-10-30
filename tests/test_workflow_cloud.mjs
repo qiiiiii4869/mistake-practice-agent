@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {freezeInput,runWorkflow,MemoryWorkflowStore} from '../app/packages/agent/src/workflow/index.ts';
 import {cloudWorkflowPorts,recognizeWorkflowUnits} from '../app/packages/agent/src/workflow/live.ts';
 import {mockWorkflowModel,workflowWorkspace} from './workflow_fixture.mjs';
-import {transcriptionKey} from '../app/packages/agent/src/workflow/recognition.ts';
+import {transcriptionKey,recheckSavedRecognition} from '../app/packages/agent/src/workflow/recognition.ts';
 import {validateUnits} from '../app/packages/agent/src/workflow/validators.ts';
 const jobId='00000000-0000-4000-8000-000000000002';
 async function context(change){
@@ -112,6 +112,34 @@ test('original OCR formulas are kept as source data; generated output must still
   const stem='分析公式 $\\text{raw source}$ 的适用条件。';
   const units=await recognizeWorkflowUnits(input,async()=>({questions:[{number:'2',stem,confidence:'high'}],warnings:[]}));
   assert.equal(units[0].availability,'usable');assert.equal(units[0].stem,stem);
+});
+test('missing global warnings and empty absent-question placeholders preserve two reliable neighbor readings',async()=>{
+ const workspace=workflowWorkspace();workspace.paper.pages.push({...workspace.paper.pages[0],id:'page-2'});
+ const input=await freezeInput({ownerId:'owner',workspace,mode:'dictation'});
+ let calls=0;const units=await recognizeWorkflowUnits(input,async(stage,data)=>{
+  calls++;return {questions:[{number:'1',paragraphs:data.pageId==='page-1'?['第一题清晰文字']:[],confidence:data.pageId==='page-1'?'high':'low'},
+   {number:'2',paragraphs:data.pageId==='page-2'?['第二题清晰文字']:[],confidence:data.pageId==='page-2'?'high':'low'},
+   {number:'99',paragraphs:['多余印刷题'],confidence:'high'}]};
+ });
+ assert.equal(calls,6);assert.equal(units.length,2);assert(units.every(u=>u.availability==='usable'));assert(units.every(u=>u.pageIds.length===1));
+});
+test('malformed known OCR entry remains isolated without erasing reliable adjacent questions',async()=>{
+ const input=await freezeInput({ownerId:'owner',workspace:workflowWorkspace(),mode:'dictation'});
+ const units=await recognizeWorkflowUnits(input,async()=>({questions:[{number:'1',paragraphs:['原题完整正文'],confidence:'high'},{number:'2',paragraphs:['不可靠格式'],confidence:'unknown'}]}));
+ assert.equal(units.find(u=>u.sourceNumbers.includes('1')).availability,'usable');assert.equal(units.find(u=>u.sourceNumbers.includes('2')).availability,'isolated');
+});
+test('provided global warning and differing scientific content still prevent OCR acceptance',async()=>{
+ const input=await freezeInput({ownerId:'owner',workspace:workflowWorkspace(),mode:'dictation',testScope:{questionNumbers:['2']}});
+ const units=await recognizeWorkflowUnits(input,async()=>({questions:[{number:'2',paragraphs:['正文'],confidence:'high'}],warnings:['正文不清晰']}));
+ assert.equal(units[0].availability,'isolated');
+});
+test('offline receipt recheck uses only saved responses, preserves old task and refuses missing receipts',async()=>{
+ const input=await freezeInput({ownerId:'owner',workspace:workflowWorkspace(),mode:'dictation'});
+ const calls=[1,2].map(i=>({callId:String(i),stage:'recognize',status:'completed',scopeId:'page-1'}));
+ const run={contentHash:input.contentHash,mode:input.mode,calls,units:[],facts:[],items:[],state:'partial'},before=structuredClone(run);let loaded=0;
+ const result=await recheckSavedRecognition(input,run,async()=>{loaded++;return {value:{questions:[{number:'1',paragraphs:['第一题正文'],confidence:'high'},{number:'2',paragraphs:['第二题正文'],confidence:'high'}]}};});
+ assert.equal(loaded,2);assert.deepEqual(result.usableNumbers,['1','2']);assert.deepEqual(result.unresolvedNumbers,[]);assert.deepEqual(run,before);
+ await assert.rejects(recheckSavedRecognition(input,run,async()=>null),/workflow_result_missing/);
 });
 test('missing or low-confidence selected text cannot be promoted to usable by only one confident reading',async()=>{
   const input=await freezeInput({ownerId:'owner',workspace:workflowWorkspace(),mode:'dictation',testScope:{questionNumbers:['2']}}),logs=[];let calls=0;

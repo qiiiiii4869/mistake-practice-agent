@@ -95,6 +95,11 @@ window.__TAURI_INTERNALS__.invoke=async(command,args)=>{
    assert page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model'&&c.args.request.stage==='extract').length")==3
    assert len(page.evaluate('Object.values(testWorkflowDb.tasks)[0].run.facts[0].sourceNumbers'))==13
    assert page.evaluate('testAccount.credits')==10
+   calls_before_recheck=page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model').length")
+   panel.get_by_role('button',name='离线复核已保存识题',exact=True).click()
+   expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('已离线复核')
+   expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('13 道原题有可靠文字')
+   assert page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model').length")==calls_before_recheck
    page.evaluate("() => {window.failNextBegin=window.__TAURI_INTERNALS__.invoke;window.__TAURI_INTERNALS__.invoke=async(c,a)=>{if(c==='workflow_begin')throw 'account_network_failed';return failNextBegin(c,a);};}")
    model_calls=page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model').length")
    panel.get_by_role('button',name='生成并导出 PDF',exact=True).click();expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('账号服务连接失败')

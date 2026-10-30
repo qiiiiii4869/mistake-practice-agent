@@ -173,6 +173,11 @@ fn batch_payload(request:&Request,names:&[String],images:&[&str],numbers:&[Strin
 
 #[cfg(test)]mod tests{
     use super::*;
+    #[test]fn calculated_statistics_preserve_ieee_values_through_json(){
+      for value in [8f64/17f64,4f64/17f64,4f64/21f64,0.9130434782608695,21f64/46f64]{
+        let source=json!({"correctRate":value});let bytes=serde_json::to_vec(&source).unwrap();let stored:Value=serde_json::from_slice(&bytes).unwrap();assert_eq!(stored["correctRate"].as_f64().unwrap().to_bits(),value.to_bits());
+      }
+    }
     #[test]fn whole_exam_authorization_accepts_thirteen_and_eighty_unique_known_questions(){
       let numbers=(1..=81).map(|n|n.to_string()).collect::<Vec<_>>();
       for length in [1,6,13,80]{

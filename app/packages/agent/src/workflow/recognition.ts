@@ -1,6 +1,6 @@
 import {analyze} from '../../../core/src/index.ts';
 import {invalid,list,object,sourceText,text} from './validators.ts';
-import type {FrozenInput,InvokeModel,RecognitionCheck,RecognitionReason,SourceUnit} from './types.ts';
+import type {FrozenInput,InvokeModel,RecognitionCheck,RecognitionReason,SourceUnit,WorkflowRun,ModelResponse} from './types.ts';
 
 interface Question{number:string;stem:string;confidence:'high'|'low';warnings:string[]}
 interface Reading{questions:Question[];warnings:string[];valid:boolean;attempt:number}
@@ -18,17 +18,29 @@ export function transcriptionKey(value:string):string{
     .replace(/(\d+(?:\.\d+)?:\d+(?:\.\d+)?)[~\-–—](\d+(?:\.\d+)?:\d+(?:\.\d+)?)(?=之间)/g,'$1~$2');
 }
 function parse(value:unknown,allNumbers:string[],attempt:number):Reading{
-  const v=object(value),warnings=list(v.warnings,100,true).map(w=>sourceText(w,2000));
-  const questions=list(v.questions,100,true).map(q=>{
-    const x=object(q);if(!['high','low'].includes(String(x.confidence)))return invalid();
+  const v=object(value),warnings=list(v.warnings===undefined?[]:v.warnings,100,true).map(w=>sourceText(w,2000));
+  const questions:Question[]=list(v.questions,100,true).flatMap(q=>{
+    const x=object(q),number=text(x.number,40);
+    // An extra printed question outside this exam is never renumbered or used.
+    if(!allNumbers.includes(number))return [];
+    try{
+    if(!['high','low'].includes(String(x.confidence)))return invalid();
+    // Some providers enumerate absent question numbers as low-confidence,
+    // empty placeholders. They are not printed duplicates on another page.
+    if(x.confidence==='low'&&((Array.isArray(x.paragraphs)&&x.paragraphs.length===0)
+      ||x.paragraphs===undefined&&typeof x.stem==='string'&&!x.stem.trim()))return [];
     // Body paragraphs exclude graphic captions and table regions. Legacy
     // responses may still use stem; never compare two contradictory versions.
     const stem=x.paragraphs===undefined?sourceText(x.stem):sourceText(list(x.paragraphs,80).map(v=>sourceText(v,8000)).join('\n'));
     if(x.paragraphs!==undefined&&x.stem!==undefined&&transcriptionKey(sourceText(x.stem))!==transcriptionKey(stem))return invalid();
-    return {number:text(x.number,40),stem,confidence:x.confidence as 'high'|'low',
-      warnings:x.warnings===undefined?[]:list(x.warnings,20,true).map(w=>sourceText(w,2000))};
+    return [{number,stem,confidence:x.confidence as 'high'|'low',
+      warnings:x.warnings===undefined?[]:list(x.warnings,20,true).map(w=>sourceText(w,2000))}];
+    }catch(error){if(!(error instanceof Error)||error.message!=='workflow_invalid_output')throw error;
+      // Blank low-confidence placeholders and a malformed known item isolate
+      // that number; they must not erase reliable neighbors on this page.
+      return [{number,stem:'',confidence:'low',warnings:['本题文字读取不完整或返回结构异常']}];
+    }
   });
-  if(questions.some(q=>!allNumbers.includes(q.number)))return invalid();
   return {questions,warnings,valid:true,attempt};
 }
 function warningsFor(reading:Reading,number:string):string[]{
@@ -42,7 +54,7 @@ function warningsFor(reading:Reading,number:string):string[]{
 function matching(reading:Reading,number:string){return reading.questions.filter(q=>q.number===number);}
 function trusted(reading:Reading,number:string,keepFirst:string[]):boolean{
   const found=matching(reading,number);
-  return reading.valid&&found.length>0&&(found.length===1||keepFirst.includes(number))&&found[0].confidence==='high'&&!warningsFor(reading,number).length;
+  return reading.valid&&found.length>0&&!!found[0].stem.trim()&&(found.length===1||keepFirst.includes(number))&&found[0].confidence==='high'&&!warningsFor(reading,number).length;
 }
 function reason(readings:Reading[],number:string,keepFirst:string[]):RecognitionReason{
   if(readings.every(r=>!r.valid))return 'invalid_structure';
@@ -85,4 +97,23 @@ export async function recognizeWorkflowUnits(input:FrozenInput,invoke:InvokeMode
     }
   }
   return [...records.values()];
+}
+
+// Re-parse already saved responses only. This diagnostic never invokes a model,
+// creates a generation job, changes the original run, or promotes it to success.
+export async function recheckSavedRecognition(input:FrozenInput,run:WorkflowRun,load:(callId:string)=>Promise<ModelResponse|null>){
+ if(input.contentHash!==run.contentHash||input.mode!==run.mode)throw new Error('workflow_stale_run');
+ const queues=new Map<string,typeof run.calls>();
+ for(const call of run.calls.filter(c=>c.stage==='recognize'&&c.status==='completed')){
+  const list=queues.get(call.scopeId)??[];list.push(call);queues.set(call.scopeId,list);
+ }
+ let replayed=0;const checks:RecognitionCheck[]=[];
+ const units=await recognizeWorkflowUnits(input,async(stage,data)=>{
+  if(stage!=='recognize')throw new Error('workflow_saved_recognition_missing');
+  const call=queues.get(String(data.pageId))?.shift();if(!call)throw new Error('workflow_saved_recognition_missing');
+  const response=await load(call.callId);if(!response)throw new Error('workflow_result_missing');replayed++;return structuredClone(response.value);
+ },input.recognitionPolicy?.keepFirstNumbers??[],c=>checks.push(c));
+ const numbers=input.testScope?.questionNumbers??analyze(input.workspace).audit.questionNumbers;
+ return {replayed,usableNumbers:units.filter(u=>u.availability==='usable').flatMap(u=>u.sourceNumbers),
+  unresolvedNumbers:numbers.filter(n=>!units.some(u=>u.availability==='usable'&&u.sourceNumbers.includes(n))),checks};
 }

@@ -6,6 +6,7 @@ import {selectTargets,assignStudents} from './assignment.ts';
 import {teachingEvidence} from './teachingEvidence.ts';
 import {templateClassTeachingReport,validateClassTeachingReport} from './teachingAdvice.ts';
 import {createWorkflowActor,actorState} from './machine.ts';
+import {sameStatistics} from './statisticsIntegrity.ts';
 import type {WorkflowStore,WorkflowRun,FrozenInput,ModelResponse,AnalysisCache,WorkflowTaskContext,ExportProfile} from './types.ts';
 
 type Invoke=<T>(command:string,args?:Record<string,unknown>)=>Promise<T>;
@@ -15,6 +16,7 @@ export interface SavedExport {profile:ExportProfile;state:'planned'|'exporting'|
 function invalid():never{throw new Error('workflow_storage_corrupt');}
 const same=async(a:unknown,b:unknown)=>await digest(a)===await digest(b);
 export async function validateStoredTask(task:StoredTask,ownerId:string,runId:string):Promise<StoredTask>{
+  task=structuredClone(task);
   await assertFrozen(task.input);
   if(task.input.ownerId!==ownerId||!Number.isSafeInteger(task.revision)||task.revision<0)invalid();
   const r=task.run;if(!r)return structuredClone(task);
@@ -41,7 +43,12 @@ export async function validateStoredTask(task:StoredTask,ownerId:string,runId:st
     if(i.status==='passed'&&!Object.values(i.checks).every(v=>v===true))invalid();}
   if(r.checkpoints.includes('targets')&&!await same(r.targets,selectTargets(task.input,r.facts)))invalid();
   if(r.checkpoints.includes('assignments')&&!await same(r.assignments,assignStudents(task.input,r.targets,r.items,r.facts)))invalid();
-  if(r.checkpoints.includes('evidence')&&!await same(r.evidence,teachingEvidence(task.input,r.facts)))invalid();
+  if(r.checkpoints.includes('evidence')){
+    const computed=teachingEvidence(task.input,r.facts);
+    if(!sameStatistics(r.evidence,computed))invalid();
+    // Return the values recomputed from the frozen scores, without editing the database.
+    r.evidence=computed;
+  }
   if(r.teacherReport){const report=r.teacherReport,checked=report.generatedBy==='template'?templateClassTeachingReport(r.evidence):validateClassTeachingReport({overview:report.overview,followUp:report.followUp,groupActions:report.groupActions,
     advice:report.priorities.map(a=>({evidenceIds:a.evidenceIds,focus:a.focus,classroomAction:a.classroomAction,followUp:a.followUp}))},r.evidence);if(!await same(report,checked)||!await same(r.advice,report.priorities))invalid();}
   return structuredClone(task);

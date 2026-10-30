@@ -6,6 +6,7 @@ import {freezeInput,runWorkflow,SqliteWorkflowStore,type GenerationMode,type Sto
 import {cloudWorkflowPorts,type CloudModelStatus} from '../../../packages/agent/src/workflow/live';
 import type {KnowledgeLibrary} from '../../../packages/knowledge/src';
 import {failureMessages} from '../../../packages/agent/src/workflow/diagnostics';
+import {recheckSavedRecognition} from '../../../packages/agent/src/workflow/recognition';
 import {renderPaperFiles} from './renderPaperFiles';
 import {workflowMessage} from './CloudWorkflowPanel';
 import {useAccount} from './AccountGate';
@@ -19,10 +20,11 @@ export function ClassWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
  const [busy,setBusy]=React.useState(false),[message,setMessage]=React.useState('按本场失分目标生成全班材料，学生练习与教师报告分别保存。');
  const [tasks,setTasks]=React.useState<TaskSummary[]>([]),[task,setTask]=React.useState<StoredTask|null>(null),[exports,setExports]=React.useState<SavedExport[]>([]);
  const [delivery,setDelivery]=React.useState<Delivery|null>(null),[retryUnknown,setRetryUnknown]=React.useState(false);
+ const [offlineRecognition,setOfflineRecognition]=React.useState<Awaited<ReturnType<typeof recheckSavedRecognition>>|null>(null);
  const controller=React.useRef<AbortController|null>(null),activeRun=React.useRef<string|null>(null);
  const disabled=locked||busy,run=task?.run;
  const refresh=async()=>{try{setTasks(await store.list());}catch(error){setMessage(workflowMessage(error));}};
- const show=async(runId:string)=>{const value=await store.task(runId);if(!value)throw new Error('workflow_run_not_found');setTask(value);setRetryUnknown(false);setMode(value.input.mode);setMaxItems(value.input.settings.maxItems);setDifficulty(value.input.settings.difficulty);setExports(await store.listExports(runId));return value;};
+ const show=async(runId:string)=>{const value=await store.task(runId);if(!value)throw new Error('workflow_run_not_found');setTask(value);setOfflineRecognition(null);setRetryUnknown(false);setMode(value.input.mode);setMaxItems(value.input.settings.maxItems);setDifficulty(value.input.settings.difficulty);setExports(await store.listExports(runId));return value;};
  React.useEffect(()=>{void refresh();let closed=false,off:(()=>void)|undefined;
   void listen<{runId:string;progress:{stage:string;filename:string|null}}>('workflow-export-progress',event=>{
    if(event.payload.runId!==activeRun.current)return;
@@ -86,6 +88,12 @@ export function ClassWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
   {run&&<div aria-label="全班生成结果"><p>{task?.input.workspace.exam.name} · {task?.input.workspace.students.length} 人</p><p>状态：{({contentReady:'内容已就绪',partial:'部分完成',failed:'生成失败',cancelled:'已停止',recoverable:'待恢复'} as Record<string,string>)[run.state]??'处理中'}；有效条目 {run.items.filter(i=>i.status==='passed').length} 个；未覆盖目标 {run.assignments.reduce((sum,a)=>sum+a.uncoveredTargets.length,0)} 个；未覆盖原题 {new Set(run.assignments.flatMap(a=>a.uncoveredNumbers)).size} 道。</p>
    {!!task?.input.testScope&&<p>此为单题测试结果，不能作为全班 PDF 导出。</p>}
    <p>教师报告：{run.teacherReport?'已生成，导出时独立保存':'尚未完成'}</p>
+   {run.calls.some(c=>c.stage==='recognize'&&c.status==='completed')&&<button className="secondary small" disabled={disabled} onClick={()=>void withBusy(async()=>{
+    const saved=await store.task(run.runId);if(!saved?.run)throw new Error('workflow_run_not_found');
+    const result=await recheckSavedRecognition(saved.input,saved.run,id=>store.loadResponse(account.user.id,run.runId,id));setOfflineRecognition(result);
+    setMessage(`已离线复核 ${result.replayed} 条已保存识题回包：${result.usableNumbers.length} 道原题有可靠文字，${result.unresolvedNumbers.length} 道仍需核查。未调用模型，也未修改原任务。`);
+   })}>离线复核已保存识题</button>}
+   {offlineRecognition&&<p className="help">可靠原题号：{offlineRecognition.usableNumbers.join('、')||'暂无'}；仍需核查：{offlineRecognition.unresolvedNumbers.join('、')||'无'}。这只是已保存识题回包的复核，不代表听写或补练已生成。</p>}
    {!!run.skipped.length&&<details open><summary>失败与未覆盖原题</summary><ul>{run.skipped.map((s,i)=><li key={i}>原第 {s.sourceNumbers.join('、')} 题：{failureMessages[s.reason]??'此项未通过检查'}</li>)}</ul></details>}
    {!['contentReady','partial','failed'].includes(run.state)&&!task?.input.testScope&&<div>
     <label><input type="checkbox" aria-label="全班允许重试未知请求" checked={retryUnknown} onChange={e=>setRetryUnknown(e.target.checked)} disabled={disabled}/>允许重试未知请求（可能重复消耗模型额度）</label>

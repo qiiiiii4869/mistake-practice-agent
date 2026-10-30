@@ -40,6 +40,7 @@ export function workflowMessage(error:unknown):string{
     workflow_invalid_question_scope:'原题号范围与已导入成绩不一致，或存在重复题号；尚未调用模型，请刷新考试后重试。',
     account_invalid_response:'账号服务返回格式不符合当前版本，请检查服务版本。',invalid_model_request:'试卷或生成请求未通过本机检查，尚未发送该次模型请求。',
     workflow_failed:'生成在准备阶段未完成，请查看本机任务记录定位具体原因。',
+    workflow_saved_recognition_missing:'已保存的识题回包不足，已停止离线复核；不会自动重新调用模型。',
     model_privacy_blocked:'题干或资料包含学生姓名，已拦截模型请求。',invalid_input:'测试参数不符合限制，请核对题号与页数。',
     model_network_failed:'模型连接失败，已停止本批调用。',workflow_release_pending:'本机 Key 已清理，但云端预占释放尚未确认。'} as Record<string,string>)[code]??`本次未完成（${/^[a-z_]+$/.test(code)?code:'请求失败'}）。`;
 }
