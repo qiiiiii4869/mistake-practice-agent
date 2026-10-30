@@ -130,7 +130,7 @@ export interface WorkflowRun {
   targets: StudentTargets[]; assignments: StudentAssignment[]; evidence: EvidenceSummary;
   advice: TeachingAdvice[]; skipped: { sourceNumbers: string[]; reason: string }[];
   teacherReport:ClassTeachingReport|null;
-  checkpoints: string[]; errorCode?: string;
+  checkpoints: string[]; errorCode?: string;errorStage?:WorkflowState;
   analysisBatches?:string[][];verificationBatches?:string[][];
   validationAttempts: ValidationAttempt[];
   recognitionChecks:RecognitionCheck[];

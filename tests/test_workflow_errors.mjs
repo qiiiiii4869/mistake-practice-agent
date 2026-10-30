@@ -15,3 +15,7 @@ for(const code of ['workflow_invalid_question_scope','invalid_input','account_ne
  s.ports.authorize=async()=>{throw code;};s.ports.release=async()=>{releaseCount++;};
  const run=await runWorkflow(s);assert.equal(run.errorCode,code);assert.equal(run.state,'failed');assert.equal(run.calls.length,0);assert.equal(s.model.calls.length,0);assert.equal(releaseCount,1);
 });
+test('structural failure records its actual workflow stage without discarding saved calls',async()=>{
+ const s=await setupWorkflow();s.ports.prepareUnits=async()=>[{unitId:'bad',sourceNumbers:['1'],pageIds:['page-1'],stem:'',material:'',options:[],availability:'usable',alignmentStatus:'recognized_by_machine'}];
+ const run=await runWorkflow(s);assert.equal(run.errorCode,'workflow_invalid_output');assert.equal(run.errorStage,'recognizing');assert.equal(run.state,'failed');
+});

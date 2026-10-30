@@ -79,6 +79,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
   const cached = analysisKey && shape.hasTargets && (!current.checkpoints.length || current.analysisCacheHit) ? await ports.store.loadAnalysis(input.ownerId,analysisKey) : null;
   if (current.analysisCacheHit && !cached) throw new Error('workflow_analysis_cache_missing');
   delete current.errorCode;
+  delete current.errorStage;
   const actor = createWorkflowActor(input.mode);
   actor.start();
   const save = async () => { current.machineSnapshot = actor.getPersistedSnapshot(); await ports.store.save(input.ownerId,current); };
@@ -356,6 +357,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
   } catch (error) {
     const code = workflowErrorCode(error);
     current.errorCode = code;
+    current.errorStage=current.state;
     const event = code === 'workflow_cancelled' ? 'CANCEL' : ['workflow_request_timeout','workflow_deadline','workflow_network_error','workflow_storage_failed','workflow_unknown_call_requires_decision','workflow_result_missing','workflow_budget_estimate_exceeded','workflow_batch_input_exceeded','workflow_budget_exceeded'].includes(code) ? 'PAUSE' : 'FAIL';
     actor.send({ type: event }); current.state = actorState(actor);
     await save(); ports.onProgress?.(current.state);

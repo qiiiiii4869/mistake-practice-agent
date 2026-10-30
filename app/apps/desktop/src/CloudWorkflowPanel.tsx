@@ -12,8 +12,9 @@ import type {KnowledgeLibrary} from '../../../packages/knowledge/src';
 const stages:Partial<Record<WorkflowState,string>>={preflight:'预检',authorizing:'云端授权',rendering:'准备试卷',recognizing:'独立识题与核对',aligning:'题号对齐',
   extracting:'提炼知识句',retrieving:'检索可选资料',verifyingFacts:'事实核验',merging:'合并知识点',selectingTargets:'选择个人目标',clozing:'生成听写',validatingCloze:'独立盲填',
   generatingExercises:'生成补练',solving:'独立解题',validatingExercise:'题目校验',assembling:'个人分配',aggregatingEvidence:'统计教学证据',writingGuidance:'教学建议',validatingGuidance:'建议检查'};
-export function workflowMessage(error:unknown):string{
+export function workflowMessage(error:unknown,stage?:WorkflowState):string{
   const code=error instanceof Error?error.message:String(error);
+  if(code==='workflow_invalid_output'&&stage&&stages[stage])return `在${stages[stage]}阶段，返回数据未通过检查。已保存的回包和任务保留；可先查看结果或离线复核。`;
   return ({model_unconfigured:'云端尚未配置模型 Key，请由管理员保存云端配置。',account_service_failed:'账号服务器尚未支持新工作流接口，请先部署新版服务。',
     pdf_runtime_missing:'本机缺少 PDF 导出组件或系统中文字体，请使用包含导出组件的新版程序。',pdf_content_incomplete:'部分内容或教师报告未完成，尚不能导出全班文件。',
     pdf_export_busy:'已有 PDF 正在导出，请等待或停止当前导出。',pdf_cancelled:'已停止 PDF 导出，已有生成内容保留，可重试。',pdf_qa_failed:'PDF 检查未通过，尚未发布文件，可重试导出。',
@@ -98,7 +99,7 @@ export function CloudWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
       const run=await runWorkflow({input,ports,runId:requestKey,signal:signal.signal,resume:resuming,retryUnknownCalls:resuming&&retryUnknown,taskContext:{workspaceRevision:revision}});setResult(run);
       const saved=await store.task(requestKey);setRestored(saved);void refreshTasks();
       const passed=run.items.filter(item=>item.status==='passed').length;
-      setMessage(run.errorCode?workflowMessage(run.errorCode):run.state==='contentReady'?`测试内容已生成并校验，有效条目 ${passed} 个；任务已结束，本机 Key 已清理。`:`已有 ${passed} 个有效条目，部分个人目标未覆盖，请查看失败摘要；任务已结束，本机 Key 已清理。`);
+      setMessage(run.errorCode?workflowMessage(run.errorCode,run.errorStage):run.state==='contentReady'?`测试内容已生成并校验，有效条目 ${passed} 个；任务已结束，本机 Key 已清理。`:`已有 ${passed} 个有效条目，部分个人目标未覆盖，请查看失败摘要；任务已结束，本机 Key 已清理。`);
     }catch(error){setMessage(workflowMessage(error));}
     finally{controller.current=null;setBusy(false);onBusy(false);void account.refresh();void refreshTasks();}
   }

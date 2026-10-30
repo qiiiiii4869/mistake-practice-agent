@@ -5,6 +5,7 @@ import {cloudWorkflowPorts,recognizeWorkflowUnits} from '../app/packages/agent/s
 import {mockWorkflowModel,workflowWorkspace} from './workflow_fixture.mjs';
 import {transcriptionKey,recheckSavedRecognition} from '../app/packages/agent/src/workflow/recognition.ts';
 import {validateUnits} from '../app/packages/agent/src/workflow/validators.ts';
+import {setupWorkflow} from './workflow_fixture.mjs';
 const jobId='00000000-0000-4000-8000-000000000002';
 async function context(change){
   const input=await freezeInput({ownerId:'cloud-synthetic-owner',workspace:workflowWorkspace(),mode:'dictation',testScope:{questionNumbers:['2']}});
@@ -126,7 +127,7 @@ test('missing global warnings and empty absent-question placeholders preserve tw
 test('malformed known OCR entry remains isolated without erasing reliable adjacent questions',async()=>{
  const input=await freezeInput({ownerId:'owner',workspace:workflowWorkspace(),mode:'dictation'});
  const units=await recognizeWorkflowUnits(input,async()=>({questions:[{number:'1',paragraphs:['原题完整正文'],confidence:'high'},{number:'2',paragraphs:['不可靠格式'],confidence:'unknown'}]}));
- assert.equal(units.find(u=>u.sourceNumbers.includes('1')).availability,'usable');assert.equal(units.find(u=>u.sourceNumbers.includes('2')).availability,'isolated');
+ assert.equal(units.find(u=>u.sourceNumbers.includes('1')).availability,'usable');assert.equal(units.some(u=>u.sourceNumbers.includes('2')),false);
 });
 test('provided global warning and differing scientific content still prevent OCR acceptance',async()=>{
  const input=await freezeInput({ownerId:'owner',workspace:workflowWorkspace(),mode:'dictation',testScope:{questionNumbers:['2']}});
@@ -140,6 +141,36 @@ test('offline receipt recheck uses only saved responses, preserves old task and 
  const result=await recheckSavedRecognition(input,run,async()=>{loaded++;return {value:{questions:[{number:'1',paragraphs:['第一题正文'],confidence:'high'},{number:'2',paragraphs:['第二题正文'],confidence:'high'}]}};});
  assert.equal(loaded,2);assert.deepEqual(result.usableNumbers,['1','2']);assert.deepEqual(result.unresolvedNumbers,[]);assert.deepEqual(run,before);
  await assert.rejects(recheckSavedRecognition(input,run,async()=>null),/workflow_result_missing/);
+});
+test('blank and explicit absent-page metadata never creates empty SourceUnits or cross-page duplicates',async()=>{
+ const w=workflowWorkspace();w.paper.pages.push({...w.paper.pages[0],id:'page-2'});
+ const input=await freezeInput({ownerId:'owner',workspace:w,mode:'dictation'});
+ const units=await recognizeWorkflowUnits(input,async(stage,data)=>({questions:data.pageId==='page-1'?
+  [{number:'1',paragraphs:['第一题可靠正文'],confidence:'high'},{number:'2',paragraphs:['',''],confidence:'low'}]:
+  [{number:'1',paragraphs:['图片中未找到题号1的正文。'],confidence:'low'},
+   {number:'2',paragraphs:['第二题可靠正文'],confidence:'high'}]}));
+ assert.equal(units.length,2);assert(units.every(u=>u.availability==='usable'&&u.pageIds.length===1));assert.doesNotThrow(()=>validateUnits(units,input));
+ for(const placeholder of [['________'],['',''],['图示和表格区域全部跳过，未读取到题号2的题干及各小问正文。']]){
+  const only=await recognizeWorkflowUnits(input,async()=>({questions:[{number:'2',paragraphs:placeholder,confidence:'low'}]}));
+  assert.equal(only.length,0);assert.doesNotThrow(()=>validateUnits(only,input));
+ }
+});
+test('malformed empty OCR candidate cannot abort the runner before good originals are analyzed',async()=>{
+ const s=await setupWorkflow(),prior=s.model.call.bind(s.model);s.model.call=async(request,signal)=>request.stage==='recognize'?
+  {value:{questions:[{number:'1',paragraphs:['第一题清晰文字'],confidence:'high'},{number:'2',paragraphs:['',''],confidence:'medium'}]},usage:{totalTokens:5}}:prior(request,signal);
+ s.ports.prepareUnits=(input,signal,invoke,report)=>recognizeWorkflowUnits(input,invoke,[],report);
+ const run=await runWorkflow(s);assert.equal(run.state,'partial',run.errorCode);assert.equal(run.errorCode,undefined);assert.equal(run.units.length,1);
+ assert.equal(run.units[0].sourceNumbers[0],'1');assert(run.checkpoints.includes('recognition'));assert(run.calls.some(c=>c.stage==='extract'));
+ assert(run.assignments.some(a=>a.uncoveredNumbers.includes('2')));
+});
+test('repeated known question-number heading and ratio glyphs align without altering scientific numbers',async()=>{
+ const input=await freezeInput({ownerId:'owner',workspace:workflowWorkspace(),mode:'dictation',testScope:{questionNumbers:['2']}});
+ let calls=0;const units=await recognizeWorkflowUnits(input,async()=>({questions:[{number:'2',paragraphs:[++calls===1?'观察到比例为3∶1。':'2. 观察到比例为3：1。'],confidence:'high'}]}));
+ assert.equal(calls,2);assert.equal(units[0].availability,'usable');assert.equal(units[0].stem,'观察到比例为3∶1。');
+ for(const text of ['3.5 mL液体','2. 5 mL液体','2∶1液体比例','结果不支持该机制']){
+  let reads=0;const conflict=await recognizeWorkflowUnits(input,async()=>({questions:[{number:'2',paragraphs:[++reads===1?'5 mL液体':reads===2?text:'6 mL液体'],confidence:'high'}]}));
+  assert.equal(conflict[0].availability,'isolated');
+ }
 });
 test('missing or low-confidence selected text cannot be promoted to usable by only one confident reading',async()=>{
   const input=await freezeInput({ownerId:'owner',workspace:workflowWorkspace(),mode:'dictation',testScope:{questionNumbers:['2']}}),logs=[];let calls=0;

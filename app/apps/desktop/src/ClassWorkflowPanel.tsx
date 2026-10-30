@@ -67,7 +67,7 @@ export function ClassWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
   const result=await runWorkflow({input,ports,runId,signal:controller.current!.signal,resume:resuming,retryUnknownCalls:resuming&&retryUnknown,taskContext:{workspaceRevision:revision}});
   await show(runId);setRetryUnknown(false);
   if(result.state==='contentReady'&&!result.errorCode&&!controller.current!.signal.aborted)await exported(runId);
-  else setMessage(result.errorCode?workflowMessage(result.errorCode):'部分内容未通过检查，已保存结果与未覆盖项，尚未导出或结算次数。');
+  else setMessage(result.errorCode?workflowMessage(result.errorCode,result.errorStage):'部分内容未通过检查，已保存结果与未覆盖项，尚未导出或结算次数。');
  });}
  const canExport=!!run&&run.state==='contentReady'&&run.executionMode==='real'&&!task?.input.testScope;
  return <section className="card" aria-label="全班练习与教师报告">

@@ -5,17 +5,32 @@ import type {FrozenInput,InvokeModel,RecognitionCheck,RecognitionReason,SourceUn
 interface Question{number:string;stem:string;confidence:'high'|'low';warnings:string[]}
 interface Reading{questions:Question[];warnings:string[];valid:boolean;attempt:number}
 
+function absentTranscription(value:string,number:string):boolean{
+  const body=value.trim();if(!body||/^[_＿—–-]+$/.test(body))return true;
+  // Narrow provider metadata forms, not a heuristic for biological content.
+  const compact=body.replace(/\s/g,'').replace(/[。.]$/,'');
+  return compact===`图片中未找到题号${number}的正文`
+    ||compact===`图示和表格区域全部跳过，未读取到题号${number}的题干及各小问正文`;
+}
+
 export function transcriptionKey(value:string):string{
   // Normalize typography, never remove words, signs, units or numeric values.
   const key=value.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹₀-₉]/gu,c=>`${'⁰¹²³⁴⁵⁶⁷⁸⁹'.includes(c)?'^':'_'}(${c.normalize('NFKC')})`)
     .normalize('NFKC').replace(/\r\n?/g,'\n').replace(/(?<=\d)[ \t]+(?=\d)/g,'<digit-gap>').replace(/[“”]/g,'"').replace(/[‘’]/g,"'")
-    .replace(/，/g,',').replace(/。/g,'.').replace(/；/g,';').replace(/：/g,':')
+    .replace(/，/g,',').replace(/。/g,'.').replace(/；/g,';').replace(/[：∶]/g,':')
     .replace(/(^|[\s。；;])([A-H])[.、:)]\s*/g,'$1$2.').replace(/[_＿]{2,}/g,'__').replace(/\s/g,'');
   // Diagram placement has no meaning in this text-only workflow. Only a
   // two-ratio interval explicitly followed by “之间” normalizes its range mark;
   // scalar minus signs, values, inequality signs and diagram labels stay distinct.
   return key.replace(/如(?:上|下)?图所示/g,'如图所示')
     .replace(/(\d+(?:\.\d+)?:\d+(?:\.\d+)?)[~\-–—](\d+(?:\.\d+)?:\d+(?:\.\d+)?)(?=之间)/g,'$1~$2');
+}
+function questionKey(number:string,stem:string):string{
+  const id=number.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  // The known printed item number may be repeated at the start by OCR.
+  // A numbered heading is formatting; a decimal/scientific quantity is not.
+  const heading=new RegExp(`^\\s*(?:第\\s*${id}\\s*题[：:、.]?\\s*|${id}[.．]\\s+(?=[^\\s\\d]))`);
+  return transcriptionKey(stem.replace(heading,''));
 }
 function parse(value:unknown,allNumbers:string[],attempt:number):Reading{
   const v=object(value),warnings=list(v.warnings===undefined?[]:v.warnings,100,true).map(w=>sourceText(w,2000));
@@ -27,12 +42,14 @@ function parse(value:unknown,allNumbers:string[],attempt:number):Reading{
     if(!['high','low'].includes(String(x.confidence)))return invalid();
     // Some providers enumerate absent question numbers as low-confidence,
     // empty placeholders. They are not printed duplicates on another page.
-    if(x.confidence==='low'&&((Array.isArray(x.paragraphs)&&x.paragraphs.length===0)
-      ||x.paragraphs===undefined&&typeof x.stem==='string'&&!x.stem.trim()))return [];
+    if(x.confidence==='low'){
+      const raw=x.paragraphs===undefined?x.stem:Array.isArray(x.paragraphs)&&x.paragraphs.every(p=>typeof p==='string')?x.paragraphs.join('\n'):null;
+      if(typeof raw==='string'&&absentTranscription(raw,number))return [];
+    }
     // Body paragraphs exclude graphic captions and table regions. Legacy
     // responses may still use stem; never compare two contradictory versions.
     const stem=x.paragraphs===undefined?sourceText(x.stem):sourceText(list(x.paragraphs,80).map(v=>sourceText(v,8000)).join('\n'));
-    if(x.paragraphs!==undefined&&x.stem!==undefined&&transcriptionKey(sourceText(x.stem))!==transcriptionKey(stem))return invalid();
+    if(x.paragraphs!==undefined&&x.stem!==undefined&&questionKey(number,sourceText(x.stem))!==questionKey(number,stem))return invalid();
     return [{number,stem,confidence:x.confidence as 'high'|'low',
       warnings:x.warnings===undefined?[]:list(x.warnings,20,true).map(w=>sourceText(w,2000))}];
     }catch(error){if(!(error instanceof Error)||error.message!=='workflow_invalid_output')throw error;
@@ -77,7 +94,7 @@ export async function recognizeWorkflowUnits(input:FrozenInput,invoke:InvokeMode
       for(let a=0;a<reads.length;a++)for(let b=a+1;b<reads.length;b++){
         if(!trusted(reads[a],number,keepFirst)||!trusted(reads[b],number,keepFirst))continue;
         const x=matching(reads[a],number),y=matching(reads[b],number);
-        if(x.length===y.length&&transcriptionKey(x[0].stem)===transcriptionKey(y[0].stem))return [x[0],y[0]];
+        if(x.length===y.length&&questionKey(number,x[0].stem)===questionKey(number,y[0].stem))return [x[0],y[0]];
       }return null;
     };
     // One extra request per page, targeted to unresolved question numbers,
@@ -85,13 +102,17 @@ export async function recognizeWorkflowUnits(input:FrozenInput,invoke:InvokeMode
     const unresolved=numbers.filter(n=>!pair(n));
     if(unresolved.length)reads.push(await read(3,unresolved));
     for(const number of numbers){
-      const matched=pair(number),present=reads.some(r=>matching(r,number).length),accepted=matched?.[0]??reads.flatMap(r=>matching(r,number))[0];
+      const matched=pair(number),observed=reads.flatMap(r=>matching(r,number));
+      const accepted=matched?.[0]??observed.find(q=>q.stem.trim());
+      const present=!!accepted;
       report({sourceNumbers:[number],pageIndex:pageIndex+1,status:matched?'usable':present?'isolated':'missing',
         reason:matched?(matched[0].stem===matched[1].stem?'matched':'format_only'):reason(reads,number,keepFirst),
         readings:reads.map(r=>({attempt:r.attempt,matches:matching(r,number).length,confidence:matching(r,number)[0]?.confidence??'missing',warningCount:warningsFor(r,number).length,valid:r.valid}))});
-      if(!present)continue;
+      // A malformed item's empty fallback is diagnostic-only. It cannot enter
+      // SourceUnit (which correctly requires text), or poison another page.
+      if(!accepted)continue;
       const previous=records.get(number);
-      if(previous){previous.pageIds.push(page.id);if(!matched||transcriptionKey(previous.stem)!==transcriptionKey(accepted.stem)){previous.availability='isolated';previous.alignmentStatus='ambiguous';}continue;}
+      if(previous){previous.pageIds.push(page.id);if(!matched||questionKey(number,previous.stem)!==questionKey(number,accepted.stem)){previous.availability='isolated';previous.alignmentStatus='ambiguous';}continue;}
       records.set(number,{unitId:`unit-${number}`,sourceNumbers:[number],pageIds:[page.id],stem:accepted.stem,material:'',options:[],
         availability:matched?'usable':'isolated',alignmentStatus:matched?'recognized_by_machine':'ambiguous'});
     }
