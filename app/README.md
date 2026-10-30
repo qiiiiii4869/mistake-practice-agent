@@ -1,5 +1,11 @@
 # Windows 桌面端
 
+## 知识句适配器（2026-10-30，开发模块）
+
+`packages/agent/src/workflow/factAdapters.ts` 的 `createFactAdapters` 返回 extracting/retrieving/verifyingFacts 三个注入接口，可交给 `createWorkflowHandlers`；实际模型、当前知识库修订号和本机检索由调用方提供。模型请求使用固定提示词和匿名DTO，每个可靠原题单元提炼1–3条待核对知识句；独立核对不传正确状态，引用必须来自该条本机命中。无知识库/无命中保留原卷模式，知识库版本改变停止。取消、额度、请求账本与预算复用现有runner。当前未接生成界面、真实模型或新计次。
+
+运行 `node tools/check_workflow_facts_real.mjs <当前账号workspace.sqlite路径>` 可复查25项协议断言，含听写/出题各有无库四种共同分析路径。只读真实成绩，知识句为批准方案中的公开示例，模型仅本地回调；不是实际识题、科学事实质量或完整生成/PDF验收。
+
 ## 双模式识题适配器（2026-10-29，尚未接入生成界面）
 
 `packages/agent/src/workflow/sourceAdapters.ts` 提供资源预检、文件展开、逐页双次识题与有限第三次复核的注入接口。对齐模块保留成绩题号，对不可靠读取、重复题号、失效排除规则及不完整跨页/共用材料作隔离；没有识别结果也不会删去原始失分目标。排除规则随内容冻结，改变规则会改变内容摘要。模型请求仅包含页面、允许题号和固定提示词，账号/学生名单不进入识题请求。
