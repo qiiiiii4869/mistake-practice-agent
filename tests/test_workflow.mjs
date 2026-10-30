@@ -170,7 +170,7 @@ test('request timeout pauses with unknown usage and never automatically retries'
 });
 test('budget pre-reservation stops before model invocation, unknown usage is not freed',async () => {
   const s = await setupWorkflow(); const run = await runWorkflow({...s,policy:{maxCalls:1}});
-  assert.equal(run.state,'failed'); assert.equal(run.errorCode,'workflow_budget_exceeded'); assert.equal(s.model.calls.length,1);
+  assert.equal(run.state,'recoverable'); assert.equal(run.errorCode,'workflow_budget_exceeded'); assert.equal(s.model.calls.length,1);
   const policy = estimateBudget('dictation',1,2);
   assert.equal(policy.maxOutputTokens,16384);
   const reasoning=reserveCall(policy,[],'verifyFact','hash',10,1,0,1);

@@ -63,7 +63,7 @@ export function registerReportRoutes(app,{db,authenticated,administrator,modelKe
       const user=db.prepare('SELECT * FROM users WHERE id=?').get(request.account.id);if(user.credits<1)fail('credits_exhausted',409);
       const now=Date.now(),jobId=randomUUID(),expires=now+2*3600000;
       const policy={maxCalls:body.requestedBudget.maxCalls,maxTokens:body.requestedBudget.maxTokens,
-        maxRunSeconds:body.requestedBudget.maxRunSeconds,maxOutputTokens:['report-prompts-v7','report-prompts-v8','report-prompts-v9','report-prompts-v10','report-prompts-v11'].includes(body.promptVersion)?16384:4096,maxInputBytes:32000,heartbeatSeconds:20};
+        maxRunSeconds:body.requestedBudget.maxRunSeconds,maxOutputTokens:['report-prompts-v7','report-prompts-v8','report-prompts-v9','report-prompts-v10','report-prompts-v11','report-prompts-v12'].includes(body.promptVersion)?16384:4096,maxInputBytes:32000,heartbeatSeconds:20};
       db.prepare("INSERT INTO generations VALUES(?,?,?,'reserved',?,?,NULL)").run(jobId,user.id,body.requestKey,now,expires);
       db.prepare('INSERT INTO report_runs(job_id,content_hash,mode,export_layout,workflow_version,prompt_version,policy_json,lease_until,heartbeat_at) VALUES(?,?,?,?,?,?,?,?,?)')
         .run(jobId,body.contentHash,body.mode,body.exportLayout,body.workflowVersion,body.promptVersion,JSON.stringify(policy),now+90000,now);

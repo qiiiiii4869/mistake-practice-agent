@@ -57,6 +57,36 @@ def main():
     expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('取消选择保存位置');assert page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model').length")==calls
     assert not errors,errors;page.close()
     print('PASS:',mode,layout,'whole-class scope, settings, teacher report, PDF-only retry/cancel, resource preflight and no deduction.')
+   page=browser.new_page();initial=workspace();base=initial['students'][0];q=base['questions'][0]
+   initial['students']=[{**base,'id':f'synthetic-{i}','name':f'合成学生{i}','questions':[{**q,'number':str(j+1),'label':str(j+1),'score':0,'result':'incorrect'} for j in range(13)]} for i in range(50)]
+   initial['paper']={'pages':[{**initial['paper']['pages'][0],'id':f'page-{i+1}'} for i in range(4)],'questions':[]}
+   batch=r"""
+const batchPrior=window.__TAURI_INTERNALS__.invoke;
+window.__TAURI_INTERNALS__.invoke=async(command,args)=>{
+ if(command==='workflow_call_model'){
+  const r=args.request,d=r.data;
+  if(r.stage==='recognize'){
+   testCloudCalls.push({command,args:structuredClone(args)});
+   const page=Number(d.pageId.split('-').at(-1))-1;
+   return {value:{questions:Array.from({length:13},(_,i)=>i+1).filter(n=>(n-1)%4===page).map(n=>({number:String(n),stem:'说明光合作用的能量转化。',confidence:'high'})),warnings:[]},usage:{totalTokens:10}};
+  }
+  if(d.groups){
+   testCloudCalls.push({command,args:structuredClone(args)});
+   return {value:{groups:d.groups.map(g=>r.stage==='extract'?{unitId:g.unitId,facts:[{knowledgePoint:'光合作用',context:'',completeStatement:'光合作用将光能转化为化学能。',conditions:[],candidateAnswers:['化学能']}]}:{unitId:g.unitId,checks:g.facts.map(()=>({accurate:true,supported:true,inScope:true}))})},usage:{totalTokens:10}};
+  }
+ }
+ return batchPrior(command,args);
+};
+"""
+   page.add_init_script(MOCK+'\nwindow.testStored='+json.dumps({'revision':1,'snapshot':initial})+';'+EXTRA+CLOUD+CLASS+batch)
+   page.goto(f'http://127.0.0.1:{server.server_port}/');page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告',exact=True).click()
+   panel=page.get_by_role('region',name='全班练习与教师报告',exact=True);panel.get_by_role('button',name='生成并导出 PDF',exact=True).click()
+   expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('已保存',timeout=20000)
+   request=page.evaluate("testCloudCalls.find(c=>c.command==='workflow_begin').args.request")
+   assert request['counts']=={'pages':4,'units':13,'students':50};assert request['requestedBudget']['maxCalls']==200
+   assert page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model'&&c.args.request.stage==='extract').length")==3
+   assert len(page.evaluate('Object.values(testWorkflowDb.tasks)[0].run.facts[0].sourceNumbers'))==13
+   assert page.evaluate('testAccount.credits')==10;page.close();print('PASS: 50 students / 13 original numbers / 4 pages reaches PDF delivery with three shared analysis batches.')
    browser.close()
  finally:server.shutdown();server.server_close()
 if __name__=='__main__':main()

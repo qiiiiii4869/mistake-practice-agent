@@ -1,7 +1,7 @@
 import type { Workspace } from '../../../core/src/index.ts';
 
 export const WORKFLOW_VERSION = 'report-workflow-v1';
-export const PROMPT_VERSION = 'report-prompts-v11';
+export const PROMPT_VERSION = 'report-prompts-v12';
 export type GenerationMode = 'dictation' | 'exercise';
 export type ExecutionMode = 'mock' | 'real';
 export type WorkflowState = 'idle' | 'preflight' | 'authorizing' | 'rendering' | 'recognizing' | 'aligning'
@@ -131,6 +131,7 @@ export interface WorkflowRun {
   advice: TeachingAdvice[]; skipped: { sourceNumbers: string[]; reason: string }[];
   teacherReport:ClassTeachingReport|null;
   checkpoints: string[]; errorCode?: string;
+  analysisBatches?:string[][];verificationBatches?:string[][];
   validationAttempts: ValidationAttempt[];
   recognitionChecks:RecognitionCheck[];
   frame?:{id:string;callStart:number;data:CheckpointData};

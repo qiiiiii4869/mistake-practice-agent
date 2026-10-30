@@ -10,6 +10,7 @@ import { templateClassTeachingReport,validateClassTeachingReport,teachingReportI
 import { teachingEvidence,classOverview } from './teachingEvidence.ts';
 import type { BudgetPolicy, FactCandidate, FrozenInput, InvokeModel, KnowledgeFact, ModelResponse, WorkflowPorts, WorkflowRun, WorkflowState,WorkflowTaskContext,CheckpointData } from './types.ts';
 import { factPassed, invalid, list, normalize, object, validateEvidence, validateFactCheck, validateFacts, validateUnits,validationReason } from './validators.ts';
+import {planBatches,remainingFits,sourceData,extractBatch,verificationData,verifyBatch} from './batchAnalysis.ts';
 
 export interface RunOptions {
   input: FrozenInput; ports: WorkflowPorts; runId?: string; signal?: AbortSignal;
@@ -36,7 +37,8 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
   await assertFrozen(input);
   if (ports.model.executionMode === 'real' && (!ports.authorize || !ports.release)) throw new Error('workflow_authorization_required');
   if (!/^[\w-]{1,100}$/.test(runId)) throw new Error('workflow_invalid_run_id');
-  const shape = preflight(input), estimated = estimateBudget(input.mode,shape.hasTargets ? shape.pages : 0,shape.hasTargets ? shape.units : 0);
+  const shape = preflight(input),batched=!input.testScope&&shape.units>6;
+  const estimated = estimateBudget(input.mode,shape.hasTargets ? shape.pages : 0,shape.hasTargets ? shape.units : 0,batched);
   const policy = { ...estimated, ...options.policy };
   for (const [key,value] of Object.entries(policy)) {
     if (!Number.isSafeInteger(value) || value < (key === 'maxNetworkRetries' ? 0 : 1) || value > estimated[key as keyof BudgetPolicy])
@@ -200,7 +202,16 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
         current.skipped.push({ sourceNumbers: [number], reason: shape.hasTargets ? 'recognition_missing' : 'no_targets_no_model_calls' });
     });
     await next('extracting');
+    if(batched&&!cached){
+      await checkpoint('analysis-batch-plan',async()=>{
+        const size=(units:typeof current.units)=>new TextEncoder().encode(JSON.stringify(modelRequest('extract',{subject:input.workspace.exam.subjectName,contentId:'extract-batch-plan',groups:units.map(u=>({unitId:u.unitId,original:sourceData(u)}))}))).length;
+        current.analysisBatches=planBatches(current.units.filter(u=>u.availability==='usable'),size,current.policy.maxInputBytes);
+        remainingFits(current,4*current.analysisBatches.length+12*shape.units+2);
+      });
+      for(const [i,ids]of current.analysisBatches!.entries())await checkpoint(`extract-batch:${i}`,()=>extractBatch(current,ids,invoke,input.workspace.exam.subjectName));
+    }
     for (const unit of current.units.filter(u => !cached && u.availability === 'usable')) {
+      if(batched)continue;
       await checkpoint(`extract:${unit.unitId}`,async () => {
         for (let attempt = 0; attempt < 2; attempt++) {
           try {
@@ -222,7 +233,18 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
       });
     }
     await next('verifyingFacts');
+    if(batched&&!cached){
+      await checkpoint('verification-batch-plan',async()=>{
+        const units=current.units.filter(u=>current.draftFacts[u.unitId]?.length);
+        const size=(values:typeof current.units)=>new TextEncoder().encode(JSON.stringify(modelRequest('verifyFact',{subject:input.workspace.exam.subjectName,contentId:'verify-batch-plan',groups:verificationData(current,values.map(u=>u.unitId))}))).length;
+        current.verificationBatches=planBatches(units,size,current.policy.maxInputBytes);
+        const facts=Object.values(current.draftFacts).reduce((n,f)=>n+f.length,0);
+        remainingFits(current,3*current.verificationBatches.length+4*facts+2);
+      });
+      for(const [i,ids]of current.verificationBatches!.entries())await checkpoint(`verify-batch:${i}`,()=>verifyBatch(current,ids,invoke,input.workspace.exam.subjectName,save));
+    }
     for (const unit of current.units.filter(u => !cached && current.draftFacts[u.unitId])) {
+      if(batched)continue;
       await checkpoint(`verify:${unit.unitId}`,async () => {
         const id=(slot:number)=>`${unit.unitId}-fact-${slot}`;
         let pending=current.draftFacts[unit.unitId].map((fact,index)=>({fact,slot:index+1}))
@@ -282,6 +304,11 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
       }
     };
     const targetIds = new Set(current.targets.flatMap(t => t.selectedTargets));
+    if(batched){
+      const pending=current.facts.filter(f=>targetIds.has(f.factId)&&!current.checkpoints.includes(`item:${f.factId}`));
+      const remaining=pending.reduce((sum,f)=>sum+Math.max(0,4-current.calls.filter(c=>c.scopeId===f.factId&&c.attempt===1).length),0);
+      remainingFits(current,remaining+Math.max(0,2-current.calls.filter(c=>c.stage==='guidance'&&c.attempt===1).length));
+    }
     for (const fact of current.facts.filter(f => targetIds.has(f.factId))) {
       await checkpoint(`item:${fact.factId}`,async () => {
         const scopedInvoke: InvokeModel = (stage,data) => invoke(stage,{ ...data,contentId: fact.factId });
@@ -328,7 +355,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
   } catch (error) {
     const code = error instanceof Error ? error.message : 'workflow_failed';
     current.errorCode = /^(workflow_|model_|paper_)[a-z_]+$/.test(code) ? code : 'workflow_failed';
-    const event = code === 'workflow_cancelled' ? 'CANCEL' : ['workflow_request_timeout','workflow_deadline','workflow_network_error','workflow_storage_failed','workflow_unknown_call_requires_decision','workflow_result_missing'].includes(code) ? 'PAUSE' : 'FAIL';
+    const event = code === 'workflow_cancelled' ? 'CANCEL' : ['workflow_request_timeout','workflow_deadline','workflow_network_error','workflow_storage_failed','workflow_unknown_call_requires_decision','workflow_result_missing','workflow_budget_estimate_exceeded','workflow_batch_input_exceeded','workflow_budget_exceeded'].includes(code) ? 'PAUSE' : 'FAIL';
     actor.send({ type: event }); current.state = actorState(actor);
     await save(); ports.onProgress?.(current.state);
   } finally {

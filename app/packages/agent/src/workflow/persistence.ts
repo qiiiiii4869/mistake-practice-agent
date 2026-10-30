@@ -28,6 +28,12 @@ export async function validateStoredTask(task:StoredTask,ownerId:string,runId:st
     await validateStoredTask({...task,run:{...r,...r.frame.data,frame:undefined}},ownerId,runId);}
   const ids=new Set();for(const c of r.calls){if(ids.has(c.callId)||!['pending','completed','unknown'].includes(c.status)||!Number.isSafeInteger(c.reservedTokens)||c.reservedTokens<0||(c.usage!==null&&(!Number.isSafeInteger(c.usage)||c.usage<0)))invalid();ids.add(c.callId);}
   validateUnits(r.units,task.input);for(const facts of Object.values(r.draftFacts))validateFacts({facts});
+  for(const batches of [r.analysisBatches,r.verificationBatches])if(batches!==undefined){
+    if(!Array.isArray(batches)||batches.length>80)invalid();const used=new Set<string>();
+    for(const group of batches){if(!Array.isArray(group)||!group.length||group.length>6)invalid();
+      for(const id of group){if(typeof id!=='string'||used.has(id)||!r.units.some(u=>u.unitId===id&&u.availability==='usable'))invalid();used.add(id);}
+    }
+  }
   for(const refs of Object.values(r.unitEvidence))validateEvidence(refs);
   const factIds=new Set();for(const f of r.facts){validateFacts({facts:[f]});validateFactCheck(f.factCheck);validateEvidence(f.evidenceRefs);if(factIds.has(f.factId)||!factPassed(f))invalid();factIds.add(f.factId);}
   const itemIds=new Set();for(const i of r.items){const f=r.facts.find(f=>f.factId===i.factId);if(!f||itemIds.has(i.itemId)||i.mode!==r.mode)invalid();itemIds.add(i.itemId);

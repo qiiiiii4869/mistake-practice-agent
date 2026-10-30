@@ -14,7 +14,7 @@ test('biology methods are selected by subject and never imposed on other subject
   assert(!modelRequest(stage,{subject:'物理'}).instruction.includes(methods[stage]));
   assert(!modelRequest(stage,{}).instruction.includes(methods[stage]));
  }
- assert.equal(PROMPT_VERSION,'report-prompts-v11');
+ assert.equal(PROMPT_VERSION,'report-prompts-v12');
 });
 
 for(const mode of ['dictation','exercise'])test(`biology ${mode} carries fixed method through the real runner DTO without leaking independent answers`,async()=>{
