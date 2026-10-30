@@ -40,6 +40,8 @@ export async function batchFixture({mode='dictation',change,store=new MemoryWork
 test('15 originals / 4 pages fit the explicitly authorized 300-call ceiling; 301st call is blocked',()=>{
  assert.equal(estimateBudget('dictation',4,13).maxCalls,230);
  const policy=estimateBudget('dictation',4,15,true);assert.equal(policy.maxCalls,300);
+ assert.equal(estimateBudget('dictation',4,20,true).maxCalls,300);
+ assert.throws(()=>estimateBudget('dictation',4,21,true),/workflow_initial_budget_exceeded/);
  assert.throws(()=>estimateBudget('dictation',30,80,true),/workflow_initial_budget_exceeded/);
  const calls=Array.from({length:299},()=>({usage:1,attempt:1,stage:'extract',scopeId:'other'}));
  calls.push(reserveCall(policy,calls,'cloze','hash',10,1,0,1,'last'));
@@ -52,12 +54,13 @@ for(const mode of ['dictation','exercise'])test(`third-week scale: 50 students /
  assert.equal(run.facts.length,15);assert.equal(run.evidence.totalQuestions,15);assert.equal(run.evidence.mappedQuestions,15);
  assert.equal(run.assignments.length,50);assert(run.assignments.every(a=>a.status==='ready'));assert(run.teacherReport);
  assert.deepEqual(run.analysisBatches.map(g=>g.length),[6,6,3]);
+ assert.deepEqual(run.verificationBatches.map(g=>g.length),[2,2,2,2,2,2,2,1]);
 });
 for(const mode of ['dictation','exercise'])test(`50 students, 13 originals / ${mode}: shared batches, full mapping and teacher report`,async()=>{
  const s=await batchFixture({mode}),run=await runWorkflow(s);
  assert.equal(run.state,'contentReady',run.errorCode);assert.equal(run.facts.length,13);assert.equal(run.assignments.length,50);assert(run.assignments.every(a=>a.status==='ready'));
  assert(run.teacherReport);assert.deepEqual(run.analysisBatches.map(g=>g.length),[6,6,1]);
- assert.equal(s.model.calls.filter(r=>r.stage==='extract').length,3);assert.equal(s.model.calls.filter(r=>r.stage==='verifyFact').length,3);
+ assert.equal(s.model.calls.filter(r=>r.stage==='extract').length,3);assert.equal(s.model.calls.filter(r=>r.stage==='verifyFact').length,7);
  assert.equal(run.calls.filter(r=>r.stage==='guidance').length,1);assert(run.calls.length<=200);
  assert.equal(run.evidence.totalQuestions,13);assert.equal(run.evidence.mappedQuestions,13);
  for(const student of s.input.workspace.students){assert(!JSON.stringify(s.model.calls).includes(student.name));assert(!JSON.stringify(s.model.calls).includes(`"${student.id}"`));}
@@ -120,7 +123,24 @@ test('cancel after a committed batch response reuses it on resume without re-rea
  store.completeCall=async(owner,run,id,response)=>{await complete(owner,run,id,response);if(run.calls.at(-1).stage==='verifyFact'&&!cancelled){cancelled=true;controller.abort();}};
  const s=await batchFixture({store}),first=await runWorkflow({...s,runId:'resume-batch',signal:controller.signal});assert.equal(first.state,'cancelled');
  const second=await runWorkflow({...s,runId:'resume-batch',resume:true});assert.equal(second.state,'contentReady',second.errorCode);assert.equal(second.facts.length,13);
- assert.equal(s.model.calls.filter(c=>c.stage==='verifyFact').length,3);assert.equal(new Set(second.facts.map(f=>f.factId)).size,13);
+ assert.equal(s.model.calls.filter(c=>c.stage==='verifyFact').length,7);assert.equal(new Set(second.facts.map(f=>f.factId)).size,13);
+});
+for(const code of ['model_output_truncated','model_service_unavailable','model_response_aborted'])test(`${code} pauses without an automatic retry; explicit resume retains passed facts and original counters`,async()=>{
+ let interrupted=false;
+ const s=await batchFixture({change:(request,response)=>{
+  if(request.stage==='verifyFact'&&request.data.groups[0].unitId==='unit-3'&&!interrupted){interrupted=true;throw new Error(code);}
+  return response;
+ }}),runId=`pause-${code}`;
+ const first=await runWorkflow({...s,runId});assert.equal(first.state,'recoverable');assert.equal(first.errorCode,code);assert.equal(first.errorStage,'verifyingFacts');
+ assert.equal(first.facts.length,2);assert.equal(first.calls.length,5);assert.equal(first.calls.at(-1).status,'unknown');assert.equal(first.calls.at(-1).usage,null);
+ assert(first.calls.at(-1).reservedTokens>=16384);assert.equal(s.model.calls.filter(c=>c.stage==='verifyFact').length,2);
+ const calls=s.model.calls.length;
+ await assert.rejects(()=>runWorkflow({...s,runId,resume:true}),/workflow_unknown_call_requires_decision/);assert.equal(s.model.calls.length,calls);
+ const resumed=await runWorkflow({...s,runId,resume:true,retryUnknownCalls:true});assert.equal(resumed.state,'contentReady',resumed.errorCode);assert.equal(resumed.facts.length,13);
+ assert.equal(resumed.policy.maxCalls,first.policy.maxCalls);assert.equal(resumed.startedAt,first.startedAt);
+ assert.equal(s.model.calls.filter(c=>c.stage==='extract').length,3);
+ assert.equal(s.model.calls.filter(c=>c.stage==='verifyFact'&&c.data.groups[0].unitId==='unit-1').length,1);
+ assert.equal(resumed.calls[4].status,'unknown');assert.equal(resumed.calls[5].attempt,2);assert.equal(resumed.calls[5].status,'completed');
 });
 test('batched task plans and final results survive SQLite reopen without resetting calls',async()=>{
  const dir=resolve('tmp/workflow-batch-persistence/'+randomUUID());await mkdir(dir,{recursive:true});const database=join(dir,'workflow.sqlite');

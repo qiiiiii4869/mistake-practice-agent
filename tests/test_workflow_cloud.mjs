@@ -20,6 +20,7 @@ async function context(change){
     if(command==='workflow_call_model'){
       assert.ok(keyPresent);assert.equal(args.jobId,jobId);
       const r=args.request;
+      if(r.stage==='verifyFact'&&change?.verifyFailure)throw change.verifyFailure;
       if(change?.hang){change.started?.();return new Promise((_resolve,reject)=>{aborted=()=>reject('workflow_cancelled');});}
       if(change?.authFailure)throw 'model_auth_failed';
       if(r.stage==='recognize')return {value:{questions:[{number:'2',stem:'说明细胞分化的实质。',confidence:'high'}],warnings:[]},usage:{totalTokens:20}};
@@ -27,7 +28,8 @@ async function context(change){
     }
     throw new Error(`unexpected_${command}`);
   };
-  const ports=cloudWorkflowPorts({invoke,requestKey:jobId,revision:1,modelConfigVersion:'synthetic-version'});
+  const store=new MemoryWorkflowStore();if(change?.durable)store.durable=true;
+  const ports=cloudWorkflowPorts({invoke,requestKey:jobId,revision:1,modelConfigVersion:'synthetic-version',store});
   return {input,ports,requests,keyPresent:()=>keyPresent};
 }
 test('real cloud adapter authorizes, independently recognizes, validates and releases without exposing a key',async()=>{
@@ -47,6 +49,13 @@ test('failed cloud release still clears local credential and records release pen
 test('model authentication failure ends task and clears local credential',async()=>{
   const s=await context({authFailure:true}),run=await runWorkflow(s);assert.equal(run.state,'failed');assert.equal(run.errorCode,'model_auth_failed');assert.equal(s.keyPresent(),false);
   assert.equal(s.requests.find(r=>r.command==='workflow_end').args.outcome,'failed');
+});
+for(const code of ['model_output_truncated','model_service_unavailable','model_response_aborted'])test(`durable ${code} clears the key and suspends the original job without ending it`,async()=>{
+ const s=await context({verifyFailure:code,durable:true}),run=await runWorkflow(s);
+ assert.equal(run.state,'recoverable');assert.equal(run.errorCode,code);assert.equal(run.errorStage,'verifyingFacts');
+ assert.equal(run.calls.at(-1).status,'unknown');assert.equal(s.keyPresent(),false);
+ assert(s.requests.some(r=>r.command==='workflow_abort'));assert(!s.requests.some(r=>r.command==='workflow_end'));
+ assert.equal(s.requests.filter(r=>r.command==='workflow_call_model'&&r.args.request.stage==='verifyFact').length,1);
 });
 test('cancelling pending cloud request signals native abort before release and ignores late data',async()=>{
   let start;const ready=new Promise(r=>{start=r;});const s=await context({hang:true,started:start}),controller=new AbortController();

@@ -65,7 +65,14 @@ pub(crate) fn vision_payload(image:&str,numbers:&[String])->Result<Value,String>
 #[serde(rename_all="camelCase")]
 pub(crate) struct Usage { pub prompt_tokens:u64,pub completion_tokens:u64,pub total_tokens:u64 }
 pub(crate) fn response(body:Value,names:&[String])->Result<(Value,Usage),String> {
-    if body.pointer("/choices/0/finish_reason").and_then(Value::as_str)!=Some("stop") {return Err("model_output_truncated".into());}
+    match body.pointer("/choices/0/finish_reason").and_then(Value::as_str){
+        Some("stop")=>{},
+        Some("length")=>return Err("model_output_truncated".into()),
+        Some("insufficient_system_resource")=>return Err("model_service_unavailable".into()),
+        Some("aborted")=>return Err("model_response_aborted".into()),
+        Some("content_filter")=>return Err("model_output_filtered".into()),
+        _=>return Err("invalid_model_output".into()),
+    }
     let text=body.pointer("/choices/0/message/content").and_then(Value::as_str).filter(|s|!s.trim().is_empty()&&s.len()<=1024*1024).ok_or("invalid_model_output")?;
     let value:Value=serde_json::from_str(text).map_err(|_|"invalid_model_output")?;
     if !value.is_object(){return Err("invalid_model_output".into());}
@@ -82,5 +89,12 @@ mod tests {
     #[test]fn disallows_unknown_request_fields_and_answer_in_solve(){let mut r=request();r.data["answer"]=json!("2");assert!(payload(&r,&[]).is_err());}
     #[test]fn quota_and_errors_are_sanitized(){assert_eq!(status_error(402,&json!({"error":{"message":"secret"}})),"model_quota_exhausted");assert_eq!(status_error(429,&json!({})),"model_rate_limited");assert_eq!(status_error(401,&json!({})),"model_auth_failed");}
     #[test]fn validates_json_finish_reason_and_usage(){let body=json!({"choices":[{"finish_reason":"stop","message":{"content":"{\"answer\":\"2\"}"}}],"usage":{"total_tokens":12}});let (v,u)=response(body.clone(),&[]).unwrap();assert_eq!(v["answer"],"2");assert_eq!(u.total_tokens,12);let mut b=body;b["choices"][0]["finish_reason"]=json!("length");assert_eq!(response(b,&[]).err().unwrap(),"model_output_truncated");}
+    #[test]fn distinguishes_length_resource_abort_filter_and_invalid_completion_reasons(){
+        for (reason,expected) in [(json!("length"),"model_output_truncated"),(json!("insufficient_system_resource"),"model_service_unavailable"),
+          (json!("aborted"),"model_response_aborted"),(json!("content_filter"),"model_output_filtered"),(json!("tool_calls"),"invalid_model_output"),(Value::Null,"invalid_model_output")]{
+          let body=json!({"choices":[{"finish_reason":reason,"message":{"content":"{\"answer\":\"2\"}","reasoning_content":"private unfinished reasoning"}}]});
+          assert_eq!(response(body,&[]).err().unwrap(),expected);
+        }
+    }
     #[test]fn vision_only_accepts_local_raster_data_and_known_numbers(){let p=vision_payload("data:image/png;base64,aGVsbG8=",&["1".into()]).unwrap();assert_eq!(p["model"],MODEL);assert_eq!(p["messages"][1]["content"][1]["type"],"image_url");assert!(vision_payload("https://example.test/photo.jpg",&["1".into()]).is_err());assert!(vision_payload("data:image/svg+xml;base64,aGVsbG8=",&["1".into()]).is_err());assert!(vision_payload("data:image/png;base64,aGVsbG8=",&[]).is_err());}
 }

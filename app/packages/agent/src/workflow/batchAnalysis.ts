@@ -2,11 +2,12 @@ import type {FactCandidate,KnowledgeFact,SourceUnit,WorkflowRun,InvokeModel} fro
 import {factPassed,invalid,list,object,validateFacts,validateFactCheck,validationReason} from './validators.ts';
 
 export const sourceData=(u:SourceUnit)=>({unitId:u.unitId,sourceNumbers:u.sourceNumbers,stem:u.stem,material:u.material,options:u.options});
-export function planBatches(units:SourceUnit[],size:(units:SourceUnit[])=>number,limit:number,preferredLimit=limit):string[][]{
+export function planBatches(units:SourceUnit[],size:(units:SourceUnit[])=>number,limit:number,preferredLimit=limit,maxUnits=6):string[][]{
+ if(!Number.isSafeInteger(maxUnits)||maxUnits<1||maxUnits>6)throw new Error('workflow_invalid_batch_plan');
  const result:string[][]=[];let group:SourceUnit[]=[];
  for(const unit of units){
   if(size([unit])>limit)throw new Error('workflow_batch_input_exceeded');
-  if(group.length&&(group.length===6||size([...group,unit])>preferredLimit)){result.push(group.map(u=>u.unitId));group=[];}
+  if(group.length&&(group.length===maxUnits||size([...group,unit])>preferredLimit)){result.push(group.map(u=>u.unitId));group=[];}
   group.push(unit);
  }if(group.length)result.push(group.map(u=>u.unitId));return result;
 }

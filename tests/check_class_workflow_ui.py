@@ -64,6 +64,14 @@ def main():
     panel.get_by_role('button',name='生成并导出 PDF',exact=True).click()
     expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('知识库检索词为空或超过100字',timeout=15000)
     assert page.evaluate('Object.values(testWorkflowDb.tasks).some(t=>t.run?.errorCode==="knowledge_invalid_query"&&t.run.errorStage==="retrieving")')
+    page.evaluate("() => {window.testCloudModelVersion='0123456789abcdf1';window.pausePrior=noFactsPrior;window.testInterrupt=true;window.__TAURI_INTERNALS__.invoke=async(c,a)=>{if(c==='workflow_call_model'&&a.request.stage==='verifyFact'&&testInterrupt){testInterrupt=false;testCloudCalls.push({command:c,args:structuredClone(a)});throw 'model_output_truncated';}return pausePrior(c,a);};}")
+    panel.get_by_role('button',name='生成并导出 PDF',exact=True).click()
+    expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('长度限制',timeout=15000)
+    continued=panel.get_by_role('button',name='继续已保存任务',exact=True);expect(continued).to_be_disabled()
+    before_resume=page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model'&&['recognize','extract'].includes(c.args.request.stage)).length")
+    panel.get_by_label('全班允许重试未知请求',exact=True).check();continued.click()
+    expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('取消选择保存位置',timeout=15000)
+    assert page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model'&&['recognize','extract'].includes(c.args.request.stage)).length")==before_resume
     assert not errors,errors;page.close()
     print('PASS:',mode,layout,'whole-class scope, settings, teacher report, PDF-only retry/cancel, resource preflight and no deduction.')
    page=browser.new_page();initial=workspace();base=initial['students'][0];q=base['questions'][0]

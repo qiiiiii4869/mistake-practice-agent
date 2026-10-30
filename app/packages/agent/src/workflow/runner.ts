@@ -208,7 +208,8 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
       await checkpoint('analysis-batch-plan',async()=>{
         const size=(units:typeof current.units)=>new TextEncoder().encode(JSON.stringify(modelRequest('extract',{subject:input.workspace.exam.subjectName,contentId:'extract-batch-plan',groups:units.map(u=>({unitId:u.unitId,original:sourceData(u)}))}))).length;
         current.analysisBatches=planBatches(current.units.filter(u=>u.availability==='usable'),size,current.policy.maxInputBytes);
-        remainingFits(current,4*current.analysisBatches.length+12*shape.units+2);
+        const usable=current.units.filter(u=>u.availability==='usable').length;
+        remainingFits(current,current.analysisBatches.length+3*Math.ceil(usable/2)+12*shape.units+2);
       });
       for(const [i,ids]of current.analysisBatches!.entries())await checkpoint(`extract-batch:${i}`,()=>extractBatch(current,ids,invoke,input.workspace.exam.subjectName));
     }
@@ -243,7 +244,9 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
       await checkpoint('verification-batch-plan',async()=>{
         const units=current.units.filter(u=>current.draftFacts[u.unitId]?.length);
         const size=(values:typeof current.units)=>new TextEncoder().encode(JSON.stringify(modelRequest('verifyFact',{subject:input.workspace.exam.subjectName,contentId:'verify-batch-plan',groups:verificationData(current,values.map(u=>u.unitId))}))).length;
-        current.verificationBatches=planBatches(units,size,current.policy.maxInputBytes);
+        // Keep independent reasoning bounded to six facts per request while
+        // still sharing extraction across larger groups.
+        current.verificationBatches=planBatches(units,size,current.policy.maxInputBytes,current.policy.maxInputBytes,2);
         const facts=Object.values(current.draftFacts).reduce((n,f)=>n+f.length,0);
         remainingFits(current,3*current.verificationBatches.length+4*facts+2);
       });
@@ -362,7 +365,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
     const code = workflowErrorCode(error);
     current.errorCode = code;
     current.errorStage=current.state;
-    const event = code === 'workflow_cancelled' ? 'CANCEL' : ['workflow_request_timeout','workflow_deadline','workflow_network_error','workflow_storage_failed','workflow_unknown_call_requires_decision','workflow_result_missing','workflow_budget_estimate_exceeded','workflow_batch_input_exceeded','workflow_budget_exceeded'].includes(code) ? 'PAUSE' : 'FAIL';
+    const event = code === 'workflow_cancelled' ? 'CANCEL' : ['workflow_request_timeout','workflow_deadline','workflow_network_error','workflow_storage_failed','workflow_unknown_call_requires_decision','workflow_result_missing','workflow_budget_estimate_exceeded','workflow_batch_input_exceeded','workflow_budget_exceeded','model_output_truncated','model_service_unavailable','model_response_aborted'].includes(code) ? 'PAUSE' : 'FAIL';
     actor.send({ type: event }); current.state = actorState(actor);
     await save(); ports.onProgress?.(current.state);
   } finally {

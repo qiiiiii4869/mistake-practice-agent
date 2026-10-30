@@ -4,7 +4,8 @@ export const MAX_WORKFLOW_CALLS = 300;
 
 export function estimateBudget(mode: GenerationMode, pages: number, units: number, batched=false): BudgetPolicy {
   if (!['dictation','exercise'].includes(mode) || ![pages,units].every(n => Number.isSafeInteger(n) && n >= 0)) throw new Error('workflow_invalid_budget');
-  const planned = 3 * pages + 4 * (batched?Math.ceil(units/6):units) + 4 * (3 * units) + 2 + 8;
+  const analysis = batched ? Math.ceil(units/6) + 3 * Math.ceil(units/2) : 4 * units;
+  const planned = 3 * pages + analysis + 4 * (3 * units) + 2 + 8;
   if (planned > MAX_WORKFLOW_CALLS) throw new Error('workflow_initial_budget_exceeded');
   // Batched tasks retain a 300-call authorization ceiling, with staged checks
   // for text-length splits and actual selected facts. Never truncate targets.
