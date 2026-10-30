@@ -67,7 +67,7 @@ export class SqliteWorkflowStore implements WorkflowStore {
         answerFormats:item.parts.flatMap(p=>p.type==='blank'?[{blankId:p.blankId,kind:answerFormat(p.answer)}]:[]),contentId:fact.factId};}
       else{stage='solve';data={question:{type:item.type,stem:item.stem,options:item.options,material:item.material},target:{knowledgePoint:fact.knowledgePoint,conditions:fact.conditions},
         originals:run.units.filter(u=>fact.unitIds.includes(u.unitId)).map(u=>({stem:u.stem,material:u.material,options:u.options})),contentId:fact.factId};}
-      const requestHash=await digest(modelRequest(stage,data)),call=run.calls.find(c=>c.stage===stage&&c.requestHash===requestHash&&c.status==='completed');
+      const requestHash=await digest(modelRequest(stage,{...data,subject:checked.input.workspace.exam.subjectName})),call=run.calls.find(c=>c.stage===stage&&c.requestHash===requestHash&&c.status==='completed');
       if(!call)invalid();const receipt=await this.loadResponse(this.ownerId,runId,call.callId);if(!receipt)invalid();
       if(item.mode==='dictation'?!blindFillPassed(receipt.value,item):!exerciseSolvePassed(receipt.value,item))invalid();
     }

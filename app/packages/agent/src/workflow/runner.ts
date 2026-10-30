@@ -107,7 +107,8 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
   const names = input.workspace.students.map(s => s.name);
   let networkRetries = current.calls.filter(c => c.attempt > 1).length;
   const invoke: InvokeModel = async (stage,data) => {
-    const request = modelRequest(stage,data);
+    const request = modelRequest(stage,['extract','verifyFact','cloze','blindFill','exercise','solve'].includes(stage)
+      ?{...data,subject:input.workspace.exam.subjectName}:data);
     assertAnonymous(request,names);
     const serialized = JSON.stringify(request), requestHash = await digest(request);
     const scopeId = typeof data.contentId === 'string' ? data.contentId

@@ -1,7 +1,7 @@
 import type { Workspace } from '../../../core/src/index.ts';
 
 export const WORKFLOW_VERSION = 'report-workflow-v1';
-export const PROMPT_VERSION = 'report-prompts-v10';
+export const PROMPT_VERSION = 'report-prompts-v11';
 export type GenerationMode = 'dictation' | 'exercise';
 export type ExecutionMode = 'mock' | 'real';
 export type WorkflowState = 'idle' | 'preflight' | 'authorizing' | 'rendering' | 'recognizing' | 'aligning'

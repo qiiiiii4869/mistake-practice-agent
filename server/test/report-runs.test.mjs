@@ -68,7 +68,7 @@ test('frozen accounts, expired jobs, lease loss and overspending stop normal cli
 test('text-only reasoning policy has bounded output headroom while old clients retain their policy',async()=>{
   const s=await setup({modelKey:secret});
   try{
-    for(const [promptVersion,maxOutputTokens]of [['report-prompts-v6',4096],['report-prompts-v7',16384],['report-prompts-v8',16384],['report-prompts-v9',16384],['report-prompts-v10',16384]]){
+    for(const [promptVersion,maxOutputTokens]of [['report-prompts-v6',4096],['report-prompts-v7',16384],['report-prompts-v8',16384],['report-prompts-v9',16384],['report-prompts-v10',16384],['report-prompts-v11',16384]]){
       const input={...body(),promptVersion},run=await s.req('POST','/v2/report-runs',input,s.alice.token);
       assert.equal(run.status,200);assert.equal(run.data.limits.maxOutputTokens,maxOutputTokens);
       assert.equal(run.data.limits.maxCalls,input.requestedBudget.maxCalls);assert.equal(run.data.limits.maxTokens,input.requestedBudget.maxTokens);
