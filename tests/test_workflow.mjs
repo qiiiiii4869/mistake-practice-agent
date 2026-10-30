@@ -5,7 +5,7 @@ import { runWorkflow, freezeInput, exportProfile, MemoryWorkflowStore } from '..
 import { estimateBudget, reserveCall } from '../app/packages/agent/src/workflow/budget.ts';
 import { mergeFacts } from '../app/packages/agent/src/workflow/assignment.ts';
 import { teachingEvidence } from '../app/packages/agent/src/workflow/teachingEvidence.ts';
-import { blindFillPassed, validateCloze, validateExercise, exerciseSolvePassed,validateFacts } from '../app/packages/agent/src/workflow/validators.ts';
+import { blindFillPassed, reviewBlindFill, validateCloze, validateExercise, exerciseSolvePassed,validateFacts } from '../app/packages/agent/src/workflow/validators.ts';
 import { setupWorkflow, sourceUnits, mockWorkflowModel, workflowWorkspace } from './workflow_fixture.mjs';
 import {workflowAudit} from '../app/packages/agent/src/workflow/diagnostics.ts';
 import {priorityEvidence,partitionValidationAttempts} from '../app/packages/agent/src/workflow/teachingAdvice.ts';
@@ -377,6 +377,40 @@ test('blind fill ambiguity is distinguishable from wrong answer and structure er
     const run=await runWorkflow(s);assert.equal(run.state,'partial');assert.equal(run.validationAttempts.filter(v=>v.stage==='blindFill').length,2);
     assert.ok(run.validationAttempts.filter(v=>v.stage==='blindFill').every(v=>v.reason===reason));
   }
+});
+test('a wrong gap does not blacklist the other independently correct gap during repair',async()=>{
+ const base=(await runWorkflow(await setupWorkflow())).facts[0];
+ const fact={...base,completeStatement:'合成记录以量甲作为观测指标，并以量乙作为计算结果。',conditions:[],candidateAnswers:['量甲','量乙']};
+ const two={parts:[{type:'text',text:'合成记录以'},{type:'blank',blankId:'b1',answer:'量甲',acceptedAnswers:['量甲']},{type:'text',text:'作为观测指标，并以'},
+  {type:'blank',blankId:'b2',answer:'量乙',acceptedAnswers:['量乙']},{type:'text',text:'作为计算结果。'}],correction:''};
+ let fills=0;const failures=[];
+ const item=await generateDictation(fact,async(stage,data)=>{
+  if(stage==='cloze'){
+   if(data.attempt===1)return two;
+   assert.deepEqual(data.repair.avoidAnswers,['量甲']);
+   return {parts:[{type:'text',text:'合成记录以量甲作为观测指标，并以'},{type:'blank',blankId:'b2',answer:'量乙',acceptedAnswers:['量乙']},{type:'text',text:'作为计算结果。'}],correction:''};
+  }
+  fills++;assert(!JSON.stringify(data).includes('acceptedAnswers'));
+  return {answers:fills===1?[{blankId:'b1',value:'错误量'},{blankId:'b2',value:'量乙'}]:[{blankId:'b2',value:'量乙'}],ambiguous:false,missingConditions:false};
+ },{generating:async()=>{},validating:async()=>{}},v=>failures.push(v));
+ assert.equal(item.status,'passed');assert.equal(item.parts.find(p=>p.type==='blank').blankId,'b2');
+ assert(!failures.some(v=>v.reason==='repair_not_applied'));
+});
+test('missing answer IDs remain a mapping failure and do not invalidate either gap position',async()=>{
+ const base=(await runWorkflow(await setupWorkflow())).facts[0];
+ const fact={...base,completeStatement:'合成记录分别包含量甲和量乙。',conditions:[],candidateAnswers:['量甲','量乙']};
+ const question={parts:[{type:'text',text:'合成记录分别包含'},{type:'blank',blankId:'b2',answer:'量甲',acceptedAnswers:['量甲']},{type:'text',text:'和'},
+  {type:'blank',blankId:'other',answer:'量乙',acceptedAnswers:['量乙']},{type:'text',text:'。'}],correction:''};
+ const checked=validateCloze(question,fact,'mapping',1);
+ for(const answers of [[{blankId:'b2',value:'量甲'}],[{blankId:'b2',value:'量甲'},{blankId:'b2',value:'量乙'}]]){
+  const response={answers,ambiguous:false,missingConditions:false};assert.equal(blindFillPassed(response,checked),false);
+  assert.deepEqual(reviewBlindFill(response,checked),{reason:'blind_fill_mapping',avoidAnswers:[]});
+ }
+ let fills=0;
+ const item=await generateDictation(fact,async(stage,data)=>{
+  if(stage==='cloze'){if(data.attempt===2)assert.deepEqual(data.repair.avoidAnswers,[]);return question;}
+  fills++;return {answers:fills===1?[{blankId:'b2',value:'量甲'}]:[{blankId:'b2',value:'量甲'},{blankId:'other',value:'量乙'}],ambiguous:false,missingConditions:false};
+ },{generating:async()=>{},validating:async()=>{}});assert.equal(item.status,'passed');
 });
 test('safe programmatic fallback preserves failure trace and still requires independent blind fill',async()=>{
   const s=await setupWorkflow({model:mockWorkflowModel((r,response)=>{if(r.stage==='cloze'&&r.data.attempt===1)response.value.parts[0].text+='错字';return response;})});

@@ -93,11 +93,16 @@ pub(crate) fn payload_images(request:&Request,names:&[String],images:&[&str],num
         "extract"=>r#"仅从给定题干、选项和文字材料提炼最多3个原子知识点。不读取或推测题内图示，不根据如图字样猜图中数据或关系。保留有文字依据、无需图示即可独立理解的事实；必须依赖图示才能确定的目标跳过；若没有可用文字事实，返回 {"facts":[]}。否则返回 {"facts":[{"knowledgePoint":"规范名称","context":"仅题设专有术语或机制的必要定义；常规学科知识必须空串","completeStatement":"完整正确的知识句","conditions":[],"candidateAnswers":["句内关键词"]}]}。题目自定义术语、特定实验/材料中的对象必须在context中给出文字定义，不能让读者猜该术语。例如原题文字定义某DNA片段的用途，必须保留它编码何种功能酶的背景。context不能直接重复待挖目标结论。conditions只列必要前提，不把答案/结果放进条件；candidateAnswers逐字出现在知识句中，优先提供多个适宜位置，不能整句或虚词。不把干扰项当作事实。"#,
         "verifyFact"=>r#"仅依据原题题干、选项、文字材料与检索证据，独立核验每条context+完整知识句。只返回 {"checks":[{"accurate":true,"supported":true,"inScope":true}]}，与facts顺序一一对应，不输出分析过程。不读取或推测图示，必须依赖图中标签、数值或关系才能成立的事实supported=false。检查自定义术语是否已定义、文字背景/限定条件是否足够、条件与结论是否正确分开。若离开原卷就无法理解该条，inScope=false。context和statement均须准确、有文字证据且适合独立复习；不伪造教材来源。不能将干扰项当正确结论。原题只提供考查范围，不证明所有事实。"#,
         "cloze"=>r#"返回 {"parts":[{"type":"text","text":"保留文本"},{"type":"blank","blankId":"b1","answer":"关键词","acceptedAnswers":["关键词"]},{"type":"text","text":"保留文本"}],"correction":"简短纠错说明"}。所有text与blank.answer拼接必须逐字还原statement，包括标点。默认1空、最多2空；answer保留知识句原词，acceptedAnswers必须包含answer原词以及科学含义等价的完整术语，不能省略对象、数量、方向或条件。优先挖明确的知识名词或结果，不挖形成、影响、控制、具有等泛用动词。不要挖“某例子等物质”中的例子，存在多种不同正确例子时不是唯一可盲填知识。数量、范围、前提尽量留在可见文本，只挖核心术语，例如“一种性状”保留“一种”只挖“性状”，“两对基因”保留“两对”只挖“基因”；不能将两对改成多对或省略数量。candidateAnswers是建议，可选择statement内其他有意义的完整关键词或结果，不能选句外内容、整句或无关虚词，不能删除限定条件或在可见文本泄露答案。若repair非空，要根据失败原因定向修复；blind_fill_ambiguous或missing_conditions时改变挖空位置，优先挖明确概念/结果，避免再挖avoidAnswers中的含糊片段。必要的同义术语放acceptedAnswers。"#,
-        "blindFill"=>r#"依据给定context背景，独立完成sentence中的【填空b1】（parts为同一句结构），不要回答整道原题或重写整句。value只填空内缺少的词或短语，不加解释、括号补充或周围已有文字。answerFormats若为change_direction，只填变化方向；term则填对应术语。返回 {"answers":[{"blankId":"b1","value":"该空独立答案"}],"ambiguous":false,"missingConditions":false}。不知道生成者答案；有实质不同的合理科学结论或必要背景不足时必须标歧义。只有同义措辞变化不算实质歧义，但不能忽略数字/方向/对象/条件不同。"#,
+        "blindFill"=>r#"依据给定背景，独立完成sentence中的全部填空标记，不要回答整道原题或重写整句。每个输入空号恰好返回一次，原样保留blankId，不能遗漏、合并、改号或自行增加。value只填该空缺少的词或短语，不加解释、括号补充或周围已有文字。answerFormats若为change_direction，只填变化方向；term则填对应术语。不知道生成者答案；有实质不同的合理科学结论或必要背景不足时必须标歧义。只有同义措辞变化不算实质歧义，但不能忽略数字/方向/对象/条件不同。"#,
         "exercise"=>r#"生成条件自足、目标相符的新补练。返回 {"type":"single_choice","stem":"完整题干","material":"必要材料或空串","options":[{"id":"A","text":"选项"},{"id":"B","text":"选项"}],"answer":["A"],"rubric":["具体评分点"],"explanation":"解析","estimatedMinutes":2}。type可用single_choice/multiple_choice/short_answer/calculation。非选择题options为空；简答评分点为简短独立术语或命题，便于独立求解对照。计算另返回numericAnswer:{value:2,unit:"m"}，显示answer必须为["2m"]。不得照抄原题、引用缺图、生成听力作文或实际操作。"#,
         "solve"=>r#"独立求解，不猜测出题者答案。返回 complete/inScope/tooSimilar 布尔值。选择题返回 answer 选项ID数组；简答返回 keyPoints 简短独立评分点数组及 contradiction:false；计算返回 numericAnswer:{value:2,unit:"m"}。条件不足complete=false，目标不符inScope=false，照搬originals则tooSimilar=true。"#,
         _=>r#"这是整场考试处理结束后唯一一份班级综合教师报告，不是逐题分别生成建议。综合classOverview全班总分分布、均分/中位数/离散度与各得分区间逐题表现，结合questions全班各题正确率和evidence知识点映射，形成整体观察、优先讲评重点、分层巩固与后续检查。correctRate=全对/有效作答人数，部分分单列；scoreRate仅作辅助，不从补练学生子集或生成结果推断全班。返回 {"overview":"综合班级观察","advice":[{"evidenceIds":["证据ID"],"focus":"含所引用知识点名称的讲评重点","classroomAction":"具体课堂活动","followUp":"后续检查"}],"groupActions":[{"bandId":"输入中有学生的得分区间ID","action":"结合该区间薄弱题的分层巩固"}],"followUp":"全班统一后续检查计划"}。覆盖输入每条evidence和每个非空得分区间。正文不写数字、人数、百分比、排名或题号，由程序插入。不把分组叫做确定能力等级，不虚构错因或教学成效；映射不完整必须说明局限。"#,
     };
+    let schema=if request.stage=="blindFill"{
+        let ids:Vec<_>=data["parts"].as_array().ok_or("invalid_model_request")?.iter().filter(|p|p["type"]=="blank").map(|p|p["blankId"].clone()).collect();
+        let shape=json!({"answers":ids.iter().map(|id|json!({"blankId":id,"value":"仅该空的独立答案"})).collect::<Vec<_>>(),"ambiguous":false,"missingConditions":false});
+        format!("{schema}本次空号为{}，answers必须恰好有{}项。只返回此JSON结构：{}",serde_json::to_string(&ids).map_err(|_|"invalid_model_request")?,ids.len(),shape)
+    }else{schema.to_owned()};
     let user=if request.stage=="recognize"{
         let image=*images.first().filter(|_|images.len()==1).ok_or("invalid_model_request")?;
         let mut targeted=Vec::new();
@@ -278,5 +283,15 @@ fn batch_payload(request:&Request,names:&[String],images:&[&str],numbers:&[Strin
       let value=payload_images(&r,&[],&[],&[]).unwrap();assert!(value["messages"][1]["content"].as_str().unwrap().contains("机制背景"));
       r.data["answerFormats"][0]["kind"]=json!("标准答案下降");assert!(payload_images(&r,&[],&[],&[]).is_err());
       r.data["answerFormats"]=json!([{"blankId":"b2","kind":"term"}]);assert!(payload_images(&r,&[],&[],&[]).is_err());
+    }
+    #[test]fn blind_fill_shape_uses_all_actual_gap_ids_without_leaking_answers(){
+      for ids in [vec!["b2"],vec!["b2","gap-7"]]{
+        let parts:Vec<_>=ids.iter().map(|id|json!({"type":"blank","blankId":id})).collect();
+        let r=Request{stage:"blindFill".into(),instruction:"答案不可传给盲填".into(),data:json!({"parts":parts,"contentId":"f"})};
+        let value=payload_images(&r,&[],&[],&[]).unwrap();let system=value["messages"][0]["content"].as_str().unwrap();
+        for id in &ids{assert!(system.contains(&format!("\"blankId\":\"{id}\"")));}
+        assert!(!system.contains("\"blankId\":\"b1\""));assert!(!value.to_string().contains("答案不可传给盲填"));
+        assert_eq!(value["reasoning_effort"],"high");
+      }
     }
 }

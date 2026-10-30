@@ -5,7 +5,8 @@ import {analyze,type Workspace} from '../../../packages/core/src';
 import {freezeInput,runWorkflow,SqliteWorkflowStore,type GenerationMode,type StoredTask,type TaskSummary} from '../../../packages/agent/src/workflow';
 import {cloudWorkflowPorts,type CloudModelStatus} from '../../../packages/agent/src/workflow/live';
 import type {KnowledgeLibrary} from '../../../packages/knowledge/src';
-import {failureMessages} from '../../../packages/agent/src/workflow/diagnostics';
+import {failureMessages,validationMessages} from '../../../packages/agent/src/workflow/diagnostics';
+import {partitionValidationAttempts} from '../../../packages/agent/src/workflow/teachingAdvice';
 import {recheckSavedRecognition} from '../../../packages/agent/src/workflow/recognition';
 import {paperExamMatch,assertPaperExamMatch} from '../../../packages/paper/src/examMatch';
 import {renderPaperFiles} from './renderPaperFiles';
@@ -24,6 +25,7 @@ export function ClassWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
  const [offlineRecognition,setOfflineRecognition]=React.useState<Awaited<ReturnType<typeof recheckSavedRecognition>>|null>(null);
  const controller=React.useRef<AbortController|null>(null),activeRun=React.useRef<string|null>(null);
  const disabled=locked||busy,run=task?.run;
+ const validationGroups=run?partitionValidationAttempts(run):{unresolved:[],resolved:[]};
  const paperMatch=paperExamMatch(workspace);
  const refresh=async()=>{try{setTasks(await store.list());}catch(error){setMessage(workflowMessage(error));}};
  const show=async(runId:string)=>{const value=await store.task(runId);if(!value)throw new Error('workflow_run_not_found');setTask(value);setOfflineRecognition(null);setRetryUnknown(false);setMode(value.input.mode);setMaxItems(value.input.settings.maxItems);setDifficulty(value.input.settings.difficulty);setExports(await store.listExports(runId));return value;};
@@ -94,6 +96,13 @@ export function ClassWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
    {!!task?.input.testScope&&<p>此为单题测试结果，不能作为全班 PDF 导出。</p>}
    {run.items.length===0&&<p className="notice">本次没有生成有效练习。{run.facts.length===0?'知识点尚未建立，不能据此形成知识点讲评结论。':'候选内容未能通过检查。'}已保存的识题回包可先离线复核，无需立即重新调用模型。</p>}
    <p>教师报告：{run.teacherReport?run.facts.length===0?'仅有成绩统计兜底说明，尚无知识点讲评报告':'已生成，导出时独立保存':'尚未完成'}</p>
+   {run.teacherReport&&<details><summary>查看已保存的教师报告</summary><section aria-label="已保存的教师报告">
+    <p>{run.teacherReport.overview}</p>
+    {run.teacherReport.priorities.map((advice,i)=><article key={i}><h4>{advice.focus}</h4><p>{advice.classroomAction}</p><p>{advice.followUp}</p></article>)}
+    {run.teacherReport.groupActions.map(action=>{const band=run.evidence.classOverview.scoreBands.find(b=>b.bandId===action.bandId);return <p key={action.bandId}>{band?`得分率${band.minRate*100}%～${band.includeMax?'':'低于'}${band.maxRate*100}%（${band.studentCount}人）：`:''}{action.action}</p>;})}
+    <p>{run.teacherReport.followUp}</p><p className="help">{run.teacherReport.limitations.join('；')}</p>
+   </section></details>}
+   {run.state==='partial'&&<p className="notice">已保存 {run.items.filter(i=>i.status==='passed').length} 条通过检查的内容{run.teacherReport?'和教师报告':''}。仍有未覆盖或未通过项目，当前完整班级 PDF 尚未导出。下方列出具体原因；不会自动重跑模型。</p>}
    {run.calls.some(c=>c.stage==='recognize'&&c.status==='completed')&&<button className="secondary small" disabled={disabled} onClick={()=>void withBusy(async()=>{
     const saved=await store.task(run.runId);if(!saved?.run)throw new Error('workflow_run_not_found');
     const result=await recheckSavedRecognition(saved.input,saved.run,id=>store.loadResponse(account.user.id,run.runId,id));setOfflineRecognition(result);
@@ -101,6 +110,7 @@ export function ClassWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
    })}>离线复核已保存识题</button>}
    {offlineRecognition&&<p className="help">可靠原题号：{offlineRecognition.usableNumbers.join('、')||'暂无'}；仍需核查：{offlineRecognition.unresolvedNumbers.join('、')||'无'}。这只是已保存识题回包的复核，不代表听写或补练已生成。</p>}
    {!!run.skipped.length&&<details open><summary>失败与未覆盖原题</summary><ul>{run.skipped.map((s,i)=><li key={i}>原第 {s.sourceNumbers.join('、')} 题：{failureMessages[s.reason]??'此项未通过检查'}</li>)}</ul></details>}
+   {!!validationGroups.unresolved.length&&<details><summary>未通过项目的具体原因（{validationGroups.unresolved.length}条检查记录）</summary><ul>{validationGroups.unresolved.map((v,i)=><li key={i}>原第 {v.sourceNumbers.join('、')} 题 · {run.facts.find(f=>f.factId===v.factId)?.knowledgePoint??'知识点'} · 第 {v.attempt} 轮：{validationMessages[v.reason]??'此项未通过检查'}</li>)}</ul></details>}
    {!['contentReady','partial','failed'].includes(run.state)&&!task?.input.testScope&&<div>
     <label><input type="checkbox" aria-label="全班允许重试未知请求" checked={retryUnknown} onChange={e=>setRetryUnknown(e.target.checked)} disabled={disabled}/>允许重试未知请求（可能重复消耗模型额度）</label>
     <button className="secondary" disabled={disabled||run.calls.some(c=>c.status!=='completed')&&!retryUnknown} onClick={()=>void generate(true)}>继续已保存任务</button>

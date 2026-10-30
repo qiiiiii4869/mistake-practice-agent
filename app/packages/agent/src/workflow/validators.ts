@@ -107,14 +107,19 @@ export function blindFillPassed(value: unknown, item: ClozeItem): boolean {
   return blindFillFailure(value,item)===null;
 }
 export function blindFillFailure(value:unknown,item:ClozeItem):ValidationReason|null{
+  return reviewBlindFill(value,item).reason;
+}
+export function reviewBlindFill(value:unknown,item:ClozeItem):{reason:ValidationReason|null;avoidAnswers:string[]}{
   const v = object(value);
   if (typeof v.ambiguous !== 'boolean' || typeof v.missingConditions !== 'boolean') return invalid();
   const answers = list(v.answers,2).map(a => { const p = object(a); return { blankId: text(p.blankId,100), value: text(p.value,2000) }; });
   const blanks = item.parts.filter(p => p.type === 'blank');
-  if(v.ambiguous)return 'blind_fill_ambiguous';
-  if(v.missingConditions)return 'blind_fill_missing_conditions';
-  if(answers.length!==blanks.length||new Set(answers.map(a=>a.blankId)).size!==answers.length||!blanks.every(b=>answers.some(a=>a.blankId===b.blankId)))return 'blind_fill_mapping';
-  return blanks.every(b=>answers.some(a=>a.blankId===b.blankId&&b.acceptedAnswers.some(ok=>normalize(ok)===normalize(a.value))))?null:'blind_fill_answer_mismatch';
+  if(v.ambiguous)return {reason:'blind_fill_ambiguous',avoidAnswers:blanks.map(b=>b.answer)};
+  if(v.missingConditions)return {reason:'blind_fill_missing_conditions',avoidAnswers:blanks.map(b=>b.answer)};
+  // Missing/duplicate IDs say nothing about which gap is scientifically wrong.
+  if(answers.length!==blanks.length||new Set(answers.map(a=>a.blankId)).size!==answers.length||!blanks.every(b=>answers.some(a=>a.blankId===b.blankId)))return {reason:'blind_fill_mapping',avoidAnswers:[]};
+  const failed=blanks.filter(b=>!answers.some(a=>a.blankId===b.blankId&&b.acceptedAnswers.some(ok=>normalize(ok)===normalize(a.value))));
+  return {reason:failed.length?'blind_fill_answer_mismatch':null,avoidAnswers:failed.map(b=>b.answer)};
 }
 export function validateExercise(value: unknown, fact: KnowledgeFact, units: SourceUnit[], itemId: string, attempts: number): ExerciseItem {
   const v = object(value), kind = v.type;

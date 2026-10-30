@@ -1,5 +1,5 @@
 import type { ClozeItem, InvokeModel, KnowledgeFact,ValidationAttempt,ValidationReason } from '../types.ts';
-import { blindFillFailure, validateCloze,validationReason,object,list,specificClozeAnswer } from '../validators.ts';
+import { reviewBlindFill, validateCloze,validationReason,object,list,specificClozeAnswer } from '../validators.ts';
 import {answerFormat} from '../answerAliases.ts';
 
 export function deterministicCloze(fact:KnowledgeFact,itemId:string,attempt:number,avoidAnswers:string[]=[]):ClozeItem|null{
@@ -73,9 +73,9 @@ export async function generateDictation(fact: KnowledgeFact, invoke: InvokeModel
       const parts = item.parts.map(p => p.type === 'text' ? { type: p.type, text: p.text } : { type: p.type, blankId: p.blankId });
       const sentence=item.parts.map(p=>p.type==='text'?p.text:`【填空${p.blankId}】`).join('');
       const answerFormats=item.parts.flatMap(p=>p.type==='blank'?[{blankId:p.blankId,kind:answerFormat(p.answer)}]:[]);
-      const failure=blindFillFailure(await invoke('blindFill',{ parts,sentence,context:item.context??'',answerFormats }),item);
+      const review=reviewBlindFill(await invoke('blindFill',{ parts,sentence,context:item.context??'',answerFormats }),item),failure=review.reason;
       item.checks.independent = failure===null;
-      if(failure){report({factId:fact.factId,sourceNumbers:fact.sourceNumbers,stage,attempt,reason:failure});context.repair={reason:failure,avoidAnswers:item.parts.flatMap(p=>p.type==='blank'?[p.answer]:[])};}
+      if(failure){report({factId:fact.factId,sourceNumbers:fact.sourceNumbers,stage,attempt,reason:failure});context.repair={reason:failure,avoidAnswers:review.avoidAnswers};}
       item.status = item.checks.independent && item.checks.scope ? 'passed' : 'failed';
       if (item.status === 'passed' || attempt === 2) return item;
     } catch (error) {

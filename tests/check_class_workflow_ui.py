@@ -50,6 +50,9 @@ def main():
     assert 'testScope' not in task['input'];assert task['input']['settings']['maxItems']==4;assert task['input']['settings']['difficulty']=='basic';assert task['run']['teacherReport']
     begin=page.evaluate("testCloudCalls.find(c=>c.command==='workflow_begin')");assert begin['args']['request']['exportLayout']==layout
     calls=page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model').length")
+    panel.get_by_text('查看已保存的教师报告',exact=True).click()
+    expect(panel.get_by_role('region',name='已保存的教师报告',exact=True).get_by_text(task['run']['teacherReport']['overview'],exact=True)).to_be_visible()
+    assert page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model').length")==calls
     page.evaluate('classExportFail=false');panel.get_by_role('button',name='重试 PDF 导出',exact=True).click()
     expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('已保存');assert page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model').length")==calls
     assert page.evaluate('testAccount.credits')==10
@@ -72,6 +75,13 @@ def main():
     panel.get_by_label('全班允许重试未知请求',exact=True).check();continued.click()
     expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('取消选择保存位置',timeout=15000)
     assert page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model'&&['recognize','extract'].includes(c.args.request.stage)).length")==before_resume
+    if mode=='dictation':
+     page.evaluate("testCloudBadCloze=true;testCloudModelVersion='0123456789abcdf2'")
+     panel.get_by_role('button',name='生成并导出 PDF',exact=True).click()
+     expect(panel.get_by_text('当前完整班级 PDF 尚未导出',exact=False)).to_be_visible(timeout=15000)
+     panel.get_by_text('未通过项目的具体原因',exact=False).click()
+     expect(panel.get_by_text('独立盲填发现多个合理答案',exact=False).first).to_be_visible()
+     expect(panel.get_by_role('button',name='导出已有结果 PDF',exact=True)).to_have_count(0)
     assert not errors,errors;page.close()
     print('PASS:',mode,layout,'whole-class scope, settings, teacher report, PDF-only retry/cancel, resource preflight and no deduction.')
    page=browser.new_page();initial=workspace();base=initial['students'][0];q=base['questions'][0]
