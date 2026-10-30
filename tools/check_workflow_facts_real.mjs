@@ -24,9 +24,9 @@ const adapters=createFactAdapters({maxCallTokens:100,libraryRevision:async()=>re
   calls++;requests.push(request);
   if(mode==='quota')throw new Error('model_quota_exhausted');
   if(mode==='privacy')return {value:{facts:[{...statement,completeStatement:input.students[0].name}]},usage:1};
-  if(request.stage==='extract_facts_v2')return {value:{facts:mode==='badExtraction'?[{...statement,factCheck:'verified'}]:[statement]},usage:1};
-  const f=request.data.candidate;
-  return {value:{decisions:[{factId:f.factId,accurate:true,inScope:true,conditionsComplete:true,supportedEvidenceRefs:mode==='forgedRef'?['fake-ref']:request.data.evidence.length?[evidenceId]:[],reason:'协议核对说明，非实际事实质量验收。'}]},usage:1};
+  if(request.stage==='extract_facts_v2')return {value:{units:request.data.groups.map(g=>({unitId:g.unitId,facts:mode==='badExtraction'?[{...statement,factCheck:'verified'}]:[statement]}))},usage:1};
+  if(request.stage==='repair_facts_v2')return {value:{repairs:[]},usage:1};
+  return {value:{decisions:request.data.groups.flatMap(g=>g.candidates.map(e=>({factId:e.candidate.factId,accurate:true,inScope:true,conditionsComplete:true,supportedEvidenceRefs:mode==='forgedRef'?['fake-ref']:e.evidence.length?[evidenceId]:[],reason:'协议核对说明，非实际事实质量验收。'})))},usage:1};
  }});
 const handlers=createWorkflowHandlers(adapters,100);
 const ctx={input,profile:{},signal,outputs:{aligning:{value:{units:[unit]}}},callModel:async(id,hash,budget,perform)=>(await perform()).value};

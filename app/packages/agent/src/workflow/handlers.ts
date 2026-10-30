@@ -93,7 +93,17 @@ export function createWorkflowHandlers(adapters:WorkflowAdapters,maxCallTokens:n
       });return {value:json({matches})};
     }
     if(stage==='verifyingFacts'){
-      const extracted=facts(ctx,'extracting'),decisions=array(obj(result.value).decisions,240),ids=new Set<string>();
+      const original=facts(ctx,'extracting'),payload=obj(result.value),decisions=array(payload.decisions,240),ids=new Set<string>();
+      const repairs=array(payload.repairs??[],240).map(raw=>{
+        const r=obj(raw),factId=text(r.factId,100);
+        if(Object.keys(r).some(k=>!['factId','completeStatement','conditions'].includes(k))||!original.some(f=>f.factId===factId))fail();
+        const decision=decisions.filter(d=>obj(d).factId===factId);
+        if(decision.length!==1||['accurate','inScope','conditionsComplete'].some(k=>obj(decision[0])[k]!==true))fail();
+        return {factId,completeStatement:text(r.completeStatement),conditions:strings(r.conditions,30)};
+      });
+      if(new Set(repairs.map(r=>r.factId)).size!==repairs.length)fail();
+      const extracted=original.map(f=>{const repair=repairs.find(r=>r.factId===f.factId);return repair?{...f,...repair}:f;});
+      assertAnonymous(extracted,names(ctx));
       const checked=extracted.map(f=>{
         const matches=decisions.filter(d=>obj(d).factId===f.factId);if(matches.length!==1)fail();
         const d=obj(matches[0]);if(ids.has(f.factId)||[d.accurate,d.inScope,d.conditionsComplete].some(x=>typeof x!=='boolean'))fail();ids.add(f.factId);

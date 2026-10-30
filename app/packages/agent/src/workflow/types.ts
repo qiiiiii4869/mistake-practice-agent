@@ -2,7 +2,7 @@ import type { ExamIdentity, Student, TeacherSettings } from '../../../core/src/i
 import type { PaperPage } from '../../../paper/src/index.ts';
 
 export const WORKFLOW_VERSION = '2.0.0-foundation.2';
-export const PROMPT_VERSION = '2.0.0-facts.1';
+export const PROMPT_VERSION = '2.0.0-facts.2';
 export type WorkflowMode = 'dictation' | 'exercise';
 export type ExportLayout = 'individual' | 'combined';
 export interface ContentSettings {

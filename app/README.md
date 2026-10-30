@@ -1,5 +1,11 @@
 # Windows 桌面端
 
+## 知识分析批处理与有限修复（2026-10-30）
+
+知识适配器现在每批最多6个原题单元，按UTF-8请求正文长度提前拆组；`maxInputBytes`默认48000，仅为输入保护，不是精确Token估算。单元超限在当前阶段任何调用前停止。正常每组提炼/核对两次；失败条目只修复一次并独立复检一次，最多四次，始终经过runner预算。按长度进一步拆组不会重置任务预算，正式预检估算与真实模型仍待接线。
+
+复检通过后只替换该事实的完整陈述/条件，原factId与题号不变，其他通过条目保持不动；复检不带上次判断标签，失败则隔离。协议新增 `repair_facts_v2`，提炼请求返回按unitId对应的units列表，核对按factId逐项返回。运行 `node tools/check_workflow_fact_batches_real.mjs <当前账号workspace.sqlite路径>` 可复查16项离线协议断言。此修改仍是开发模块，未接入正式生成按钮或发布exe。
+
 ## 知识句适配器（2026-10-30，开发模块）
 
 `packages/agent/src/workflow/factAdapters.ts` 的 `createFactAdapters` 返回 extracting/retrieving/verifyingFacts 三个注入接口，可交给 `createWorkflowHandlers`；实际模型、当前知识库修订号和本机检索由调用方提供。模型请求使用固定提示词和匿名DTO，每个可靠原题单元提炼1–3条待核对知识句；独立核对不传正确状态，引用必须来自该条本机命中。无知识库/无命中保留原卷模式，知识库版本改变停止。取消、额度、请求账本与预算复用现有runner。当前未接生成界面、真实模型或新计次。
