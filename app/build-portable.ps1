@@ -53,7 +53,8 @@ try {
 请保留同目录 WebView2Loader.dll 和 resources 文件夹。
 需要 Windows 10/11 x64、Microsoft Edge WebView2 Runtime 和系统中文字体。
 账号连接正式服务 https://codeqiqi.com/mistake-agent/，使用原账号登录。
-本包包含柔和蓝紫界面，未包含尚未接入界面的双模式新工作流。
+本包包含柔和蓝紫界面、独立 PDF 试卷入口及云端工作流开发测试面板。
+整场正式生成、PDF 桌面交付和最终计次仍未完整接入，请以界面说明为准。
 本包不含账号数据库、学生资料、登录令牌或模型密钥。
 本机原账号资料继续保存在原来的 Windows 用户数据目录。
 此包是便携版本，不包含安装向导；debug 为测试构建。

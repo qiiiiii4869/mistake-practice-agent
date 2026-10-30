@@ -1,134 +1,341 @@
-import {createWorkflowActor,allStages,type Stage} from './machine.ts';
-import {reserveCall,recordUsage,type Budget} from './budget.ts';
-import {WORKFLOW_VERSION,PROMPT_VERSION,type FrozenInput,type ExportProfile} from './types.ts';
-import {assertCheckpointSafe,type Json,type Checkpoint,type CheckpointStore,type StageResult} from './checkpoint.ts';
+import { assertAnonymous } from '../index.ts';
+import { assignStudents, mergeFacts, selectTargets } from './assignment.ts';
+import { estimateBudget, recordUsage, reserveCall } from './budget.ts';
+import { assertFrozen, digest, preflight } from './input.ts';
+import { actorState, createWorkflowActor } from './machine.ts';
+import { modelRequest } from './prompts.ts';
+import { generateDictation } from './strategies/dictation.ts';
+import { generateExercise } from './strategies/exercise.ts';
+import { templateClassTeachingReport,validateClassTeachingReport,teachingReportInput } from './teachingAdvice.ts';
+import { teachingEvidence,classOverview } from './teachingEvidence.ts';
+import type { BudgetPolicy, FactCandidate, FrozenInput, InvokeModel, KnowledgeFact, ModelResponse, WorkflowPorts, WorkflowRun, WorkflowState,WorkflowTaskContext,CheckpointData } from './types.ts';
+import { factPassed, invalid, list, normalize, object, validateEvidence, validateFactCheck, validateFacts, validateUnits,validationReason } from './validators.ts';
 
-export interface HandlerContext {
-  input:FrozenInput;profile:ExportProfile;signal:AbortSignal;outputs:Readonly<Partial<Record<Stage,StageResult>>>;
-  callModel:(callId:string,requestHash:string,maxTokens:number,perform:()=>Promise<{value:Json;usage:number|null}>)=>Promise<Json>;
+export interface RunOptions {
+  input: FrozenInput; ports: WorkflowPorts; runId?: string; signal?: AbortSignal;
+  policy?: Partial<BudgetPolicy>; resume?: boolean; retryUnknownCalls?: boolean;
+  taskContext?:WorkflowTaskContext;
 }
-export type StageHandler=(context:HandlerContext)=>Promise<StageResult>;
-export interface RecoveryProof {ownerId:string;contentHash:string;exportHash:string;cloudConfirmed:boolean}
-const modelStages=new Set<Stage>(['recognizing','aligning','extracting','verifyingFacts','clozing','validatingCloze','generatingExercises','solving','writingGuidance','validatingGuidance']);
-const knownError=(e:unknown)=>{
-  const code=e instanceof Error?e.message:'';
-  return /^(workflow|model|account|session|credits|generation)_[a-z_]{1,80}$/.test(code)?code:'workflow_stage_failed';
-};
-const replayable=new Set<Stage>(['preflight','rendering','retrieving','merging','selectingTargets','assembling','aggregatingEvidence','validatingPdf']);
+const activeOwners = new Map<string,{ runId: string; hash: string; promise: Promise<WorkflowRun> }>();
 
-// One instance is retained by the desktop scheduler, independent of React pages.
-// Concrete handlers, persistent storage, cloud leases and PDF QA are injected later.
-export class WorkflowRunner {
-  private abort:AbortController|null=null;private executing=false;
-  private store:CheckpointStore;private handlers:Partial<Record<Stage,StageHandler>>;
-  private authorized:()=>Promise<boolean>;private now:()=>number;
-  constructor(store:CheckpointStore,handlers:Partial<Record<Stage,StageHandler>>,authorized:()=>Promise<boolean>,now:()=>number=Date.now){this.store=store;this.handlers=handlers;this.authorized=authorized;this.now=now;}
-  create(input:FrozenInput,profile:ExportProfile,budget:Budget){
-    if(profile.contentHash!==input.contentHash||input.workflowVersion!==WORKFLOW_VERSION||input.promptVersion!==PROMPT_VERSION)throw new Error('workflow_stale_input');
-    if(budget.calls!==0||budget.tokens!==0||Object.keys(budget.pending).length||budget.deadline<=this.now()
-      ||!Number.isSafeInteger(budget.maxCalls)||budget.maxCalls<1||budget.maxCalls>200||!Number.isSafeInteger(budget.maxTokens)||budget.maxTokens<1)throw new Error('workflow_invalid_budget');
-    const cp:Checkpoint={schemaVersion:2,workflowVersion:WORKFLOW_VERSION,promptVersion:PROMPT_VERSION,runId:profile.runId,
-      ownerId:input.ownerId,contentHash:input.contentHash,exportHash:profile.exportHash,mode:input.mode,revision:0,state:'preflight',
-      completed:[],outputs:{},inFlight:null,budget:structuredClone(budget),calls:{},errorCode:null};
-    return this.store.write(cp,null);
+export function runWorkflow(options: RunOptions): Promise<WorkflowRun> {
+  const input = structuredClone(options.input), runId = options.runId ?? crypto.randomUUID();
+  const active = activeOwners.get(input.ownerId);
+  if (active) {
+    if (active.runId === runId && active.hash === input.contentHash) return active.promise;
+    return Promise.reject(new Error('workflow_busy'));
   }
-  cancel(){this.abort?.abort();}
-  async execute(input:FrozenInput,profile:ExportProfile,proof?:RecoveryProof):Promise<Checkpoint>{
-    if(this.executing)throw new Error('workflow_busy');
-    const release=this.store.acquire(input.ownerId,profile.runId);this.executing=true;this.abort=new AbortController();
-    const signal=this.abort.signal;let cp=this.store.read(input.ownerId,profile.runId);
-    try{
-      if(!cp)throw new Error('workflow_checkpoint_missing');
-      if(cp.schemaVersion!==2||cp.ownerId!==input.ownerId||cp.runId!==profile.runId||cp.contentHash!==input.contentHash||cp.exportHash!==profile.exportHash||profile.contentHash!==input.contentHash||cp.mode!==input.mode
-        ||cp.workflowVersion!==WORKFLOW_VERSION||cp.promptVersion!==PROMPT_VERSION)throw new Error('workflow_stale_input');
-      if(cp.state==='completed'||cp.state==='cancelled'||cp.state==='failed'||cp.state==='partial')return cp;
-      if(cp.state!=='preflight'||cp.completed.length||cp.inFlight){
-        if(!proof?.cloudConfirmed||proof.ownerId!==input.ownerId||proof.contentHash!==input.contentHash||proof.exportHash!==profile.exportHash)throw new Error('workflow_recovery_unconfirmed');
-        if(cp.inFlight&&cp.inFlight!=='settling'&&!cp.outputs[cp.inFlight]&&!replayable.has(cp.inFlight))throw new Error('workflow_stage_outcome_unknown');
-        if(Object.values(cp.calls).some(c=>c.status!=='succeeded'))throw new Error('workflow_call_outcome_unknown');
+  const promise = execute({ ...options, input, runId }).finally(async()=>{try{await options.ports.store.endRun?.(input.ownerId,runId);}finally{activeOwners.delete(input.ownerId);}});
+  activeOwners.set(input.ownerId,{ runId, hash: input.contentHash, promise });
+  return promise;
+}
+
+async function execute(options: RunOptions & { runId: string }): Promise<WorkflowRun> {
+  const { input, ports, runId } = options, now = ports.now ?? Date.now;
+  const leaseController=new AbortController(),signal=options.signal?AbortSignal.any([options.signal,leaseController.signal]):leaseController.signal;
+  await assertFrozen(input);
+  if (ports.model.executionMode === 'real' && (!ports.authorize || !ports.release)) throw new Error('workflow_authorization_required');
+  if (!/^[\w-]{1,100}$/.test(runId)) throw new Error('workflow_invalid_run_id');
+  const shape = preflight(input), estimated = estimateBudget(input.mode,shape.hasTargets ? shape.pages : 0,shape.hasTargets ? shape.units : 0);
+  const policy = { ...estimated, ...options.policy };
+  for (const [key,value] of Object.entries(policy)) {
+    if (!Number.isSafeInteger(value) || value < (key === 'maxNetworkRetries' ? 0 : 1) || value > estimated[key as keyof BudgetPolicy])
+      throw new Error('workflow_invalid_budget');
+  }
+  let run = await ports.store.load(input.ownerId,runId);
+  if (run) {
+    if (run.contentHash !== input.contentHash || run.mode !== input.mode || run.executionMode !== ports.model.executionMode
+      || run.workflowVersion !== input.workflowVersion || run.promptVersion !== input.promptVersion
+      || run.modelConfiguration !== (ports.model.cacheKey ?? 'unversioned')) throw new Error('workflow_stale_run');
+    if (run.state === 'contentReady' || run.state === 'partial') return run;
+    if (!options.resume) throw new Error('workflow_resume_required');
+    // Restored counters and original deadlines are retained, including unknown usage.
+    const resolvedRetry=(i:number)=>run!.calls[i].attempt===1&&run!.calls[i+1]?.attempt===2&&run!.calls[i+1].status==='completed'
+      &&run!.calls[i+1].requestHash===run!.calls[i].requestHash&&run!.calls[i+1].scopeId===run!.calls[i].scopeId;
+    if (run.calls.some((c,i) => c.status !== 'completed'&&!resolvedRetry(i)) && !options.retryUnknownCalls) throw new Error('workflow_unknown_call_requires_decision');
+    run.calls.filter(c => c.status === 'pending').forEach(c => { c.status = 'unknown'; });
+  } else {
+    if (options.resume) throw new Error('workflow_run_not_found');
+    run = { runId, contentHash: input.contentHash, mode: input.mode, executionMode: ports.model.executionMode,
+      workflowVersion: input.workflowVersion, promptVersion: input.promptVersion, modelConfiguration: ports.model.cacheKey ?? 'unversioned',
+      state: 'idle', startedAt: now(), policy,
+      calls: [], machineSnapshot: null, units: [], facts: [], items: [], draftFacts: {}, unitEvidence: {}, targets: [], assignments: [],
+      evidence: { rows: [],questions:[],classOverview:classOverview(input), mappedQuestions: 0, totalQuestions: 0, mappedFullScore: 0, totalFullScore: 0, unmappedNumbers: [] },
+      advice: [],teacherReport:null, skipped: [], checkpoints: [],validationAttempts:[],recognitionChecks:[] };
+  }
+  const current = run;
+  await ports.store.beginRun?.(input,runId,options.taskContext??{},()=>leaseController.abort());
+  current.validationAttempts??=[];
+  current.recognitionChecks??=[];
+  const analysisKey = ports.model.cacheKey ? await digest({ ownerId: input.ownerId, exam: input.workspace.exam,
+    paper: input.workspace.paper, numbers: [...new Set(input.workspace.students.flatMap(s => s.questions.map(q => q.number)))],
+    scope: input.testScope,
+    recognitionPolicy:input.recognitionPolicy,
+    knowledgeRevision: input.knowledgeRevision, modelConfiguration: ports.model.cacheKey, executionMode: ports.model.executionMode,
+    workflowVersion: input.workflowVersion, promptVersion: input.promptVersion }) : null;
+  const cached = analysisKey && shape.hasTargets && (!current.checkpoints.length || current.analysisCacheHit) ? await ports.store.loadAnalysis(input.ownerId,analysisKey) : null;
+  if (current.analysisCacheHit && !cached) throw new Error('workflow_analysis_cache_missing');
+  delete current.errorCode;
+  const actor = createWorkflowActor(input.mode);
+  actor.start();
+  const save = async () => { current.machineSnapshot = actor.getPersistedSnapshot(); await ports.store.save(input.ownerId,current); };
+  const check = () => {
+    if (signal?.aborted) throw new Error('workflow_cancelled');
+    if (!options.resume&&now() - current.startedAt >= current.policy.maxRunMs) throw new Error('workflow_deadline');
+  };
+  const next = async (expected: WorkflowState) => {
+    check(); actor.send({ type: 'NEXT' }); current.state = actorState(actor);
+    if (current.state !== expected) throw new Error('workflow_invalid_transition');
+    await save(); ports.onProgress?.(current.state);
+  };
+  const dataKeys=['units','facts','items','draftFacts','unitEvidence','targets','assignments','evidence','advice','teacherReport','skipped','validationAttempts','recognitionChecks'] as const;
+  let replayCursor:number|null=null;
+  const checkpoint = async (id: string, action: () => Promise<void>) => {
+    if (current.checkpoints.includes(id)) return;
+    check();
+    if(current.frame){if(current.frame.id!==id)throw new Error('workflow_checkpoint_mismatch');
+      Object.assign(current,structuredClone(current.frame.data));}
+    else{current.frame={id,callStart:current.calls.length,data:Object.fromEntries(dataKeys.map(k=>[k,structuredClone(current[k])])) as CheckpointData};await save();}
+    replayCursor=current.frame.callStart;
+    await action();check();current.checkpoints.push(id);delete current.frame;replayCursor=null;await save();
+  };
+  let authorized=false;
+  const authorize=async()=>{if(authorized||!shape.hasTargets||!ports.authorize)return;
+    const cloud=await ports.authorize(input,current.policy,signal);authorized=true;
+    if(cloud){current.cloud=cloud;await save();}
+  };
+  const names = input.workspace.students.map(s => s.name);
+  let networkRetries = current.calls.filter(c => c.attempt > 1).length;
+  const invoke: InvokeModel = async (stage,data) => {
+    const request = modelRequest(stage,data);
+    assertAnonymous(request,names);
+    const serialized = JSON.stringify(request), requestHash = await digest(request);
+    const scopeId = typeof data.contentId === 'string' ? data.contentId
+      : data.original && typeof data.original === 'object' && 'unitId' in data.original ? String(data.original.unitId) : 'batch';
+    const callScope=stage==='recognize'?String(data.pageId):scopeId;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      check();
+      if(replayCursor!==null&&replayCursor<current.calls.length){
+        const previous=current.calls[replayCursor++];
+        if(previous.stage!==stage||previous.scopeId!==callScope||previous.requestHash!==requestHash||previous.attempt!==attempt)throw new Error('workflow_replay_mismatch');
+        if(previous.status==='completed'){
+          const response=await ports.store.loadResponse?.(input.ownerId,runId,previous.callId);
+          if(response){assertAnonymous(response.value,names);return structuredClone(response.value);}
+          if(previous.errorCode)throw new Error(previous.errorCode);
+          throw new Error('workflow_result_missing');
+        }
+        const continuation=current.calls[replayCursor];
+        if(attempt===1&&continuation?.attempt===2&&continuation.status==='completed'&&continuation.requestHash===requestHash&&continuation.scopeId===callScope)continue;
+        if(attempt===1&&options.retryUnknownCalls&&networkRetries<current.policy.maxNetworkRetries){networkRetries++;continue;}
+        throw new Error('workflow_unknown_call_requires_decision');
       }
-      const actor=createWorkflowActor({ownerId:input.ownerId,contentHash:input.contentHash,exportHash:profile.exportHash,mode:input.mode}).start();
-      actor.send({type:'START'});
-      const advance=(stage:Stage,result:StageResult)=>{
-        if(stage==='validatingPdf'){
-          if(!result.pdf)throw new Error('workflow_pdf_unverified');
-          actor.send({type:'PDF_VERIFIED',...result.pdf});
-        }else if(stage==='settling'){
-          if(!result.settlement?.confirmed)throw new Error('workflow_settlement_unconfirmed');
-          actor.send({type:'SETTLED',contentHash:result.settlement.contentHash,exportHash:result.settlement.exportHash});
-        }else actor.send({type:'STEP_DONE',stage});
-        if(String(actor.getSnapshot().value)===stage)throw new Error('workflow_stage_not_verified');
-      };
-      try{
-        for(const stage of cp.completed){
-          if(String(actor.getSnapshot().value)!==stage||!cp.outputs[stage])throw new Error('workflow_checkpoint_invalid');
-          advance(stage,cp.outputs[stage]!);
+      if(now()-current.startedAt>=current.policy.maxRunMs)throw new Error('workflow_deadline');
+      await authorize();
+      const images=stage==='recognize'?1:0;
+      const call = reserveCall(current.policy,current.calls,stage,requestHash,new TextEncoder().encode(serialized).byteLength,now(),current.startedAt,attempt,
+        callScope,images);
+      current.calls.push(call); await save();
+      if(replayCursor!==null)replayCursor++;
+      const controller = new AbortController();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let onAbort: () => void = () => {};
+      let receiptSaved=false;
+      try {
+        check();
+        const interrupted = new Promise<never>((_,reject) => {
+          onAbort = () => { controller.abort(); reject(new Error('workflow_cancelled')); };
+          signal?.addEventListener('abort',onAbort,{ once: true });
+          timer = setTimeout(() => { controller.abort(); reject(new Error('workflow_request_timeout')); },
+            Math.min(current.policy.requestTimeoutMs,Math.max(1,current.policy.maxRunMs - (now() - current.startedAt))));
+          if (signal?.aborted) onAbort();
+        });
+        const response: ModelResponse = await Promise.race([ports.model.call(structuredClone(request),controller.signal),interrupted]);
+        recordUsage(call,response.usage?.totalTokens,now());
+        try{if(JSON.stringify(response.value)?.length>100_000)return invalid();assertAnonymous(response.value,names);}
+        catch(error){call.errorCode=error instanceof Error?error.message:'workflow_invalid_output';await save();throw error;}
+        current.machineSnapshot=actor.getPersistedSnapshot();
+        if(ports.store.completeCall)await ports.store.completeCall(input.ownerId,current,call.callId,response);else await save();
+        receiptSaved=true;
+        check();
+        if (current.calls.reduce((sum,c) => sum + (c.usage ?? c.reservedTokens),0) > current.policy.maxTokens) throw new Error('workflow_budget_exceeded');
+        return response.value;
+      } catch (error) {
+        if (call.status === 'pending'||(call.status==='completed'&&!receiptSaved&&!call.errorCode)) {
+          call.status = 'unknown'; call.finishedAt = now();const code=error instanceof Error?error.message:'';
+          call.errorCode=/^(workflow_|model_|paper_)[a-z_]+$/.test(code)?code:'workflow_failed';await save();
         }
-        const save=()=>{cp=this.store.write(cp!,cp!.revision);};
-        while(actor.getSnapshot().status!=='done'){
-          const stage=actor.getSnapshot().value as Stage;
-          if(!allStages.includes(stage))throw new Error('workflow_checkpoint_invalid');
-          if(signal.aborted&&stage!=='settling'){actor.send({type:'CANCEL'});cp.state='cancelled';cp.errorCode='workflow_cancelled';save();break;}
-          if(this.now()>=cp.budget.deadline){cp.state='recoverable';cp.errorCode='workflow_deadline_exceeded';save();break;}
-          if(cp.inFlight===stage&&stage!=='settling'&&cp.outputs[stage]){
-            advance(stage,cp.outputs[stage]!);cp.completed.push(stage);cp.inFlight=null;cp.state=String(actor.getSnapshot().value);save();continue;
+        // Only explicitly classified network failures retry once; timeouts retain unknown status and pause.
+        if (error instanceof Error && error.message === 'workflow_network_error' && attempt === 1 && networkRetries < current.policy.maxNetworkRetries) {
+          networkRetries++; continue;
+        }
+        throw error;
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+        signal?.removeEventListener('abort',onAbort);
+      }
+    }
+    throw new Error('workflow_network_error');
+  };
+  const modelUnit = (unitId: string) => {
+    const u = current.units.find(u => u.unitId === unitId)!;
+    return { unitId, sourceNumbers: u.sourceNumbers, stem: u.stem, material: u.material, options: u.options };
+  };
+  const extract = async (unitId: string,repair?:{facts:FactCandidate[];checks:KnowledgeFact['factCheck'][]}): Promise<FactCandidate[]> => validateFacts(await invoke('extract',{
+    subject: input.workspace.exam.subjectName, original: modelUnit(unitId),...(repair?{repair}:{}) }));
+  try {
+    await next('preflight'); await next('authorizing');
+    if(!(options.resume&&ports.store.durable))await authorize();
+    await next('rendering'); await next('recognizing');
+    await checkpoint('recognition',async () => {
+      if (cached) { current.analysisCacheHit = true; current.units = validateUnits(cached.units,input); current.draftFacts = cached.draftFacts;
+        current.unitEvidence = cached.unitEvidence; current.facts = cached.facts; }
+      else if (shape.hasTargets) current.units = validateUnits(await ports.prepareUnits(structuredClone(input),signal ?? new AbortController().signal,invoke,check=>current.recognitionChecks.push(check)),input);
+    });
+    await next('aligning');
+    await checkpoint('alignment',async () => {
+      for (const unit of current.units.filter(u => u.availability === 'isolated')) current.skipped.push({ sourceNumbers: unit.sourceNumbers, reason: 'recognition_ambiguous' });
+      const numbers = input.testScope?.questionNumbers??[...new Set(input.workspace.students.flatMap(s => s.questions.map(q => q.number)))];
+      for (const number of numbers.filter(n => !current.units.some(u => u.sourceNumbers.includes(n))))
+        current.skipped.push({ sourceNumbers: [number], reason: shape.hasTargets ? 'recognition_missing' : 'no_targets_no_model_calls' });
+    });
+    await next('extracting');
+    for (const unit of current.units.filter(u => !cached && u.availability === 'usable')) {
+      await checkpoint(`extract:${unit.unitId}`,async () => {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const facts=await extract(unit.unitId);
+            if(facts.length)current.draftFacts[unit.unitId]=facts;
+            else current.skipped.push({sourceNumbers:unit.sourceNumbers,reason:'text_evidence_insufficient'});
+            return;
           }
-          const handler=this.handlers[stage];
-          if(!handler){cp.state='recoverable';cp.errorCode='workflow_handler_missing';save();break;}
-          cp.inFlight=stage;cp.state=stage;cp.errorCode=null;save();let modelActive=false;const pending=new Set<Promise<unknown>>();
-          const invokeModel:HandlerContext['callModel']=async(callId,requestHash,maxTokens,perform)=>{
-            if(!modelStages.has(stage))throw new Error('workflow_model_stage_forbidden');
-            if(modelActive)throw new Error('workflow_model_busy');
-            if(signal.aborted)throw new Error('workflow_cancelled');
-            if(!/^[a-f0-9]{64}$/.test(requestHash)||!callId||callId.length>100)throw new Error('workflow_invalid_call');
-            modelActive=true;
-            try{
-              const old=cp!.calls[callId];
-              if(old){if(old.stage!==stage||old.requestHash!==requestHash)throw new Error('workflow_duplicate_call');if(old.status!=='succeeded')throw new Error('workflow_call_outcome_unknown');return structuredClone(old.value!);}
-              if(!await this.authorized())throw new Error('workflow_authorization_required');
-              if(signal.aborted)throw new Error('workflow_cancelled');
-              cp!.budget=reserveCall(cp!.budget,callId,maxTokens,this.now());
-              cp!.calls[callId]={stage,requestHash,status:'sent',usage:null};save();
-              try{
-                const result=await perform();assertCheckpointSafe(result.value);
-                if(result.usage!==null&&Number.isSafeInteger(result.usage)&&result.usage>maxTokens){
-                  cp!.budget.tokens+=result.usage-maxTokens;delete cp!.budget.pending[callId];
-                  cp!.calls[callId]={stage,requestHash,status:'succeeded',usage:result.usage,value:result.value};save();throw new Error('workflow_usage_exceeded');
-                }
-                cp!.budget=recordUsage(cp!.budget,callId,result.usage);
-                cp!.calls[callId]={stage,requestHash,status:'succeeded',usage:result.usage,value:result.value};save();
-                if(signal.aborted)throw new Error('workflow_cancelled');
-                if(!await this.authorized())throw new Error('workflow_authorization_required');
-                return structuredClone(result.value);
-              }catch(error){
-                if(cp!.calls[callId].status==='sent'){
-                  cp!.budget=recordUsage(cp!.budget,callId,null);cp!.calls[callId].status='unknown';save();
-                }throw error;
-              }
-            }finally{modelActive=false;}
-          };
-          const callModel:HandlerContext['callModel']=(...args)=>{
-            const task=invokeModel(...args);pending.add(task);void task.then(()=>pending.delete(task),()=>pending.delete(task));return task;
-          };
-          try{
-            const result=await handler({input,profile,signal,outputs:structuredClone(cp.outputs),callModel});
-            if(pending.size){await Promise.allSettled([...pending]);throw new Error('workflow_unawaited_call');}
-            if(signal.aborted&&stage!=='settling')throw new Error('workflow_cancelled');
-            assertCheckpointSafe(result);
-            // Persist the actual result before progressing. No stage can select its successor.
-            cp.outputs[stage]=structuredClone(result);save();advance(stage,result);
-            cp.completed.push(stage);cp.inFlight=null;cp.state=String(actor.getSnapshot().value);save();
-          }catch(error){
-            if(pending.size)await Promise.allSettled([...pending]);
-            const code=knownError(error);cp.errorCode=code;
-            if(stage==='settling'){cp.state='pendingSettlement';}
-            else if(signal.aborted){cp.state='cancelled';}
-            else cp.state=/model_(quota_exhausted|auth_failed)|workflow_(checkpoint_secret|usage_exceeded)/.test(code)?'failed':'recoverable';
-            save();break;
+          catch (error) { if (!(error instanceof Error) || error.message !== 'workflow_invalid_output') throw error; }
+        }
+        current.skipped.push({ sourceNumbers: unit.sourceNumbers, reason: 'fact_extraction_failed' });
+      });
+    }
+    await next('retrieving');
+    for (const unit of current.units.filter(u => !cached && current.draftFacts[u.unitId])) {
+      await checkpoint(`retrieve:${unit.unitId}`,async () => {
+        const query = current.draftFacts[unit.unitId].map(f => f.knowledgePoint).join(' ');
+        current.unitEvidence[unit.unitId] = validateEvidence(await ports.retrieve(query,signal ?? new AbortController().signal));
+      });
+    }
+    await next('verifyingFacts');
+    for (const unit of current.units.filter(u => !cached && current.draftFacts[u.unitId])) {
+      await checkpoint(`verify:${unit.unitId}`,async () => {
+        const id=(slot:number)=>`${unit.unitId}-fact-${slot}`;
+        let pending=current.draftFacts[unit.unitId].map((fact,index)=>({fact,slot:index+1}))
+          .filter(p=>!current.facts.some(f=>f.factId===id(p.slot)));
+        const report=(slot:number,attempt:number,reason:WorkflowRun['validationAttempts'][number]['reason'])=>{
+          current.validationAttempts.push({factId:id(slot),sourceNumbers:[...unit.sourceNumbers],stage:'verifyFact',attempt,reason});
+        };
+        for (let attempt = 0; attempt < 2; attempt++) {
+          if(!pending.length)break;
+          let checks:KnowledgeFact['factCheck'][]=[];
+          try {
+            const evidence = current.unitEvidence[unit.unitId] ?? [];
+            checks = list(object(await invoke('verifyFact',{ original: modelUnit(unit.unitId), facts: pending.map(p=>p.fact), evidence })).checks,3).map(validateFactCheck);
+            if (checks.length !== pending.length) return invalid();
+            const facts: KnowledgeFact[] = pending.map((p,i) => ({ ...p.fact, factId:id(p.slot),
+              sourceNumbers: [...unit.sourceNumbers], unitIds: [unit.unitId], evidenceRefs: structuredClone(evidence),
+              sourceMode: evidence.length ? 'library' : 'paper', factCheck: checks[i] }));
+            // Passing facts survive every later repair, malformed response and cancellation.
+            for(const fact of facts.filter(factPassed))if(!current.facts.some(f=>f.factId===fact.factId))current.facts.push(fact);
+            const rejected=pending.flatMap((p,i)=>factPassed(facts[i])?[]:[{...p,check:checks[i]}]);
+            for(const p of rejected){
+              if(!p.check.accurate)report(p.slot,attempt+1,'fact_inaccurate');
+              if(!p.check.supported)report(p.slot,attempt+1,'fact_unsupported');
+              if(!p.check.inScope)report(p.slot,attempt+1,'fact_context_incomplete');
+            }
+            pending=rejected;checks=rejected.map(p=>p.check);
+            await save();
+          } catch (error) {
+            if (!(error instanceof Error) || error.message !== 'workflow_invalid_output') throw error;
+            pending.forEach(p=>report(p.slot,attempt+1,validationReason(error)));checks=[];
+          }
+          if (!pending.length||attempt === 1 || current.calls.filter(c => c.stage === 'extract' && c.scopeId===unit.unitId && c.attempt===1).length >= 2) break;
+          try {
+            const repaired=await extract(unit.unitId,checks.length?{facts:pending.map(p=>p.fact),checks}:undefined);
+            if(!repaired.length)break;
+            if(repaired.length!==pending.length)return invalid();
+            pending=pending.map((p,i)=>({...p,fact:repaired[i]}));
+            for(const p of pending)current.draftFacts[unit.unitId][p.slot-1]=p.fact;
+          } catch (error) {
+            if (!(error instanceof Error) || error.message !== 'workflow_invalid_output') throw error;
+            pending.forEach(p=>report(p.slot,attempt+2,validationReason(error)));break;
           }
         }
-        return structuredClone(cp);
-      }finally{actor.stop();}
-    }finally{this.abort=null;this.executing=false;release();}
+        if (pending.length) current.skipped.push({ sourceNumbers: unit.sourceNumbers, reason: 'fact_check_failed' });
+      });
+    }
+    await next('merging'); await checkpoint('merge',async () => { current.facts = mergeFacts(current.facts); });
+    if (analysisKey && !cached && shape.hasTargets && !current.skipped.length) await ports.store.saveAnalysis(input.ownerId,analysisKey,{
+      units: current.units, facts: current.facts, draftFacts: current.draftFacts, unitEvidence: current.unitEvidence });
+    await next('selectingTargets'); await checkpoint('targets',async () => { current.targets = selectTargets(input,current.facts); });
+    await next(input.mode === 'dictation' ? 'clozing' : 'generatingExercises');
+    const generatePhase = async () => {
+      if (['validatingCloze','validatingExercise'].includes(current.state)) {
+        check(); actor.send({ type: 'MORE' }); current.state = actorState(actor); await save(); ports.onProgress?.(current.state);
+      } else if (current.state === 'solving') {
+        check(); actor.send({ type: 'RETRY' }); current.state = actorState(actor); await save(); ports.onProgress?.(current.state);
+      }
+    };
+    const targetIds = new Set(current.targets.flatMap(t => t.selectedTargets));
+    for (const fact of current.facts.filter(f => targetIds.has(f.factId))) {
+      await checkpoint(`item:${fact.factId}`,async () => {
+        const scopedInvoke: InvokeModel = (stage,data) => invoke(stage,{ ...data,contentId: fact.factId });
+        const report=(failure:WorkflowRun['validationAttempts'][number])=>{current.validationAttempts.push(failure);};
+        const item = input.mode === 'dictation'
+          ? await generateDictation(fact,scopedInvoke,{ generating: generatePhase, validating: () => next('validatingCloze') },report)
+          : await generateExercise(fact,input,current.units,scopedInvoke,{ generating: generatePhase,
+            solving: () => next('solving'), validating: () => next('validatingExercise') },report);
+        if (item) current.items.push(item);
+        if (!item || item.status !== 'passed') current.skipped.push({ sourceNumbers: fact.sourceNumbers, reason: 'item_validation_failed' });
+      });
+    }
+    if (current.state === 'generatingExercises') { await next('solving'); await next('validatingExercise'); }
+    else if (current.state === 'clozing') await next('validatingCloze');
+    await next('assembling'); await checkpoint('assignments',async () => {
+      const seen = new Set<string>();
+      for (const item of current.items) {
+        const key = item.mode === 'exercise' ? normalize(item.stem + item.material) : JSON.stringify(item.parts);
+        if (seen.has(key)) { item.status = 'failed'; current.skipped.push({ sourceNumbers: item.sourceNumbers, reason: 'duplicate_item' }); }
+        else if (item.status === 'passed') seen.add(key);
+      }
+      current.assignments = assignStudents(input,current.targets,current.items,current.facts);
+    });
+    await next('aggregatingEvidence'); await checkpoint('evidence',async () => { current.evidence = teachingEvidence(input,current.facts); });
+    if(input.testScope){
+      check();actor.send({type:'SKIP_GUIDANCE'});current.state=actorState(actor);current.advice=[];current.teacherReport=null;await save();
+    }else{
+    await next('writingGuidance'); await checkpoint('advice',async () => {
+      // A single-question/subset test is only a content test. Teacher guidance
+      // belongs to one final report of the entire frozen exam, never per item.
+      if(current.evidence.mappedQuestions&&shape.hasTargets) {
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try { current.teacherReport=validateClassTeachingReport(await invoke('guidance',{...teachingReportInput(current.evidence),attempt}),current.evidence);
+            current.advice=current.teacherReport.priorities;return; }
+          catch (error) { if (!(error instanceof Error) || error.message !== 'workflow_invalid_output') throw error; }
+        }
+      }
+      current.teacherReport=templateClassTeachingReport(current.evidence);current.advice=current.teacherReport.priorities;
+    });
+    await next('validatingGuidance');
+    }
+    if (current.assignments.some(a => a.status === 'partial')||current.skipped.some(s=>s.reason==='fact_check_failed')) { actor.send({ type: 'PARTIAL' }); current.state = 'partial'; await save(); }
+    else await next('contentReady');
+  } catch (error) {
+    const code = error instanceof Error ? error.message : 'workflow_failed';
+    current.errorCode = /^(workflow_|model_|paper_)[a-z_]+$/.test(code) ? code : 'workflow_failed';
+    const event = code === 'workflow_cancelled' ? 'CANCEL' : ['workflow_request_timeout','workflow_deadline','workflow_network_error','workflow_storage_failed','workflow_unknown_call_requires_decision','workflow_result_missing'].includes(code) ? 'PAUSE' : 'FAIL';
+    actor.send({ type: event }); current.state = actorState(actor);
+    await save(); ports.onProgress?.(current.state);
+  } finally {
+    actor.stop();
+    if(shape.hasTargets&&ports.release){try{const status=await ports.release(current.state==='cancelled'?'cancelled':current.state==='failed'||current.state==='recoverable'?'failed':'partial',current);
+      if(status&&current.cloud){current.cloud.status=status;await ports.store.save(input.ownerId,current);}}
+      catch{current.errorCode=current.errorCode??'workflow_release_pending';await ports.store.save(input.ownerId,current);}}
+    if(ports.persistDiagnostics){try{await ports.persistDiagnostics(structuredClone(current));}catch{current.errorCode=current.errorCode??'workflow_diagnostic_write_failed';}}
   }
+  return structuredClone(current);
 }

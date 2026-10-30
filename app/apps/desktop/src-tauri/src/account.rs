@@ -7,6 +7,8 @@ use std::sync::{
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{Manager, WebviewWindow};
 
+const DEFAULT_ACCOUNT_API_URL: &str = "https://codeqiqi.com/mistake-agent/";
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct User {
@@ -67,7 +69,10 @@ fn valid_id(id: &str) -> bool {
     id.len() == 36 && id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
 }
 fn endpoint() -> Result<reqwest::Url, String> {
-    let value = option_env!("MISTAKE_ACCOUNT_API_URL").ok_or("account_server_unconfigured")?;
+    configured_endpoint(option_env!("MISTAKE_ACCOUNT_API_URL"))
+}
+fn configured_endpoint(configured: Option<&str>) -> Result<reqwest::Url, String> {
+    let value = configured.unwrap_or(DEFAULT_ACCOUNT_API_URL);
     let url = reqwest::Url::parse(value).map_err(|_| "account_server_unconfigured")?;
     let local_http = url.scheme() == "http"
         && matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"));
@@ -154,6 +159,8 @@ async fn send_request(
             "current_password_required",
             "current_password_incorrect",
             "password_change_conflict",
+            "model_unconfigured","model_configuration_failed","https_required","workflow_delivery_not_enabled",
+            "workflow_export_not_verified","workflow_counter_regression","workflow_budget_exceeded","workflow_lease_expired","workflow_v2_required",
         ];
         return Err(if allowed.contains(&code) {
             code.into()
@@ -233,6 +240,7 @@ fn pending_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     Ok(user_folder(app)?.join("pending-generation.json"))
 }
 fn clear_private_state(app: &tauri::AppHandle) -> Result<(), String> {
+    super::workflow_cloud::clear(&app.state::<super::workflow_cloud::WorkflowCloudState>());
     if let Some(login) = app.get_webview_window("zhixue-login") {
         login.close().map_err(|_| "window_close_failed")?;
     }
@@ -248,6 +256,13 @@ fn clear_private_state(app: &tauri::AppHandle) -> Result<(), String> {
     probe.captcha_seen.store(false, Ordering::SeqCst);
     *probe.progress.lock().map_err(|_| "state_unavailable")? = None;
     Ok(())
+}
+
+pub(crate) async fn workflow_request(app: &tauri::AppHandle,path:&str,body:Option<Value>)->Result<Value,String>{
+    let state=app.state::<AccountState>();require_session(&state)?;
+    let value=request(path,body,Some(&token(&state)?)).await?;
+    if value.get("user").is_some(){update(&state,&value)?;}
+    Ok(value)
 }
 
 #[tauri::command]
@@ -802,6 +817,27 @@ pub(crate) fn clear_saved_pending(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn default_account_server_works_without_a_build_override_and_invalid_overrides_fail_closed() {
+        let production = configured_endpoint(None).unwrap();
+        assert_eq!(
+            join_endpoint(production, "/v1/auth/login").unwrap().as_str(),
+            "https://codeqiqi.com/mistake-agent/v1/auth/login"
+        );
+        assert_eq!(
+            configured_endpoint(Some("http://127.0.0.1:8787/")).unwrap().as_str(),
+            "http://127.0.0.1:8787/"
+        );
+        for invalid in [
+            "", "http://example.test/", "https://example.test/mistake-agent",
+            "https://name:password@example.test/", "https://example.test/?target=other",
+            "https://example.test/#other",
+        ] {
+            assert_eq!(configured_endpoint(Some(invalid)), Err("account_server_unconfigured".into()));
+        }
+        let expected = configured_endpoint(option_env!("MISTAKE_ACCOUNT_API_URL"));
+        assert_eq!(endpoint(), expected);
+    }
     #[test]
     fn shared_website_api_keeps_its_configured_prefix() {
         let base: reqwest::Url = "https://example.test/mistake-agent/".parse().unwrap();

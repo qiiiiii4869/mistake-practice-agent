@@ -15,6 +15,12 @@ mod model;
 mod model_http;
 mod pdf_export;
 mod account;
+mod workflow_model;
+mod workflow_cloud;
+mod asset_checks;
+mod workflow_diagnostics;
+mod workflow_storage;
+mod workflow_storage_commands;
 
 #[derive(Default)]struct ExportState(AtomicBool);
 #[derive(Serialize)]#[serde(rename_all="camelCase")]
@@ -553,8 +559,11 @@ pub fn run() {
     tauri::Builder::default()
         .manage(ProbeState::default())
         .manage(DeepseekState::default())
+        .manage(workflow_cloud::WorkflowCloudState::default())
         .manage(ExportState::default())
         .manage(account::AccountState::default())
+        .on_page_load(|webview,_|{if webview.label()=="main"{if let Some(state)=webview.app_handle().try_state::<workflow_cloud::WorkflowCloudState>(){workflow_cloud::clear(&state);}}})
+        .on_window_event(|window,event|{if window.label()=="main"&&matches!(event,tauri::WindowEvent::Destroyed){if let Some(state)=window.app_handle().try_state::<workflow_cloud::WorkflowCloudState>(){workflow_cloud::clear(&state);}}})
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             account::account_config,
@@ -593,6 +602,16 @@ pub fn run() {
             deepseek_status,
             configure_deepseek,
             call_deepseek,
+            workflow_cloud::workflow_model_status,
+            workflow_storage_commands::workflow_store,
+            workflow_cloud::workflow_pending,
+            workflow_diagnostics::workflow_save_diagnostic,
+            workflow_cloud::workflow_configure_cloud_model,
+            workflow_cloud::workflow_begin,
+            workflow_cloud::workflow_heartbeat,
+            workflow_cloud::workflow_call_model,
+            workflow_cloud::workflow_end,
+            workflow_cloud::workflow_abort,
             export_practice_pdf
         ])
         .setup(|app| {

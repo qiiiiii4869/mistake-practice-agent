@@ -11,6 +11,9 @@ Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 Environment=PORT=8787
 Environment=DATABASE_PATH=/var/lib/user-store/users.sqlite3
+Environment=MODEL_KEY_FILE=/var/lib/user-store/shared-model-key
+Environment=ALLOW_LOCAL_CREDENTIALS=false
+Environment=WORKFLOW_DELIVERY_ENABLED=false
 ExecStart=/opt/mistake-agent/runtime/node-v24.16.0-linux-x64/bin/node src/index.mjs
 Restart=on-failure
 RestartSec=5

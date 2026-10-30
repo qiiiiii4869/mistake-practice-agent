@@ -34,7 +34,7 @@ export function PaperWorkspace({ paper, numbers, locked, onBusy, save }: Props) 
         const normalized=`data:${mime};base64,${encoded}`;
         if(['pdf','docx'].includes(extension)){
           const header=new Uint8Array(await file.slice(0,8).arrayBuffer());
-          if(extension==='pdf'?!new TextDecoder().decode(header).startsWith('%PDF-'):!(header[0]===80&&header[1]===75&&header[2]===3&&header[3]===4))throw new Error();
+          if(extension==='pdf'?![0x25,0x50,0x44,0x46,0x2d].every((value,index)=>header[index]===value):!(header[0]===80&&header[1]===75&&header[2]===3&&header[3]===4))throw new Error();
         }else{const image=new Image();image.src=normalized;await image.decode();}
         if([...draft.pages,...pages].some(p=>p.data===normalized)){duplicates++;continue;}
         pages.push({ id: crypto.randomUUID(), name: file.name, data:normalized });

@@ -1,111 +1,162 @@
-import { assertAnonymous } from '../index.ts';
-import type { ClozeItem, ClozePart, KnowledgeFact, ExerciseItem } from './types.ts';
+import type { ClozeItem, EvidenceRef, ExerciseItem, FactCandidate, FrozenInput, KnowledgeFact, SourceUnit,ValidationReason } from './types.ts';
+import { typstContent } from '../../../pdf/src/math.ts';
+import {acceptedTermAliases} from './answerAliases.ts';
 
-const fail=():never=>{throw new Error('workflow_invalid_content');};
-const object=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:fail();
-const text=(v:unknown,max=20000):string=>typeof v==='string'&&v.trim()&&v.length<=max?v:fail();
-const normalize=(v:string)=>v.normalize('NFKC').trim();
-const keys=(v:Record<string,unknown>,fields:string[])=>{if(Object.keys(v).length!==fields.length||fields.some(k=>!Object.hasOwn(v,k)))fail();};
-const list=(v:unknown,max:number):unknown[]=>Array.isArray(v)&&v.length<=max?v:fail();
-
-// Accept model content only; never accept model-provided passed/checks/review flags.
-export function parseCloze(value:unknown,fact:KnowledgeFact,names:string[]):ClozeItem{
-  if(fact.factCheck!=='verified')throw new Error('workflow_unverified_fact');
-  const v=object(value);keys(v,['itemId','factId','sourceNumbers','parts','correction']);assertAnonymous(v,names);
-  if(v.factId!==fact.factId)fail();
-  const sourceNumbers=list(v.sourceNumbers,80).map(n=>text(n,100));
-  if(new Set(sourceNumbers).size!==sourceNumbers.length||JSON.stringify([...sourceNumbers].sort())!==JSON.stringify([...fact.sourceNumbers].sort()))fail();
-  const blanks=new Set<string>();
-  const parts:ClozePart[]=list(v.parts,20).map(raw=>{
-    const p=object(raw);
-    if(p.type==='text'){keys(p,['type','text']);return {type:'text',text:text(p.text)};}
-    keys(p,['type','blankId','answer','acceptedAnswers']);if(p.type!=='blank')return fail();
-    const blankId=text(p.blankId,100),answer=text(p.answer,1000);
-    if(blanks.has(blankId)||['的','是','了','和','与','在'].includes(answer))fail();blanks.add(blankId);
-    const acceptedAnswers=list(p.acceptedAnswers,10).map(a=>text(a,1000));
-    if(!acceptedAnswers.some(a=>normalize(a)===normalize(answer)))fail();
-    return {type:'blank',blankId,answer,acceptedAnswers};
+export class WorkflowValidationError extends Error{
+  reason:ValidationReason;
+  constructor(reason:ValidationReason){super('workflow_invalid_output');this.reason=reason;}
+}
+export const invalid = (reason:ValidationReason='invalid_structure'): never => { throw new WorkflowValidationError(reason); };
+export const validationReason=(error:unknown):ValidationReason=>error instanceof WorkflowValidationError?error.reason:'invalid_structure';
+export const object = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string,unknown> : invalid();
+export function text(v: unknown, max = 8000, allowEmpty = false): string {
+  const value=sourceText(v,max,allowEmpty);
+  try { typstContent(value); } catch { return invalid('unsupported_formula'); }
+  return value;
+}
+// Original material is data for analysis, not yet generated PDF content.
+// Renderability is checked on generated content, not on raw OCR transcription.
+export function sourceText(v:unknown,max=20000,allowEmpty=false):string{
+  if (typeof v !== 'string' || v.length > max || (!allowEmpty && !v.trim()) || /(?:https?:\/\/|data:|javascript:|<\s*(?:script|iframe|img)\b)/i.test(v)) return invalid();
+  return v;
+}
+export function list(v: unknown, max: number, allowEmpty = false): unknown[] {
+  if (!Array.isArray(v) || v.length > max || (!allowEmpty && !v.length)) return invalid();
+  return v;
+}
+export const strings = (v: unknown, max = 20, allowEmpty = false): string[] => list(v,max,allowEmpty).map(x => text(x,2000));
+export const normalize = (v: string): string => v.normalize('NFKC').replace(/\s/g,'').toLocaleLowerCase('en-US');
+export const specificClozeAnswer=(answer:string)=>!['形成','发生','产生','进行','可以','能够','影响','控制','决定','呈现','具有','表现','说明'].includes(normalize(answer));
+export function validateUnits(value: unknown, input: FrozenInput): SourceUnit[] {
+  const numbers = new Set(input.workspace.students.flatMap(s => s.questions.map(q => q.number)));
+  const pageIds = new Set(input.workspace.paper?.pages.map(p => p.id));
+  const ids = new Set<string>(), seen = new Set<string>();
+  return list(value,80,true).map(v => {
+    const u = object(v), unitId = text(u.unitId,100), sourceNumbers = strings(u.sourceNumbers,80), pages = strings(u.pageIds,30);
+    if (ids.has(unitId) || sourceNumbers.some(n => !numbers.has(n) || seen.has(n)) || new Set(sourceNumbers).size !== sourceNumbers.length
+      || pages.some(p => !pageIds.has(p)) || !['usable','isolated'].includes(String(u.availability))
+      || !['recognized_by_machine','ambiguous'].includes(String(u.alignmentStatus))
+      || (u.availability === 'usable' && u.alignmentStatus !== 'recognized_by_machine')) return invalid();
+    ids.add(unitId); sourceNumbers.forEach(n => seen.add(n));
+    return { unitId, sourceNumbers, pageIds: pages, stem: sourceText(u.stem), material: sourceText(u.material,16000,true),
+      options: list(u.options,10,true).map(o=>sourceText(o,3000)), availability: u.availability as SourceUnit['availability'], alignmentStatus: u.alignmentStatus as SourceUnit['alignmentStatus'] };
   });
-  if(blanks.size<1||blanks.size>2||!parts.some(p=>p.type==='text'))fail();
-  if(parts.map(p=>p.type==='text'?p.text:p.answer).join('')!==fact.completeStatement)throw new Error('workflow_cloze_reconstruction');
-  const visible=normalize(parts.filter(p=>p.type==='text').map(p=>p.text).join(''));
-  if(parts.some(p=>p.type==='blank'&&p.acceptedAnswers.some(a=>visible.includes(normalize(a)))))throw new Error('workflow_answer_leak');
-  return {itemId:text(v.itemId,100),factId:fact.factId,sourceNumbers,parts,correction:typeof v.correction==='string'&&v.correction.length<=10000?v.correction:fail(),
-    checks:{structure:true,reconstruction:true,blindFill:false},status:'pending',attempts:1};
 }
-export function blindFillRequest(item:ClozeItem){
-  return {itemId:item.itemId,parts:item.parts.map(p=>p.type==='text'?{type:p.type,text:p.text}:{type:p.type,blankId:p.blankId})};
+export function validateEvidence(value: unknown): EvidenceRef[] {
+  return list(value,6,true).map(v => {
+    const e = object(v);
+    if (!Number.isSafeInteger(e.page) || Number(e.page) < 1) return invalid();
+    return { documentId: text(e.documentId,100), page: Number(e.page), text: text(e.text,8000) };
+  });
 }
-export function checkBlindFill(item:ClozeItem,response:unknown,names:string[]):ClozeItem{
-  const v=object(response);keys(v,['answers','ambiguous','missingConditions']);assertAnonymous(v,names);
-  if(typeof v.ambiguous!=='boolean'||typeof v.missingConditions!=='boolean')fail();
-  const blanks=item.parts.filter((p):p is Extract<ClozePart,{type:'blank'}>=>p.type==='blank');
-  const answers=list(v.answers,2).map(raw=>{const a=object(raw);keys(a,['blankId','text']);return {blankId:text(a.blankId,100),text:text(a.text,1000)};});
-  if(answers.length!==blanks.length||new Set(answers.map(a=>a.blankId)).size!==answers.length||answers.some(a=>!blanks.some(b=>b.blankId===a.blankId)))fail();
-  const passed=!v.ambiguous&&!v.missingConditions&&blanks.every(b=>b.acceptedAnswers.some(a=>normalize(a)===normalize(answers.find(x=>x.blankId===b.blankId)!.text)));
-  return {...item,checks:{...item.checks,blindFill:passed},status:passed&&item.checks.structure&&item.checks.reconstruction?'verified':'isolated'};
+export function validateFacts(value: unknown): FactCandidate[] {
+  return list(object(value).facts,3,true).map(v => {
+    const f = object(v), completeStatement = text(f.completeStatement), candidateAnswers = strings(f.candidateAnswers,4);
+    if (candidateAnswers.some(a => !completeStatement.includes(a) || normalize(a) === normalize(completeStatement))) return invalid();
+    const conditions=strings(f.conditions,10,true),providedContext=f.context===undefined?'':text(f.context,6000,true);
+    // Conditions are immutable supporting text, not optional instructions that
+    // disappear when only the cloze sentence is sent to the blind solver.
+    const missing=conditions.filter(c=>!normalize(completeStatement+providedContext).includes(normalize(c)));
+    const context=providedContext+(missing.length?`${providedContext?'\n':''}适用条件：${missing.join('；')}。`:'');
+    return { knowledgePoint: text(f.knowledgePoint,300), completeStatement, conditions, candidateAnswers,...(context?{context}:{}) };
+  });
 }
-
-const choices=(answer:string,optionCount:number):string[]=>{
-  const compact=answer.normalize('NFKC').toUpperCase().replace(/[\s,，、]/g,'');
-  const result=[...compact];
-  if(!result.length||new Set(result).size!==result.length||result.some(c=>c<'A'||c>String.fromCharCode(64+optionCount)))fail();
-  return result.sort();
-};
-export function parseExercise(value:unknown,facts:KnowledgeFact[],availableMaterials:string[],names:string[]):ExerciseItem{
-  const v=object(value);keys(v,['itemId','type','targetIds','sourceNumbers','stem','options','materialRefs','answer','rubric','explanation','estimatedMinutes','questionCount']);
-  assertAnonymous(v,names);
-  if(!['single_choice','multiple_choice','short_answer','calculation'].includes(String(v.type)))fail();
-  const strings=(raw:unknown,max:number,len=100)=>list(raw,max).map(x=>text(x,len));
-  const targetIds=strings(v.targetIds,20),sourceNumbers=strings(v.sourceNumbers,80),materialRefs=strings(v.materialRefs,10);
-  if(!targetIds.length||!sourceNumbers.length||new Set(targetIds).size!==targetIds.length||new Set(sourceNumbers).size!==sourceNumbers.length
-    ||targetIds.some(id=>!facts.some(f=>f.factId===id&&f.factCheck==='verified'))||new Set(materialRefs).size!==materialRefs.length||materialRefs.some(id=>!availableMaterials.includes(id)))fail();
-  const expected=[...new Set(facts.filter(f=>targetIds.includes(f.factId)).flatMap(f=>f.sourceNumbers))].sort();
-  if(JSON.stringify([...sourceNumbers].sort())!==JSON.stringify(expected))fail();
-  const stem=text(v.stem),answer=text(v.answer,10000),options=strings(v.options,10,3000),rubric=strings(v.rubric,20,3000);
-  if((/如图|下图|上图|图中|见图/.test([stem,...options].join(' '))&&!materialRefs.length)||/https?:\/\//i.test(JSON.stringify(v)))throw new Error('workflow_missing_material');
-  const type=v.type as ExerciseItem['type'];
-  if(type==='single_choice'||type==='multiple_choice'){
-    if(options.length<2||new Set(options.map(normalize)).size!==options.length)fail();
-    const selected=choices(answer,options.length);
-    if(type==='single_choice'?selected.length!==1:selected.length<2)fail();
-  }else if(options.length||!rubric.length)fail();
-  if(!Number.isFinite(v.estimatedMinutes)||Number(v.estimatedMinutes)<=0||Number(v.estimatedMinutes)>120
-    ||!Number.isSafeInteger(v.questionCount)||Number(v.questionCount)<1||Number(v.questionCount)>10)fail();
-  return {itemId:text(v.itemId,100),type,targetIds,sourceNumbers,stem,options,materialRefs,answer,rubric,
-    explanation:text(v.explanation),estimatedMinutes:Number(v.estimatedMinutes),questionCount:Number(v.questionCount),solveResult:null,
-    checks:{structure:true,scope:false,independentSolve:false,conditions:false,originality:false},status:'pending',attempts:1};
+export function validateFactCheck(value: unknown): KnowledgeFact['factCheck'] {
+  const v = object(value);
+  if ([v.accurate,v.supported,v.inScope].some(x => typeof x !== 'boolean')) return invalid();
+  return { accurate: v.accurate as boolean, supported: v.supported as boolean, inScope: v.inScope as boolean };
 }
-export function independentSolveRequest(item:ExerciseItem,materials:{id:string;text:string}[]){
-  if(item.materialRefs.some(id=>!materials.some(m=>m.id===id)))throw new Error('workflow_missing_material');
-  return {itemId:item.itemId,type:item.type,stem:item.stem,options:[...item.options],materials:materials.filter(m=>item.materialRefs.includes(m.id)).map(m=>({id:m.id,text:m.text}))};
+export function factPassed(fact: KnowledgeFact): boolean {
+  return fact.factCheck.accurate && fact.factCheck.supported && fact.factCheck.inScope;
 }
-export type AnswerComparison = {kind:'number';unit:string;absoluteTolerance:number;relativeTolerance:number}
-  |{kind:'rubric';coveredIndexes:number[];contradictions:boolean};
-const numberWithUnit=(s:string):{value:number;unit:string}|null=>{
-  const match=s.normalize('NFKC').trim().match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*([^\d\r\n]*)$/);
-  if(!match||!Number.isFinite(Number(match[1])))return null;
-  return {value:Number(match[1]),unit:match[2].trim()};
-};
-export function checkExercise(item:ExerciseItem,response:unknown,originalStems:string[],names:string[],comparison?:AnswerComparison):ExerciseItem{
-  const v=object(response);keys(v,['answer','explanation','complete','inScope','tooSimilar']);assertAnonymous(v,names);
-  if([v.complete,v.inScope,v.tooSimilar].some(x=>typeof x!=='boolean'))fail();
-  const answer=text(v.answer,10000),explanation=text(v.explanation);let matches=false;
-  if(item.type==='single_choice'||item.type==='multiple_choice'){
-    const a=choices(item.answer,item.options.length),b=choices(answer,item.options.length);
-    matches=JSON.stringify(a)===JSON.stringify(b);
-  }else if(item.type==='calculation'&&comparison?.kind==='number'){
-    if(!Number.isFinite(comparison.absoluteTolerance)||!Number.isFinite(comparison.relativeTolerance)||comparison.absoluteTolerance<0||comparison.relativeTolerance<0)fail();
-    const a=numberWithUnit(item.answer),b=numberWithUnit(answer);
-    matches=!!a&&!!b&&a.unit===comparison.unit&&b.unit===comparison.unit&&Math.abs(a.value-b.value)<=Math.max(comparison.absoluteTolerance,Math.abs(a.value)*comparison.relativeTolerance);
-  }else if(item.type==='short_answer'&&comparison?.kind==='rubric'){
-    // The separate comparison verdict is not sent in the independent solver request.
-    const ids=comparison.coveredIndexes;
-    if(!Array.isArray(ids)||typeof comparison.contradictions!=='boolean')fail();
-    matches=!comparison.contradictions&&new Set(ids).size===ids.length&&ids.length===item.rubric.length&&ids.every(i=>Number.isSafeInteger(i)&&i>=0&&i<item.rubric.length);
+export function validateCloze(value: unknown, fact: KnowledgeFact, itemId: string, attempts: number): ClozeItem {
+  const v = object(value), blanks = new Set<string>();
+  const parts = list(v.parts,20).map(raw => {
+    const p = object(raw);
+    if (p.type === 'text') return { type: 'text' as const, text: text(p.text,8000,true) };
+    if (p.type !== 'blank') return invalid();
+    const blankId = text(p.blankId,100), answer = text(p.answer,300), providedAnswers = strings(p.acceptedAnswers,10);
+    // The exact restoration word is always a valid answer. A model may list
+    // only its equivalent wording; keep it without discarding the authored gap.
+    const acceptedAnswers=[...new Set([answer,...providedAnswers].flatMap(acceptedTermAliases))];
+    if(blanks.has(blankId))return invalid('duplicate_blank_id');
+    if(!specificClozeAnswer(answer))return invalid('non_specific_blank');
+    if(!fact.candidateAnswers.includes(answer)&&(!fact.completeStatement.includes(answer)||[...answer.trim()].length<2
+      ||normalize(answer)===normalize(fact.completeStatement)||/^[\p{P}\p{Z}]+$/u.test(answer)))return invalid('answer_not_candidate');
+    if(fact.conditions.some(c=>c.includes(answer)))return invalid('condition_removed');
+    blanks.add(blankId);
+    return { type: 'blank' as const, blankId, answer, acceptedAnswers };
+  });
+  const restored = parts.map(p => p.type === 'text' ? p.text : p.answer).join('');
+  const context=fact.context??'';
+  const visible = context+parts.filter(p => p.type === 'text').map(p => p.text).join('');
+  if(restored!==fact.completeStatement)return invalid('statement_not_restored');
+  if(parts.some((p,index)=>{if(p.type!=='blank')return false;const next=parts[index+1];
+    const before=parts.slice(0,index).map(part=>part.type==='text'?part.text:part.answer).join('');
+    return (next?.type==='text'&&/^等(?:物质|产物|实例|例子|成分|因素|对象|性状|现象|结构|过程|生物)/.test(next.text))
+      ||/(?:^|[，；。])(?:例如|比如|如)[^，；。]*$/.test(before);
+  }))return invalid('non_specific_blank');
+  if(blanks.size<1||blanks.size>2)return invalid('invalid_blank_count');
+  if(normalize(visible).length<3)return invalid('insufficient_context');
+  if(parts.some(p=>p.type==='blank'&&p.acceptedAnswers.some(a=>normalize(visible).includes(normalize(a)))))return invalid('answer_visible');
+  return { itemId, mode: 'dictation', factId: fact.factId, sourceNumbers: [...fact.sourceNumbers], parts,
+    ...(context?{context}:{}),
+    correction: text(v.correction,2000,true), attempts, checks: { structure: true, independent: false, scope: factPassed(fact) }, status: 'failed' };
+}
+export function blindFillPassed(value: unknown, item: ClozeItem): boolean {
+  return blindFillFailure(value,item)===null;
+}
+export function blindFillFailure(value:unknown,item:ClozeItem):ValidationReason|null{
+  const v = object(value);
+  if (typeof v.ambiguous !== 'boolean' || typeof v.missingConditions !== 'boolean') return invalid();
+  const answers = list(v.answers,2).map(a => { const p = object(a); return { blankId: text(p.blankId,100), value: text(p.value,2000) }; });
+  const blanks = item.parts.filter(p => p.type === 'blank');
+  if(v.ambiguous)return 'blind_fill_ambiguous';
+  if(v.missingConditions)return 'blind_fill_missing_conditions';
+  if(answers.length!==blanks.length||new Set(answers.map(a=>a.blankId)).size!==answers.length||!blanks.every(b=>answers.some(a=>a.blankId===b.blankId)))return 'blind_fill_mapping';
+  return blanks.every(b=>answers.some(a=>a.blankId===b.blankId&&b.acceptedAnswers.some(ok=>normalize(ok)===normalize(a.value))))?null:'blind_fill_answer_mismatch';
+}
+export function validateExercise(value: unknown, fact: KnowledgeFact, units: SourceUnit[], itemId: string, attempts: number): ExerciseItem {
+  const v = object(value), kind = v.type;
+  if (!['single_choice','multiple_choice','short_answer','calculation'].includes(String(kind))) return invalid('unsupported_exercise_type');
+  const stem = text(v.stem), material = text(v.material,16000,true), answer = strings(v.answer,10), rubric = strings(v.rubric,10);
+  const options = list(v.options,10,true).map(o => { const p = object(o); return { id: text(p.id,10), text: text(p.text,2000) }; });
+  const choice = kind === 'single_choice' || kind === 'multiple_choice';
+  if (new Set(options.map(o => o.id)).size !== options.length || new Set(options.map(o => normalize(o.text))).size !== options.length
+    || new Set(answer.map(normalize)).size !== answer.length || (choice && (options.length < 2 || answer.some(a => !options.some(o => o.id === a))))
+    || (kind === 'single_choice' && answer.length !== 1) || (!choice && options.length > 0)) return invalid('invalid_options');
+  if(/如图|见图|下图/.test(stem+material))return invalid('missing_diagram');
+  if(units.some(u=>normalize(u.stem)===normalize(stem)))return invalid('original_copied');
+  if(!Number.isFinite(v.estimatedMinutes)||Number(v.estimatedMinutes)<=0||Number(v.estimatedMinutes)>60)return invalid('invalid_duration');
+  let numericAnswer: ExerciseItem['numericAnswer'];
+  if (kind === 'calculation') {
+    const n = object(v.numericAnswer);
+    if (typeof n.value !== 'number' || !Number.isFinite(n.value)) return invalid('invalid_numeric_answer');
+    numericAnswer = { value: n.value, unit: text(n.unit,100,true) };
+    // Numeric and displayed answers must agree; no model-chosen tolerance.
+    if (answer.length !== 1 || normalize(answer[0]) !== normalize(`${n.value}${numericAnswer.unit}`)) return invalid('invalid_numeric_answer');
   }
-  const same=(s:string)=>s.normalize('NFKC').replace(/\s/g,'');
-  const original=!v.tooSimilar&&!originalStems.some(s=>same(s)===same(item.stem));
-  const passed=item.checks.structure&&matches&&v.complete&&v.inScope&&original;
-  return {...item,solveResult:{answer,explanation},checks:{structure:item.checks.structure,scope:v.inScope as boolean,independentSolve:matches,conditions:v.complete as boolean,originality:original},status:passed?'verified':'isolated'};
+  return { itemId, mode: 'exercise', factId: fact.factId, sourceNumbers: [...fact.sourceNumbers], type: kind as ExerciseItem['type'],
+    stem, material, answer, rubric, options, explanation: text(v.explanation), estimatedMinutes: Number(v.estimatedMinutes),
+    ...(numericAnswer ? { numericAnswer } : {}), attempts, checks: { structure: true, independent: false, scope: factPassed(fact) }, status: 'failed' };
+}
+export function exerciseSolvePassed(value: unknown, item: ExerciseItem): boolean {
+  return exerciseSolveFailure(value,item)===null;
+}
+export function exerciseSolveFailure(value:unknown,item:ExerciseItem):ValidationReason|null{
+  const v = object(value);
+  if ([v.complete,v.inScope,v.tooSimilar].some(b => typeof b !== 'boolean')) return invalid();
+  if(!v.complete)return 'solve_incomplete';if(!v.inScope)return 'solve_out_of_scope';if(v.tooSimilar)return 'solve_too_similar';
+  if (item.type === 'calculation') {
+    const n = object(v.numericAnswer), expected = item.numericAnswer!;
+    return typeof n.value === 'number' && Number.isFinite(n.value) && normalize(text(n.unit,100,true)) === normalize(expected.unit)
+      && Math.abs(n.value - expected.value) <= 1e-9 * Math.max(1,Math.abs(expected.value))?null:'solve_numeric_mismatch';
+  }
+  if (item.type === 'short_answer') {
+    // Conservative explicit scoring-point match; no semantic equivalence claim.
+    const keyPoints = strings(v.keyPoints,10).map(normalize);
+    return item.rubric.every(point => keyPoints.includes(normalize(point))) && v.contradiction === false?null:'solve_scoring_mismatch';
+  }
+  const answer = strings(v.answer,10).map(normalize).sort(), expected = item.answer.map(normalize).sort();
+  return answer.length === expected.length && answer.every((a,i) => a === expected[i])?null:'solve_answer_mismatch';
 }
