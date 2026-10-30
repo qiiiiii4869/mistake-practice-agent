@@ -23,7 +23,7 @@ export function workflowMessage(error:unknown,stage?:WorkflowState):string{
     account_network_failed:'账号服务连接失败；本机 Key 会清除，云端预占最迟到期释放。',model_auth_failed:'模型服务拒绝了云端 Key，请管理员更新配置。',
     credits_exhausted:'当前账号没有可用次数，不能领取模型授权。',generation_busy:'账号已有活动任务，请结束或等待原任务到期。',
     model_quota_exhausted:'模型服务余额或额度耗尽，已停止并清理本机 Key。',workflow_lease_expired:'任务授权已失效，已停止并清理本机 Key。',
-    workflow_budget_exceeded:'达到本批调用或 Token 上限，已停止。',workflow_budget_estimate_exceeded:'后续处理预计超过剩余调用上限，已暂停新增请求；已完成进度保留。',
+    workflow_budget_exceeded:'达到本批调用或 Token 上限，已停止。',workflow_initial_budget_exceeded:'本场预计调用次数超过300次上限，尚未开始生成。',workflow_budget_estimate_exceeded:'后续处理预计超过剩余调用上限，已暂停新增请求；已完成进度保留。',
     workflow_batch_input_exceeded:'原题或资料文字过长，当前无法在请求长度上限内处理；已暂停并保留进度。',
     workflow_request_timeout:'模型请求超时，停止后续调用；该请求的用量可能未知。',workflow_cancelled:'已停止内容测试。',
     paper_required:'请先上传空白卷并确认不含学生姓名。',storage_conflict:'考试版本已变化，请重新打开测试入口。',workflow_invalid_scope:'请选择当前考试内的 1～6 个测试题号。',
@@ -42,6 +42,7 @@ export function workflowMessage(error:unknown,stage?:WorkflowState):string{
     account_invalid_response:'账号服务返回格式不符合当前版本，请检查服务版本。',invalid_model_request:'试卷或生成请求未通过本机检查，尚未发送该次模型请求。',
     workflow_failed:'生成在准备阶段未完成，请查看本机任务记录定位具体原因。',
     workflow_saved_recognition_missing:'已保存的识题回包不足，已停止离线复核；不会自动重新调用模型。',
+    workflow_paper_exam_mismatch:'成绩与试卷的周次不一致，请先换成同一场考试的成绩和试卷；尚未调用模型。',
     model_privacy_blocked:'题干或资料包含学生姓名，已拦截模型请求。',invalid_input:'测试参数不符合限制，请核对题号与页数。',
     model_network_failed:'模型连接失败，已停止本批调用。',workflow_release_pending:'本机 Key 已清理，但云端预占释放尚未确认。'} as Record<string,string>)[code]??`本次未完成（${/^[a-z_]+$/.test(code)?code:'请求失败'}）。`;
 }

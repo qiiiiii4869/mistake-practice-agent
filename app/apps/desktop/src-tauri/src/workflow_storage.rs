@@ -51,8 +51,8 @@ fn lease(conn:&Connection,owner:&str,run_id:&str,lease_id:&str,now:i64)->Result<
 fn validate_run(run:&Value,input:&Value,run_id:&str)->Result<()>{
  if run["runId"]!=run_id||run["contentHash"]!=input["contentHash"]||run["mode"]!=input["mode"]||run["workflowVersion"]!=input["workflowVersion"]||run["promptVersion"]!=input["promptVersion"]
   ||!matches!(run["executionMode"].as_str(),Some("real"|"mock"))||!run["state"].as_str().is_some_and(|s|["idle","preflight","authorizing","rendering","recognizing","aligning","extracting","retrieving","verifyingFacts","merging","selectingTargets","clozing","validatingCloze","generatingExercises","solving","validatingExercise","assembling","aggregatingEvidence","writingGuidance","validatingGuidance","contentReady","partial","failed","cancelled","recoverable"].contains(&s)){return Err(bad());}
- let calls=run["calls"].as_array().filter(|a|a.len()<=200).ok_or_else(bad)?;let mut ids=HashSet::new();
- if num(&run["policy"],"maxCalls")?>200||num(&run["policy"],"maxTokens")?>2_000_000||num(&run["policy"],"maxRunMs")?>2_700_000{return Err(bad());}
+ let calls=run["calls"].as_array().filter(|a|a.len()<=300).ok_or_else(bad)?;let mut ids=HashSet::new();
+ if num(&run["policy"],"maxCalls")?>300||num(&run["policy"],"maxTokens")?>2_000_000||num(&run["policy"],"maxRunMs")?>2_700_000{return Err(bad());}
  for c in calls{let cid=string(c,"callId")?;if !id(cid)||!ids.insert(cid)||!hash(string(c,"requestHash")?)||!matches!(c["status"].as_str(),Some("pending"|"completed"|"unknown"))
    ||!matches!(c["stage"].as_str(),Some("recognize"|"extract"|"verifyFact"|"cloze"|"blindFill"|"exercise"|"solve"|"guidance"))||!matches!(num(c,"attempt")?,1|2)
    ||num(c,"reservedTokens")?>2_000_000||(!c["usage"].is_null()&&c["usage"].as_u64().is_none()){return Err(bad());}}

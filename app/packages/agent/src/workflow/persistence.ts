@@ -7,6 +7,7 @@ import {teachingEvidence} from './teachingEvidence.ts';
 import {templateClassTeachingReport,validateClassTeachingReport} from './teachingAdvice.ts';
 import {createWorkflowActor,actorState} from './machine.ts';
 import {sameStatistics} from './statisticsIntegrity.ts';
+import {MAX_WORKFLOW_CALLS} from './budget.ts';
 import type {WorkflowStore,WorkflowRun,FrozenInput,ModelResponse,AnalysisCache,WorkflowTaskContext,ExportProfile} from './types.ts';
 
 type Invoke=<T>(command:string,args?:Record<string,unknown>)=>Promise<T>;
@@ -21,7 +22,7 @@ export async function validateStoredTask(task:StoredTask,ownerId:string,runId:st
   if(task.input.ownerId!==ownerId||!Number.isSafeInteger(task.revision)||task.revision<0)invalid();
   const r=task.run;if(!r)return structuredClone(task);
   if(r.runId!==runId||r.contentHash!==task.input.contentHash||r.mode!==task.input.mode||r.workflowVersion!==task.input.workflowVersion||r.promptVersion!==task.input.promptVersion
-    ||!['mock','real'].includes(r.executionMode)||!Array.isArray(r.calls)||r.calls.length>r.policy.maxCalls||r.calls.length>200)invalid();
+    ||!['mock','real'].includes(r.executionMode)||!Array.isArray(r.calls)||!Number.isSafeInteger(r.policy.maxCalls)||r.policy.maxCalls<1||r.policy.maxCalls>MAX_WORKFLOW_CALLS||r.calls.length>r.policy.maxCalls||r.calls.length>MAX_WORKFLOW_CALLS)invalid();
   if(r.machineSnapshot){const actor=createWorkflowActor(r.mode,r.machineSnapshot);try{actor.start();if(actorState(actor)!==r.state||actor.getSnapshot().context.mode!==r.mode)invalid();}finally{actor.stop();}}
   if(!Array.isArray(r.checkpoints)||new Set(r.checkpoints).size!==r.checkpoints.length||r.checkpoints.length>500)invalid();
   if(r.frame&&(!Number.isSafeInteger(r.frame.callStart)||r.frame.callStart<0||r.frame.callStart>r.calls.length||r.checkpoints.includes(r.frame.id)))invalid();

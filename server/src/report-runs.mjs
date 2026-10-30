@@ -52,7 +52,7 @@ export function registerReportRoutes(app,{db,authenticated,administrator,modelKe
   app.post('/v2/report-runs',{preHandler:authenticated,schema:{body:object({requestKey:uuid,contentHash:hash,
     mode:{enum:['dictation','exercise']},exportLayout:{enum:['individual','combined']},workflowVersion:version,promptVersion:version,
     counts:object({pages:integer(1,30),units:integer(1,80),students:integer(1,100)}),
-    requestedBudget:object({maxCalls:integer(1,200),maxTokens:integer(4096,2000000),maxRunSeconds:integer(1,2700)})})}},async(request)=>transaction(db,()=>{
+    requestedBudget:object({maxCalls:integer(1,300),maxTokens:integer(4096,2000000),maxRunSeconds:integer(1,2700)})})}},async(request)=>transaction(db,()=>{
       if(!key())fail('model_unconfigured',503);
       expireJobs(db);const body=request.body;
       const old=db.prepare('SELECT r.*,g.state,g.created_at,g.expires_at FROM report_runs r JOIN generations g ON g.id=r.job_id WHERE g.user_id=? AND g.request_key=?').get(request.account.id,body.requestKey);

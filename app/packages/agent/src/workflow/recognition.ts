@@ -83,7 +83,8 @@ function reason(readings:Reading[],number:string,keepFirst:string[]):Recognition
   return 'content_mismatch';
 }
 export async function recognizeWorkflowUnits(input:FrozenInput,invoke:InvokeModel,keepFirst:string[]=[],report:(check:RecognitionCheck)=>void=()=>{}):Promise<SourceUnit[]>{
-  const allNumbers=analyze(input.workspace).audit.questionNumbers,numbers=input.testScope?.questionNumbers??allNumbers,records=new Map<string,SourceUnit>();
+  const allNumbers=analyze(input.workspace).audit.questionNumbers,numbers=input.testScope?.questionNumbers??allNumbers;
+  const records=new Map<string,{unit:SourceUnit;verified:boolean;conflict:boolean}>();
   for(const [pageIndex,page]of(input.workspace.paper?.pages??[]).entries()){
     const read=async(attempt:number,focusNumbers?:string[]):Promise<Reading>=>{
       try{return parse(await invoke('recognize',{pageId:page.id,...(focusNumbers?{focusNumbers}:{} )}),allNumbers,attempt);}
@@ -111,13 +112,21 @@ export async function recognizeWorkflowUnits(input:FrozenInput,invoke:InvokeMode
       // A malformed item's empty fallback is diagnostic-only. It cannot enter
       // SourceUnit (which correctly requires text), or poison another page.
       if(!accepted)continue;
+      const unit:SourceUnit={unitId:`unit-${number}`,sourceNumbers:[number],pageIds:[page.id],stem:accepted.stem,material:'',options:[],
+        availability:matched?'usable':'isolated',alignmentStatus:matched?'recognized_by_machine':'ambiguous'};
       const previous=records.get(number);
-      if(previous){previous.pageIds.push(page.id);if(!matched||questionKey(number,previous.stem)!==questionKey(number,accepted.stem)){previous.availability='isolated';previous.alignmentStatus='ambiguous';}continue;}
-      records.set(number,{unitId:`unit-${number}`,sourceNumbers:[number],pageIds:[page.id],stem:accepted.stem,material:'',options:[],
-        availability:matched?'usable':'isolated',alignmentStatus:matched?'recognized_by_machine':'ambiguous'});
+      if(!previous){records.set(number,{unit,verified:!!matched,conflict:false});continue;}
+      // Apply the same two-read evidence standard across pages. An unverified
+      // detection/absence message on another page is not a second source and
+      // cannot revoke the accepted transcription. Its diagnostic remains above.
+      if(!matched)continue;
+      if(!previous.verified){records.set(number,{unit,verified:true,conflict:false});continue;}
+      previous.unit.pageIds.push(page.id);
+      if(questionKey(number,previous.unit.stem)!==questionKey(number,accepted.stem))previous.conflict=true;
+      if(previous.conflict){previous.unit.availability='isolated';previous.unit.alignmentStatus='ambiguous';}
     }
   }
-  return [...records.values()];
+  return [...records.values()].map(record=>record.unit);
 }
 
 // Re-parse already saved responses only. This diagnostic never invokes a model,

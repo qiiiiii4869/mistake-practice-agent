@@ -91,6 +91,22 @@ test('reopening one unfinished job returns prior counters without a second reser
   assert.equal((await s.req('POST',`/v2/report-runs/${id}/heartbeat`,{stage:'blindFill',calls:4,tokens:7000},s.alice.token)).data.error,'workflow_counter_regression');
  }finally{await s.close();}
 });
+
+test('300-call authorization and heartbeat work; 301 is rejected and old job budgets remain frozen',async()=>{
+ const s=await setup({modelKey:secret});try{
+  const invalid={...body(),requestedBudget:{maxCalls:301,maxTokens:2000000,maxRunSeconds:2700}};
+  assert.equal((await s.req('POST','/v2/report-runs',invalid,s.alice.token)).status,400);
+  assert.equal(s.db.prepare('SELECT count(*) n FROM generations').get().n,0);
+  const input={...body(),requestedBudget:{maxCalls:300,maxTokens:2000000,maxRunSeconds:2700}};
+  const created=await s.req('POST','/v2/report-runs',input,s.alice.token);assert.equal(created.status,200);assert.equal(created.data.limits.maxCalls,300);
+  const url=`/v2/report-runs/${created.data.jobId}`;
+  assert.equal((await s.req('POST',url+'/heartbeat',{stage:'cloze',calls:300,tokens:100},s.alice.token)).data.continue,true);
+  assert.equal((await s.req('POST',url+'/heartbeat',{stage:'cloze',calls:301,tokens:101},s.alice.token)).data.reason,'workflow_budget_exceeded');
+  const old={...body(),requestedBudget:{maxCalls:200,maxTokens:2000000,maxRunSeconds:2700}};
+  const legacy=await s.req('POST','/v2/report-runs',old,s.alice.token);assert.equal(legacy.status,200);assert.equal(legacy.data.limits.maxCalls,200);
+  assert.equal((await s.req('POST','/v2/report-runs',old,s.alice.token)).data.limits.maxCalls,200);
+ }finally{await s.close();}
+});
 test('production HTTPS, completion gate and exactly-once accounting remain explicit',async()=>{
   const s=await setup({modelKey:secret,allowLocalCredentials:false,deliveryEnabled:true});const {req,alice,db}=s;
   try{

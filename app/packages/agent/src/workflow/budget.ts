@@ -1,12 +1,14 @@
 import type { BudgetPolicy, CallRecord, GenerationMode, ModelStage } from './types.ts';
 
+export const MAX_WORKFLOW_CALLS = 300;
+
 export function estimateBudget(mode: GenerationMode, pages: number, units: number, batched=false): BudgetPolicy {
   if (!['dictation','exercise'].includes(mode) || ![pages,units].every(n => Number.isSafeInteger(n) && n >= 0)) throw new Error('workflow_invalid_budget');
   const planned = 3 * pages + 4 * (batched?Math.ceil(units/6):units) + 4 * (3 * units) + 2 + 8;
-  if (planned > 200) throw new Error('workflow_budget_estimate_exceeded');
-  // Batched tasks retain a 200-call authorization ceiling, with staged checks
+  if (planned > MAX_WORKFLOW_CALLS) throw new Error('workflow_initial_budget_exceeded');
+  // Batched tasks retain a 300-call authorization ceiling, with staged checks
   // for text-length splits and actual selected facts. Never truncate targets.
-  return { maxCalls:batched?200:planned, maxTokens: 2_000_000, maxOutputTokens: 16384, maxInputBytes: 32000,
+  return { maxCalls:batched?MAX_WORKFLOW_CALLS:planned, maxTokens: 2_000_000, maxOutputTokens: 16384, maxInputBytes: 32000,
     maxRunMs: 45 * 60_000, requestTimeoutMs: 120_000, maxNetworkRetries: 8 };
 }
 export function reserveCall(policy: BudgetPolicy, calls: CallRecord[], stage: ModelStage, requestHash: string,

@@ -172,6 +172,40 @@ test('repeated known question-number heading and ratio glyphs align without alte
   assert.equal(conflict[0].availability,'isolated');
  }
 });
+test('unverified observations on another page do not revoke a two-read transcription',async()=>{
+ const w=workflowWorkspace();w.paper.pages.push({...w.paper.pages[0],id:'page-2'});
+ const input=await freezeInput({ownerId:'cross-page',workspace:w,mode:'dictation'});
+ let firstPage=0;
+ const units=await recognizeWorkflowUnits(input,async(stage,data)=>{
+  if(data.pageId==='page-1'){
+   firstPage++;return {questions:[{number:'1',paragraphs:['第一题实际正文'],confidence:'high'},
+    ...(firstPage===2?[{number:'2',paragraphs:['一次不可靠的猜测'],confidence:'high'}]:[])]};
+  }
+  return {questions:[{number:'1',paragraphs:['未能读取到题号1的正文。'],confidence:'low',warnings:['该题不在本页']},
+   {number:'2',paragraphs:['第二题实际正文'],confidence:'high'}]};
+ });
+ assert.equal(units.length,2);assert(units.every(u=>u.availability==='usable'));
+ assert.deepEqual(units.find(u=>u.sourceNumbers[0]==='1').pageIds,['page-1']);
+ assert.equal(units.find(u=>u.sourceNumbers[0]==='2').stem,'第二题实际正文');
+ assert.deepEqual(units.find(u=>u.sourceNumbers[0]==='2').pageIds,['page-2']);
+});
+test('two confirmed transcriptions with differing text on different pages still isolate the original',async()=>{
+ const w=workflowWorkspace();w.paper.pages.push({...w.paper.pages[0],id:'page-2'});
+ const input=await freezeInput({ownerId:'cross-page',workspace:w,mode:'dictation',testScope:{questionNumbers:['1']}});
+ const units=await recognizeWorkflowUnits(input,async(stage,data)=>({questions:[{number:'1',paragraphs:[data.pageId==='page-1'?'原题条件是增加':'原题条件是减少'],confidence:'high'}]}));
+ assert.equal(units.length,1);assert.equal(units[0].availability,'isolated');assert.equal(units[0].alignmentStatus,'ambiguous');assert.equal(units[0].pageIds.length,2);
+});
+test('a genuinely unreliable question remains uncovered while accepted neighboring sources reach extraction',async()=>{
+ const s=await setupWorkflow(),prior=s.model.call.bind(s.model);s.input.workspace.paper.pages.push({...s.input.workspace.paper.pages[0],id:'page-2'});
+ const input=await freezeInput({ownerId:s.input.ownerId,workspace:s.input.workspace,mode:'dictation'});
+ s.model.call=async(request,signal)=>request.stage==='recognize'?{value:{questions:request.data.pageId==='page-1'?
+  [{number:'1',paragraphs:['第一题清晰正文'],confidence:'high'},{number:'2',paragraphs:['待核查的内容'],confidence:'low',warnings:['正文有遮挡']}]:
+  [{number:'1',paragraphs:['该题未出现在这一页，请查看其他页'],confidence:'low',warnings:['不在本页']} ]},usage:{totalTokens:5}}:prior(request,signal);
+ s.ports.prepareUnits=(input,signal,invoke,report)=>recognizeWorkflowUnits(input,invoke,[],report);
+ const run=await runWorkflow({...s,input});assert.equal(run.state,'partial',run.errorCode);assert.equal(run.errorCode,undefined);
+ assert.equal(run.units.find(u=>u.sourceNumbers[0]==='1').availability,'usable');assert.equal(run.units.find(u=>u.sourceNumbers[0]==='2').availability,'isolated');
+ assert(run.facts.some(f=>f.sourceNumbers.includes('1')));assert(!run.facts.some(f=>f.sourceNumbers.includes('2')));assert(run.assignments.some(a=>a.uncoveredNumbers.includes('2')));
+});
 test('missing or low-confidence selected text cannot be promoted to usable by only one confident reading',async()=>{
   const input=await freezeInput({ownerId:'owner',workspace:workflowWorkspace(),mode:'dictation',testScope:{questionNumbers:['2']}}),logs=[];let calls=0;
   const units=await recognizeWorkflowUnits(input,async()=>{calls++;return {questions:[{number:'2',stem:'仍不清晰的题干',confidence:calls===3?'high':'low'}],warnings:[]};},[],c=>logs.push(c));

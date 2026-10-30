@@ -1,5 +1,6 @@
 import { analyze, validateWorkspace, type Workspace } from '../../../core/src/index.ts';
 import { PROMPT_VERSION, WORKFLOW_VERSION, type ContentSettings, type ExportProfile, type FrozenInput, type GenerationMode } from './types.ts';
+import {assertPaperExamMatch} from '../../../paper/src/examMatch.ts';
 
 export function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -54,5 +55,6 @@ export function preflight(input: FrozenInput): { units: number; pages: number; h
   if (input.workspace.students.length > 100 || audit.questionNumbers.length > 80 || pages > 30) throw new Error('workflow_input_limit');
   const hasTargets = students.some(s => s.weakQuestions.some(n=>!input.testScope||input.testScope.questionNumbers.includes(n)));
   if (hasTargets && !pages) throw new Error('paper_required');
+  if(hasTargets)assertPaperExamMatch(input.workspace);
   return { units: input.testScope?.questionNumbers.length??audit.questionNumbers.length, pages, hasTargets };
 }

@@ -55,16 +55,21 @@ def main():
     assert page.evaluate('testAccount.credits')==10
     page.evaluate('classChooseCancel=true');panel.get_by_role('button',name='导出已有结果 PDF',exact=True).click()
     expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('取消选择保存位置');assert page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model').length")==calls
+    page.evaluate("() => {window.noFactsPrior=window.__TAURI_INTERNALS__.invoke;window.testCloudModelVersion='fedcba9876543210';window.__TAURI_INTERNALS__.invoke=async(c,a)=>{if(c==='workflow_call_model'&&a.request.stage==='extract'){testCloudCalls.push({command:c,args:structuredClone(a)});return {value:{facts:[]},usage:{totalTokens:5}};}return noFactsPrior(c,a);};}")
+    panel.get_by_role('button',name='生成并导出 PDF',exact=True).click()
+    expect(panel.get_by_text('仅有成绩统计兜底说明，尚无知识点讲评报告',exact=False)).to_be_visible(timeout=15000)
+    expect(panel.get_by_text('本次没有生成有效练习。',exact=False)).to_be_visible()
+    expect(panel.get_by_role('button',name='导出已有结果 PDF',exact=True)).to_have_count(0)
     assert not errors,errors;page.close()
     print('PASS:',mode,layout,'whole-class scope, settings, teacher report, PDF-only retry/cancel, resource preflight and no deduction.')
    page=browser.new_page();initial=workspace();base=initial['students'][0];q=base['questions'][0]
-   initial['students']=[{**base,'id':f'synthetic-{i}','name':f'合成学生{i}','questions':[{**q,'number':str(j+1),'label':str(j+1),'score':0,'result':'incorrect'} for j in range(13)]} for i in range(50)]
+   initial['students']=[{**base,'id':f'synthetic-{i}','name':f'合成学生{i}','questions':[{**q,'number':str(j+1),'label':str(j+1),'score':0,'result':'incorrect'} for j in range(15)]} for i in range(50)]
    initial['paper']={'pages':[{**initial['paper']['pages'][0],'id':f'page-{i+1}'} for i in range(4)],'questions':[]}
    batch=r"""
 const batchPrior=window.__TAURI_INTERNALS__.invoke;
 window.__TAURI_INTERNALS__.invoke=async(command,args)=>{
  if(command==='workflow_begin'){
-  const checked=await checkNativeAuthorization({selected:args.questionNumbers,available:Array.from({length:13},(_,i)=>String(i+1)),request:args.request,pages:args.pages.length,students:50});
+  const checked=await checkNativeAuthorization({selected:args.questionNumbers,available:Array.from({length:15},(_,i)=>String(i+1)),request:args.request,pages:args.pages.length,students:50});
   if(checked.error)throw checked.error;if(!checked.value.accepted)throw 'workflow_failed';
  }
  if(command==='workflow_call_model'){
@@ -72,7 +77,7 @@ window.__TAURI_INTERNALS__.invoke=async(command,args)=>{
   if(r.stage==='recognize'){
    testCloudCalls.push({command,args:structuredClone(args)});
    const page=Number(d.pageId.split('-').at(-1))-1;
-   return {value:{questions:Array.from({length:13},(_,i)=>i+1).filter(n=>(n-1)%4===page).map(n=>({number:String(n),stem:'说明光合作用的能量转化。',confidence:'high'})),warnings:[]},usage:{totalTokens:10}};
+   return {value:{questions:Array.from({length:15},(_,i)=>i+1).filter(n=>(n-1)%4===page).map(n=>({number:String(n),stem:'说明光合作用的能量转化。',confidence:'high'})),warnings:[]},usage:{totalTokens:10}};
   }
   if(d.groups){
    testCloudCalls.push({command,args:structuredClone(args)});
@@ -91,21 +96,29 @@ window.__TAURI_INTERNALS__.invoke=async(command,args)=>{
    panel=page.get_by_role('region',name='全班练习与教师报告',exact=True);panel.get_by_role('button',name='生成并导出 PDF',exact=True).click()
    expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('已保存',timeout=20000)
    request=page.evaluate("testCloudCalls.find(c=>c.command==='workflow_begin').args.request")
-   assert request['counts']=={'pages':4,'units':13,'students':50};assert request['requestedBudget']['maxCalls']==200
+   assert request['counts']=={'pages':4,'units':15,'students':50};assert request['requestedBudget']['maxCalls']==300
    assert page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model'&&c.args.request.stage==='extract').length")==3
-   assert len(page.evaluate('Object.values(testWorkflowDb.tasks)[0].run.facts[0].sourceNumbers'))==13
+   assert len(page.evaluate('Object.values(testWorkflowDb.tasks)[0].run.facts[0].sourceNumbers'))==15
    assert page.evaluate('testAccount.credits')==10
    calls_before_recheck=page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model').length")
    panel.get_by_role('button',name='离线复核已保存识题',exact=True).click()
    expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('已离线复核')
-   expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('13 道原题有可靠文字')
+   expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('15 道原题有可靠文字')
    assert page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model').length")==calls_before_recheck
    page.evaluate("() => {window.failNextBegin=window.__TAURI_INTERNALS__.invoke;window.__TAURI_INTERNALS__.invoke=async(c,a)=>{if(c==='workflow_begin')throw 'account_network_failed';return failNextBegin(c,a);};}")
    model_calls=page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model').length")
    panel.get_by_role('button',name='生成并导出 PDF',exact=True).click();expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('账号服务连接失败')
    assert page.evaluate("testCloudCalls.filter(c=>c.command==='workflow_call_model').length")==model_calls
    assert page.evaluate('Object.values(testWorkflowDb.tasks).some(t=>t.run?.errorCode==="account_network_failed"&&t.run.calls.length===0)')
-   page.close();print('PASS: 50 students / 13 originals / 4 pages passes native authorization guard; native string failures preserve cause without model calls.')
+   page.close();print('PASS: 50 students / 15 originals / 4 pages / 300 calls passes native authorization guard; native string failures preserve cause without model calls.')
+   page=browser.new_page();mismatched=workspace();mismatched['exam']['name']='高三生物第八周周练';mismatched['paper']['pages'][0]['name']='第三周周练.pdf'
+   page.add_init_script(MOCK+'\nwindow.testStored='+json.dumps({'revision':1,'snapshot':mismatched})+';'+EXTRA+CLOUD+CLASS)
+   page.goto(f'http://127.0.0.1:{server.server_port}/');page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告',exact=True).click()
+   panel=page.get_by_role('region',name='全班练习与教师报告',exact=True)
+   expect(panel.get_by_role('alert')).to_contain_text('成绩为第8周，试卷文件包含第3周')
+   panel.get_by_role('button',name='生成并导出 PDF',exact=True).click();expect(panel.get_by_test_id('class-workflow-message')).to_contain_text('周次不一致')
+   assert not page.evaluate("testCloudCalls.some(c=>['workflow_begin','workflow_call_model'].includes(c.command))")
+   page.close();print('PASS: different exam/paper weeks block authorization and paid calls with an explicit source mismatch.')
    browser.close()
  finally:server.shutdown();server.server_close()
 if __name__=='__main__':main()

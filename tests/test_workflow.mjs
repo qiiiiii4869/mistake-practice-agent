@@ -175,7 +175,7 @@ test('budget pre-reservation stops before model invocation, unknown usage is not
   assert.equal(policy.maxOutputTokens,16384);
   const reasoning=reserveCall(policy,[],'verifyFact','hash',10,1,0,1);
   assert.ok(reasoning.reservedTokens>=16384+10);
-  assert.throws(() => estimateBudget('dictation',30,80),/workflow_budget_estimate_exceeded/);
+  assert.throws(() => estimateBudget('dictation',30,80),/workflow_initial_budget_exceeded/);
   const unknown = {usage:null,reservedTokens:policy.maxTokens};
   assert.throws(() => reserveCall(policy,[unknown],'cloze','hash',10,1,0,1),/workflow_budget_exceeded/);
 });

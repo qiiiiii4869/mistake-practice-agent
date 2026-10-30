@@ -78,7 +78,7 @@ fn lock(state:&WorkflowCloudState)->Result<Guard<'_>,String>{if state.busy.swap(
     let calls=prior_calls.max(credential["calls"].as_u64().unwrap_or(0));let tokens=prior_tokens.max(credential["tokens"].as_u64().unwrap_or(0));
     let deadline=local["run"]["startedAt"].as_u64().zip(local["run"]["policy"]["maxRunMs"].as_u64()).map_or(now()+seconds*1000,|(a,b)|a.saturating_add(b));
     if calls>=max_calls||tokens>=max_tokens||deadline<=now(){return Err("workflow_budget_exceeded".into());}
-    if lease_until<=now()||max_calls>200||max_tokens>2000000||seconds>2700{return Err("account_invalid_response".into());}
+    if lease_until<=now()||max_calls>300||max_tokens>2000000||seconds>2700{return Err("account_invalid_response".into());}
     if super::account::user_folder(&app)?!=owner{return Err("session_required".into());}
     if state.epoch.load(Ordering::SeqCst)!=epoch{
       let _=super::account::workflow_request(&app,&format!("/v2/report-runs/{job_id}/finish"),Some(json!({"outcome":"cancelled"}))).await;

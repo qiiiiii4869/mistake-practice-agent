@@ -7,6 +7,7 @@ import {cloudWorkflowPorts,type CloudModelStatus} from '../../../packages/agent/
 import type {KnowledgeLibrary} from '../../../packages/knowledge/src';
 import {failureMessages} from '../../../packages/agent/src/workflow/diagnostics';
 import {recheckSavedRecognition} from '../../../packages/agent/src/workflow/recognition';
+import {paperExamMatch,assertPaperExamMatch} from '../../../packages/paper/src/examMatch';
 import {renderPaperFiles} from './renderPaperFiles';
 import {workflowMessage} from './CloudWorkflowPanel';
 import {useAccount} from './AccountGate';
@@ -23,6 +24,7 @@ export function ClassWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
  const [offlineRecognition,setOfflineRecognition]=React.useState<Awaited<ReturnType<typeof recheckSavedRecognition>>|null>(null);
  const controller=React.useRef<AbortController|null>(null),activeRun=React.useRef<string|null>(null);
  const disabled=locked||busy,run=task?.run;
+ const paperMatch=paperExamMatch(workspace);
  const refresh=async()=>{try{setTasks(await store.list());}catch(error){setMessage(workflowMessage(error));}};
  const show=async(runId:string)=>{const value=await store.task(runId);if(!value)throw new Error('workflow_run_not_found');setTask(value);setOfflineRecognition(null);setRetryUnknown(false);setMode(value.input.mode);setMaxItems(value.input.settings.maxItems);setDifficulty(value.input.settings.difficulty);setExports(await store.listExports(runId));return value;};
  React.useEffect(()=>{void refresh();let closed=false,off:(()=>void)|undefined;
@@ -48,6 +50,7 @@ export function ClassWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
  };
  async function generate(resuming=false){await withBusy(async()=>{
   setDelivery(null);
+  assertPaperExamMatch(resuming&&task?task.input.workspace:workspace);
   const available=await invoke<{available:boolean}>('workflow_pdf_status');if(!available.available)throw new Error('pdf_runtime_missing');
   const status=await invoke<CloudModelStatus>('workflow_model_status');if(!status.configured)throw new Error('model_unconfigured');
   const library=await invoke<KnowledgeLibrary>('list_knowledge');let input;
@@ -73,6 +76,8 @@ export function ClassWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
  return <section className="card" aria-label="全班练习与教师报告">
   <div className="card-heading"><h2>生成学生练习与教师报告</h2><span className="badge">全班 {workspace.students.length} 人</span></div>
   <p className="help">一次处理本场所有原题，按每位学生的实际失分分配练习，并生成一份独立教师报告。没有知识库也可继续。请使用不含学生姓名的空白试卷。</p>
+  <p className="help">当前成绩：{workspace.exam.name}；试卷文件：{[...new Set(workspace.paper?.pages.map(p=>p.name)??[])].join('、')||'尚未上传'}</p>
+  {paperMatch.mismatch&&<p className="notice error" role="alert">成绩为第{paperMatch.examWeek}周，试卷文件包含第{paperMatch.paperWeeks.join('、')}周。请先换成同一场考试的成绩和试卷，当前不会开始模型调用。</p>}
   <div className="fields">
    <label>内容模式<select aria-label="全班内容模式" disabled={disabled} value={mode} onChange={e=>{const next=e.target.value as GenerationMode;setMode(next);setMaxItems(next==='dictation'?16:5);}}><option value="dictation">知识点听写</option><option value="exercise">变式补练</option></select></label>
    <label>{mode==='dictation'?'每人最多空数':'每人最多题数'}<input aria-label="全班每人数量上限" type="number" min="1" max={mode==='dictation'?24:10} disabled={disabled} value={maxItems} onChange={e=>setMaxItems(Number(e.target.value))}/></label>
@@ -87,7 +92,8 @@ export function ClassWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
   <p role="status" className="notice" data-testid="class-workflow-message">{message}</p>
   {run&&<div aria-label="全班生成结果"><p>{task?.input.workspace.exam.name} · {task?.input.workspace.students.length} 人</p><p>状态：{({contentReady:'内容已就绪',partial:'部分完成',failed:'生成失败',cancelled:'已停止',recoverable:'待恢复'} as Record<string,string>)[run.state]??'处理中'}；有效条目 {run.items.filter(i=>i.status==='passed').length} 个；未覆盖目标 {run.assignments.reduce((sum,a)=>sum+a.uncoveredTargets.length,0)} 个；未覆盖原题 {new Set(run.assignments.flatMap(a=>a.uncoveredNumbers)).size} 道。</p>
    {!!task?.input.testScope&&<p>此为单题测试结果，不能作为全班 PDF 导出。</p>}
-   <p>教师报告：{run.teacherReport?'已生成，导出时独立保存':'尚未完成'}</p>
+   {run.items.length===0&&<p className="notice">本次没有生成有效练习。{run.facts.length===0?'知识点尚未建立，不能据此形成知识点讲评结论。':'候选内容未能通过检查。'}已保存的识题回包可先离线复核，无需立即重新调用模型。</p>}
+   <p>教师报告：{run.teacherReport?run.facts.length===0?'仅有成绩统计兜底说明，尚无知识点讲评报告':'已生成，导出时独立保存':'尚未完成'}</p>
    {run.calls.some(c=>c.stage==='recognize'&&c.status==='completed')&&<button className="secondary small" disabled={disabled} onClick={()=>void withBusy(async()=>{
     const saved=await store.task(run.runId);if(!saved?.run)throw new Error('workflow_run_not_found');
     const result=await recheckSavedRecognition(saved.input,saved.run,id=>store.loadResponse(account.user.id,run.runId,id));setOfflineRecognition(result);

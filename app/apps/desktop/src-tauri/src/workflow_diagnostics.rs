@@ -24,7 +24,7 @@ fn validate(report:&Audit)->Result<(),String>{
     let uuid=report.run_id.len()==36&&report.run_id.bytes().all(|b|b.is_ascii_hexdigit()||b==b'-');
     if report.schema_version!=1||!uuid||!["dictation","exercise"].contains(&report.mode.as_str())
       ||!["contentReady","partial","failed","cancelled","recoverable"].contains(&report.state.as_str())
-      ||report.calls.len()>200||report.call_count!=report.calls.len()||report.coverage.len()>100||report.coverage.iter().any(|v|!v.is_finite()||!(0.0..=1.0).contains(v))
+      ||report.calls.len()>300||report.call_count!=report.calls.len()||report.coverage.len()>100||report.coverage.iter().any(|v|!v.is_finite()||!(0.0..=1.0).contains(v))
       ||report.validations.len()>500||report.passed_items>240||report.failed_items>240||report.skipped_items>500{return Err(bad());}
     let mut tokens=0u64;let mut unknown=0;
     for call in &report.calls{
