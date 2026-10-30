@@ -168,6 +168,7 @@ export interface WorkflowPorts {
   persistDiagnostics?(run:WorkflowRun):Promise<void>;
   prepareUnits(input: FrozenInput, signal: AbortSignal, invoke?: InvokeModel,report?:(check:RecognitionCheck)=>void): Promise<SourceUnit[]>;
   retrieve(query: string, signal: AbortSignal): Promise<EvidenceRef[]>;
+  retrieveForOriginal?(unit: SourceUnit, signal: AbortSignal): Promise<EvidenceRef[]>;
   now?: () => number; onProgress?: (state: WorkflowState) => void;
 }
 export interface ExportManifest {

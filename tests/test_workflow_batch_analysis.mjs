@@ -94,6 +94,18 @@ test('one empty fact group skips retrieval and verification while valid neighbou
  assert(run.skipped.some(s=>s.reason==='text_evidence_insufficient'&&s.sourceNumbers.includes('4')));
  assert(s.model.calls.filter(c=>c.stage==='verifyFact').every(c=>c.data.groups.every(g=>g.unitId!=='unit-4')));
 });
+test('batched extraction is grounded before its first call and preserves per-unit sources during verification',async()=>{
+ const s=await batchFixture();let extracted=0;
+ s.ports.retrieveForOriginal=async unit=>[{documentId:`reference-${unit.unitId}`,page:1,text:`本单元的规范知识依据：${unit.unitId}`}];
+ const call=s.model.call.bind(s.model);
+ s.model.call=async(request,signal)=>{
+  if(request.stage==='extract'&&request.data.groups){extracted++;for(const group of request.data.groups)assert.equal(group.evidence[0].documentId,`reference-${group.unitId}`);}
+  if(request.stage==='verifyFact')for(const group of request.data.groups)assert(group.evidence.some(r=>r.documentId===`reference-${group.unitId}`));
+  return call(request,signal);
+ };
+ const run=await runWorkflow(s);assert.equal(run.state,'contentReady',run.errorCode);assert.equal(extracted,3);
+ assert.equal(run.checkpoints.filter(c=>c.startsWith('source-evidence:')).length,13);assert(run.facts.every(f=>f.sourceMode==='library'));
+});
 test('all empty fact groups make no retrieval, verification or item requests and stay visibly incomplete',async()=>{
  const s=await batchFixture({change:(r,response)=>{
   if(r.stage==='extract')for(const group of response.value.groups??[])group.facts=[];

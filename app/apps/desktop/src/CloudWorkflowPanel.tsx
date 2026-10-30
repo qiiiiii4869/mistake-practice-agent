@@ -8,6 +8,7 @@ import {partitionValidationAttempts} from '../../../packages/agent/src/workflow/
 import {renderPaperFiles} from './renderPaperFiles';
 import {useAccount} from './AccountGate';
 import type {KnowledgeLibrary} from '../../../packages/knowledge/src';
+import {knowledgeVersion} from '../../../packages/knowledge/src/biology';
 
 const stages:Partial<Record<WorkflowState,string>>={preflight:'预检',authorizing:'云端授权',rendering:'准备试卷',recognizing:'独立识题与核对',aligning:'题号对齐',
   extracting:'提炼知识句',retrieving:'检索可选资料',verifyingFacts:'事实核验',merging:'合并知识点',selectingTargets:'选择个人目标',clozing:'生成听写',validatingCloze:'独立盲填',
@@ -92,14 +93,14 @@ export function CloudWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
       if(!pageNumbers.length||pageNumbers.some(n=>!Number.isInteger(n)||n<1||n>30)||new Set(pageNumbers).size!==pageNumbers.length)throw new Error('invalid_input');
       const library=await invoke<KnowledgeLibrary>('list_knowledge');
       let input;
-      if(resuming){input=restored!.input;if(input.knowledgeRevision!==String(library.revision))throw new Error('workflow_stale_run');}
+      if(resuming){input=restored!.input;if(input.knowledgeRevision!==knowledgeVersion(library.revision,workspace.exam.subjectName))throw new Error('workflow_stale_run');}
       else{if(!workspace.paper)throw new Error('paper_required');
         const paper=await renderPaperFiles(workspace.paper,numbers,setMessage,signal.signal);
         if(pageNumbers.some(n=>n>paper.pages.length))throw new Error('invalid_input');
         input=await freezeInput({ownerId:account.user.id,workspace:{...workspace,paper:{pages:pageNumbers.map(n=>paper.pages[n-1]),questions:[]}},mode,
-          knowledgeRevision:String(library.revision),testScope:{questionNumbers:chosen},recognitionPolicy:{keepFirstNumbers:keepFirst.split(/[,，、\s]+/).filter(Boolean)}});}
+          knowledgeRevision:knowledgeVersion(library.revision,workspace.exam.subjectName),testScope:{questionNumbers:chosen},recognitionPolicy:{keepFirstNumbers:keepFirst.split(/[,，、\s]+/).filter(Boolean)}});}
       const requestKey=resuming?restored!.run?.runId??'':crypto.randomUUID();
-      const ports=cloudWorkflowPorts({invoke,requestKey,revision,modelConfigVersion:configured.modelConfigVersion??'unknown',store,resumeCloud:resuming?restored?.run?.cloud:undefined,
+      const ports=cloudWorkflowPorts({invoke,requestKey,revision,modelConfigVersion:configured.modelConfigVersion??'unknown',subject:workspace.exam.subjectName,store,resumeCloud:resuming?restored?.run?.cloud:undefined,
         keepFirstNumbers:keepFirst.split(/[,，、\s]+/).filter(Boolean),onProgress:stage=>setMessage(`正在${stages[stage]??stage}…`)});
       const run=await runWorkflow({input,ports,runId:requestKey,signal:signal.signal,resume:resuming,retryUnknownCalls:resuming&&retryUnknown,taskContext:{workspaceRevision:revision}});setResult(run);
       const saved=await store.task(requestKey);setRestored(saved);void refreshTasks();

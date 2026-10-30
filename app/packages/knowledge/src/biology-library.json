@@ -1,0 +1,3831 @@
+{
+  "schemaVersion": 1,
+  "version": "biology-knowledge-20261030.1",
+  "title": "高中生物主题知识库（用户资料整理版）",
+  "basis": {
+    "archiveName": "高中生物资料库.zip",
+    "archiveSha256": "9121bd24e66052f87b401822657651b357d86417e22fe90d184817ced3a46324",
+    "readMarkdownFiles": 7,
+    "readPdfPages": 36,
+    "scope": "依据附件五模块目录、两版对照及两份江苏真题，整理原创基础概括；不是教材全文或所有高中考点的完整替代。"
+  },
+  "modules": [
+    {
+      "id": "m1",
+      "volume": "必修1",
+      "name": "分子与细胞"
+    },
+    {
+      "id": "m2",
+      "volume": "必修2",
+      "name": "遗传与进化"
+    },
+    {
+      "id": "m3",
+      "volume": "选择性必修1",
+      "name": "稳态与调节"
+    },
+    {
+      "id": "m4",
+      "volume": "选择性必修2",
+      "name": "生物与环境"
+    },
+    {
+      "id": "m5",
+      "volume": "选择性必修3",
+      "name": "生物技术与工程"
+    },
+    {
+      "id": "exp",
+      "volume": "跨模块",
+      "name": "实验与证据推理"
+    }
+  ],
+  "sources": [
+    {
+      "id": "js2024",
+      "name": "2024江苏高考生物真题及答案.pdf",
+      "sha256": "96e1c8ccdd3eaa13878b3626259c16acdef82cf03624fc3509f57ab1490ac789",
+      "pages": 22,
+      "reading": "全卷文字阅读，并核对相关图页",
+      "kind": "用户提供的试题与网络参考解析",
+      "notes": "物理页22为广告，不纳入知识。题面非选择题有重复编号，统一按内容顺序20—24编号。附带解析有局部错误，不逐段照录。"
+    },
+    {
+      "id": "js2025",
+      "name": "2025江苏高考生物真题及答案.pdf",
+      "sha256": "c96b565f009a9965c64a46a3275971f40b1296329cf13cfc6bceb43a8cc9d4e0",
+      "pages": 14,
+      "reading": "扫描件14页逐页视觉阅读",
+      "kind": "用户提供的试题与简要参考答案",
+      "notes": "1—11页为题目，12—14页为答案；无可提取文字层。专题规则只在题设条件中适用。"
+    }
+  ],
+  "cards": [
+    {
+      "id": "bio-m1-components",
+      "moduleId": "m1",
+      "title": "储能物质与组成单位",
+      "keywords": [
+        "糖原",
+        "肝糖原",
+        "脂肪",
+        "胃蛋白酶",
+        "储能",
+        "葡萄糖",
+        "氨基酸"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "糖原和脂肪都可以作为细胞内的储能物质。",
+          "keyTerms": [
+            "糖原",
+            "脂肪"
+          ]
+        },
+        {
+          "statement": "糖原的基本组成单位是葡萄糖，蛋白质的基本组成单位是氨基酸。",
+          "keyTerms": [
+            "葡萄糖",
+            "氨基酸"
+          ]
+        }
+      ],
+      "misconception": "不能把所有含碳生物分子都当成含氮大分子，也不能把储能功能等同于主要供能功能。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 10,
+          "question": "1"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 1,
+          "question": "1"
+        }
+      ]
+    },
+    {
+      "id": "bio-m1-membrane-composition",
+      "moduleId": "m1",
+      "title": "生物膜的主要组成",
+      "keywords": [
+        "生物膜",
+        "蛋白质",
+        "磷脂",
+        "细胞膜"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "蛋白质和脂质是生物膜的主要组成成分。",
+          "keyTerms": [
+            "蛋白质",
+            "脂质"
+          ]
+        }
+      ],
+      "misconception": "淀粉是多糖，不能替代磷脂成为膜的主要骨架成分。",
+      "sources": [
+        {
+          "sourceId": "js2025",
+          "page": 1,
+          "question": "1"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 12,
+          "question": "1"
+        }
+      ]
+    },
+    {
+      "id": "bio-m1-membrane-system",
+      "moduleId": "m1",
+      "title": "生物膜系统与细胞骨架",
+      "keywords": [
+        "生物膜系统",
+        "细胞器膜",
+        "核膜",
+        "囊泡",
+        "细胞骨架",
+        "分泌蛋白"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "真核细胞的生物膜系统由细胞膜、细胞器膜和核膜等共同组成。",
+          "keyTerms": [
+            "细胞膜",
+            "细胞器膜",
+            "核膜"
+          ]
+        },
+        {
+          "statement": "囊泡参与细胞内物质运输，其运动与细胞骨架有关。",
+          "keyTerms": [
+            "囊泡",
+            "细胞骨架"
+          ]
+        }
+      ],
+      "misconception": "只列出几种细胞器膜，不能称为完整的生物膜系统。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 10,
+          "question": "2"
+        }
+      ]
+    },
+    {
+      "id": "bio-m1-membrane-properties",
+      "moduleId": "m1",
+      "title": "膜的流动性与选择透过性",
+      "keywords": [
+        "流动性",
+        "选择透过性",
+        "融合",
+        "囊泡",
+        "ATP合酶",
+        "类囊体膜"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "生物膜能够形成和融合囊泡，体现了膜具有一定的流动性。",
+          "keyTerms": [
+            "流动性"
+          ]
+        },
+        {
+          "statement": "不同物质通过膜的方式和难易程度不同，体现了膜的选择透过性。",
+          "keyTerms": [
+            "选择透过性"
+          ]
+        }
+      ],
+      "misconception": "膜的结构特点和功能特性不能混用；有流动性不等于任何物质都能自由通过。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 10,
+          "question": "2"
+        },
+        {
+          "sourceId": "js2024",
+          "page": 16,
+          "question": "20"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "22"
+        }
+      ]
+    },
+    {
+      "id": "bio-m1-osmosis",
+      "moduleId": "m1",
+      "title": "质壁分离与复原",
+      "keywords": [
+        "质壁分离",
+        "渗透",
+        "液泡",
+        "原生质层",
+        "洋葱",
+        "吸水",
+        "失水"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "具有细胞壁和大液泡的活植物细胞在适宜的外界高渗条件下失水，原生质层可与细胞壁分离。",
+          "keyTerms": [
+            "原生质层",
+            "细胞壁"
+          ]
+        },
+        {
+          "statement": "观察液泡体积和原生质层位置的变化，可以判断植物细胞的吸水或失水状态。",
+          "keyTerms": [
+            "液泡",
+            "原生质层"
+          ]
+        }
+      ],
+      "misconception": "不能把失水后死亡的细胞仍当作能够正常复原的材料；细胞壁不是原生质层。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 11,
+          "question": "7"
+        },
+        {
+          "sourceId": "js2024",
+          "page": 12,
+          "question": "7"
+        }
+      ]
+    },
+    {
+      "id": "bio-m1-enzyme-specificity",
+      "moduleId": "m1",
+      "title": "酶的专一性与检测指标",
+      "keywords": [
+        "酶",
+        "专一性",
+        "淀粉酶",
+        "蔗糖",
+        "底物",
+        "还原糖",
+        "胃蛋白酶"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "酶具有专一性，检验专一性时应比较同一种酶对不同底物的作用。",
+          "keyTerms": [
+            "专一性",
+            "底物"
+          ]
+        },
+        {
+          "statement": "实验检测指标应能区分底物是否被催化转化，不能仅凭加入了检测试剂就认定反应发生。",
+          "keyTerms": [
+            "检测指标"
+          ]
+        }
+      ],
+      "misconception": "检验淀粉酶对蔗糖的作用时，不能选择只反映淀粉存在与否的指标来代替产物检测。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 10,
+          "question": "1"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 2,
+          "question": "8"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 12,
+          "question": "8"
+        }
+      ]
+    },
+    {
+      "id": "bio-m1-enzyme-temperature",
+      "moduleId": "m1",
+      "title": "温度对酶活性的实验",
+      "keywords": [
+        "温度",
+        "酶活性",
+        "水浴",
+        "酶和底物",
+        "保温"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "探究温度对酶活性的影响时，应先使酶和底物分别达到设定温度，再混合反应。",
+          "keyTerms": [
+            "分别",
+            "混合"
+          ]
+        },
+        {
+          "statement": "改变自变量时，其余可能影响反应速率的条件应尽量保持一致且适宜。",
+          "keyTerms": [
+            "自变量"
+          ]
+        }
+      ],
+      "misconception": "先混合再升到目标温度，会混入升温过程中已经发生的反应。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 10,
+          "question": "3"
+        }
+      ]
+    },
+    {
+      "id": "bio-m1-lipid-test",
+      "moduleId": "m1",
+      "title": "脂肪鉴定的操作顺序",
+      "keywords": [
+        "脂肪鉴定",
+        "苏丹",
+        "乙醇",
+        "浮色",
+        "子叶"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "用苏丹Ⅲ染液鉴定切片中的脂肪时，染色后可用适宜浓度的乙醇洗去浮色。",
+          "keyTerms": [
+            "苏丹Ⅲ",
+            "浮色"
+          ]
+        }
+      ],
+      "misconception": "染色和洗去浮色的作用不同，不应颠倒。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 10,
+          "question": "3"
+        }
+      ]
+    },
+    {
+      "id": "bio-m1-aerobic-stages",
+      "moduleId": "m1",
+      "title": "有氧呼吸的主要场所",
+      "keywords": [
+        "有氧呼吸",
+        "细胞质基质",
+        "线粒体",
+        "丙酮酸",
+        "氧气",
+        "二氧化碳"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "真核细胞有氧呼吸的第一阶段发生在细胞质基质。",
+          "keyTerms": [
+            "细胞质基质"
+          ]
+        },
+        {
+          "statement": "真核细胞有氧呼吸过程中，线粒体基质中的相关反应释放二氧化碳，线粒体内膜上的相关反应消耗氧气。",
+          "keyTerms": [
+            "线粒体基质",
+            "线粒体内膜"
+          ]
+        }
+      ],
+      "misconception": "不能把所有呼吸阶段都定位在线粒体，也不能把耗氧和产二氧化碳当成同一阶段。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 11,
+          "question": "6"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 1,
+          "question": "2"
+        }
+      ]
+    },
+    {
+      "id": "bio-m1-respiration-comparison",
+      "moduleId": "m1",
+      "title": "不同细胞的呼吸作用比较",
+      "keywords": [
+        "酵母菌",
+        "人体细胞",
+        "呼吸作用",
+        "无氧呼吸",
+        "ATP",
+        "乳酸"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "人体细胞和酵母细胞的呼吸作用均可产生ATP。",
+          "keyTerms": [
+            "ATP"
+          ]
+        },
+        {
+          "statement": "不同生物无氧呼吸的终产物可能不同，不能笼统认为无氧呼吸都释放二氧化碳。",
+          "keyTerms": [
+            "终产物"
+          ]
+        }
+      ],
+      "misconception": "比较生物的呼吸方式，要保留生物类型和供氧条件。",
+      "sources": [
+        {
+          "sourceId": "js2025",
+          "page": 1,
+          "question": "2"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 12,
+          "question": "2"
+        }
+      ]
+    },
+    {
+      "id": "bio-m1-atp",
+      "moduleId": "m1",
+      "title": "ATP与直接供能",
+      "keywords": [
+        "ATP",
+        "ADP",
+        "磷酸化",
+        "直接供能",
+        "能量"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "ATP水解可为细胞内许多吸能过程直接提供能量。",
+          "keyTerms": [
+            "ATP"
+          ]
+        },
+        {
+          "statement": "细胞内ATP的合成与消耗相互联系，不能把能产生ATP的细胞器理解为从不消耗ATP。",
+          "keyTerms": [
+            "合成",
+            "消耗"
+          ]
+        }
+      ],
+      "misconception": "有机物储存能量、ATP直接供能和酶催化反应是不同层次。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 11,
+          "question": "6"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 8,
+          "question": "22"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "22"
+        }
+      ]
+    },
+    {
+      "id": "bio-m1-light-reaction",
+      "moduleId": "m1",
+      "title": "光反应与ATP、NADPH",
+      "keywords": [
+        "光合作用",
+        "光反应",
+        "类囊体",
+        "光解水",
+        "NADPH",
+        "叶绿体",
+        "光能"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "叶绿体的光反应在类囊体膜上进行，利用光能形成ATP和NADPH等产物。",
+          "keyTerms": [
+            "类囊体膜",
+            "ATP",
+            "NADPH"
+          ]
+        },
+        {
+          "statement": "光反应产生的ATP和NADPH参与后续碳反应。",
+          "keyTerms": [
+            "ATP",
+            "NADPH"
+          ]
+        }
+      ],
+      "misconception": "不能把ATP和NADPH误写成二氧化碳固定的碳源。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 16,
+          "question": "20"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 7,
+          "question": "21"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "21"
+        }
+      ]
+    },
+    {
+      "id": "bio-m1-carbon-reaction",
+      "moduleId": "m1",
+      "title": "碳反应的物质联系",
+      "keywords": [
+        "光合作用",
+        "碳反应",
+        "暗反应",
+        "C3",
+        "C5",
+        "二氧化碳固定",
+        "还原"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "碳反应包括二氧化碳的固定和三碳化合物的还原等过程。",
+          "keyTerms": [
+            "固定",
+            "还原"
+          ]
+        },
+        {
+          "statement": "在相应光合系统中，三碳化合物的还原需要ATP提供能量，并需要NADPH参与。",
+          "keyTerms": [
+            "ATP",
+            "NADPH"
+          ]
+        }
+      ],
+      "misconception": "叶绿体和蓝细菌的结构不同，不能把蓝细菌的碳反应位置写成叶绿体基质。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 16,
+          "question": "20"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "21"
+        }
+      ]
+    },
+    {
+      "id": "bio-m1-photosynthesis-balance",
+      "moduleId": "m1",
+      "title": "净光合作用与总光合作用",
+      "keywords": [
+        "净光合",
+        "总光合",
+        "实际光合",
+        "表观光合",
+        "放氧",
+        "耗氧",
+        "氧气浓度"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "在测量条件一致且指标可比较时，总光合速率等于净光合速率与呼吸速率之和。",
+          "keyTerms": [
+            "净光合速率",
+            "呼吸速率"
+          ]
+        },
+        {
+          "statement": "光照下测得的净氧气交换量反映光合作用与呼吸作用的共同结果。",
+          "keyTerms": [
+            "净氧气交换量"
+          ]
+        }
+      ],
+      "misconception": "先认清纵轴是总生成量、净变化量还是消耗量，不能直接把净变化当成总生成。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 5,
+          "question": "20"
+        },
+        {
+          "sourceId": "js2024",
+          "page": 16,
+          "question": "20"
+        }
+      ]
+    },
+    {
+      "id": "bio-m1-pigment",
+      "moduleId": "m1",
+      "title": "色素提取与避光保存",
+      "keywords": [
+        "叶绿素",
+        "色素提取",
+        "乙醇",
+        "有机溶剂",
+        "避光",
+        "叶绿素含量"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "叶绿体中的光合色素可用适宜的有机溶剂提取。",
+          "keyTerms": [
+            "有机溶剂"
+          ]
+        },
+        {
+          "statement": "提取的色素应注意避光保存，减少色素降解对测定的影响。",
+          "keyTerms": [
+            "避光"
+          ]
+        }
+      ],
+      "misconception": "提取目的、检测浓度和原样品浓度应分别说明，不把稀释后读数直接当原浓度。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 17,
+          "question": "20"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 7,
+          "question": "21"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "21"
+        }
+      ]
+    },
+    {
+      "id": "bio-m1-organelle-isolation",
+      "moduleId": "m1",
+      "title": "细胞器分离与等渗保护",
+      "keywords": [
+        "分离叶绿体",
+        "类囊体悬液",
+        "等渗",
+        "离心",
+        "低渗"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "分离具有膜结构的细胞器后，常需采用适宜的等渗介质保持其结构和活性。",
+          "keyTerms": [
+            "等渗"
+          ]
+        },
+        {
+          "statement": "实验处理和检测前应注意清除上一步残留产物，避免其干扰后续结果。",
+          "keyTerms": [
+            "干扰"
+          ]
+        }
+      ],
+      "misconception": "低渗破膜、等渗保存和有机溶剂提取色素的目的不同。",
+      "sources": [
+        {
+          "sourceId": "js2025",
+          "page": 7,
+          "question": "21"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "21"
+        }
+      ]
+    },
+    {
+      "id": "bio-m1-differentiation",
+      "moduleId": "m1",
+      "title": "细胞分化与基因选择性表达",
+      "keywords": [
+        "细胞分化",
+        "诱导多能干细胞",
+        "胰岛B细胞",
+        "选择性表达",
+        "去分化",
+        "干细胞"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "细胞分化与基因的选择性表达有关，通常不意味着细胞因此新获得了相关功能基因。",
+          "keyTerms": [
+            "选择性表达"
+          ]
+        },
+        {
+          "statement": "干细胞具有自我更新和分化的能力，其子细胞不一定全部立即分化。",
+          "keyTerms": [
+            "自我更新",
+            "分化"
+          ]
+        }
+      ],
+      "misconception": "从体细胞诱导多能状态，不应解释为凭空突变获得了胰岛素基因。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 13,
+          "question": "11"
+        },
+        {
+          "sourceId": "js2024",
+          "page": 14,
+          "question": "11"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 3,
+          "question": "9"
+        }
+      ]
+    },
+    {
+      "id": "bio-m1-cell-death",
+      "moduleId": "m1",
+      "title": "凋亡与坏死的区别",
+      "keywords": [
+        "细胞凋亡",
+        "细胞坏死",
+        "程序性死亡",
+        "衰老",
+        "干细胞"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "细胞凋亡是受基因调控的细胞程序性死亡。",
+          "keyTerms": [
+            "基因",
+            "程序性死亡"
+          ]
+        },
+        {
+          "statement": "细胞凋亡和细胞坏死的机制及对周围组织的影响不同。",
+          "keyTerms": [
+            "细胞凋亡",
+            "细胞坏死"
+          ]
+        }
+      ],
+      "misconception": "不能将所有细胞死亡都称为正常凋亡，也不能将干细胞等同于永不衰老。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 13,
+          "question": "11"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 3,
+          "question": "9"
+        }
+      ]
+    },
+    {
+      "id": "bio-m1-cell-cycle",
+      "moduleId": "m1",
+      "title": "分裂间期与复制",
+      "keywords": [
+        "分裂间期",
+        "DNA复制",
+        "细胞增殖",
+        "核苷酸",
+        "嘌呤"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "有丝分裂前的间期进行DNA复制，并进行有关蛋白质的合成。",
+          "keyTerms": [
+            "DNA复制",
+            "蛋白质"
+          ]
+        },
+        {
+          "statement": "干扰核酸原料的合成，可能同时影响DNA复制和依赖RNA的蛋白质合成。",
+          "keyTerms": [
+            "DNA复制",
+            "RNA"
+          ]
+        }
+      ],
+      "misconception": "不能认为影响嘌呤合成只影响DNA而与RNA和蛋白质合成完全无关。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 14,
+          "question": "12"
+        }
+      ]
+    },
+    {
+      "id": "bio-m1-chromosome-count",
+      "moduleId": "m1",
+      "title": "染色体数与DNA数的区分",
+      "keywords": [
+        "着丝粒",
+        "姐妹染色单体",
+        "染色体数",
+        "有丝分裂后期",
+        "DNA数"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "着丝粒分裂、姐妹染色单体分离时，细胞内染色体数发生变化，但这一过程不伴随DNA再次复制。",
+          "keyTerms": [
+            "着丝粒",
+            "DNA"
+          ]
+        },
+        {
+          "statement": "判断分裂图像时，应分别统计染色体、染色单体和DNA分子。",
+          "keyTerms": [
+            "染色体",
+            "染色单体",
+            "DNA"
+          ]
+        }
+      ],
+      "misconception": "染色体数目加倍不能直接解释为该时刻基因又复制了一次。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 15,
+          "question": "17"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 4,
+          "question": "12"
+        }
+      ]
+    },
+    {
+      "id": "bio-m2-segregation",
+      "moduleId": "m2",
+      "title": "分离定律与配子",
+      "keywords": [
+        "分离定律",
+        "等位基因",
+        "杂合子",
+        "配子",
+        "测交"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "形成配子时，等位基因随同源染色体的分离而分离。",
+          "keyTerms": [
+            "等位基因",
+            "同源染色体"
+          ]
+        },
+        {
+          "statement": "计算后代遗传比例前，应先根据亲本基因型列出配子的种类及其比例。",
+          "keyTerms": [
+            "配子"
+          ]
+        }
+      ],
+      "misconception": "不能将配子种类、配子比例和雌雄配子的绝对数量混为一谈。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 20,
+          "question": "24"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 10,
+          "question": "24"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 14,
+          "question": "24"
+        }
+      ]
+    },
+    {
+      "id": "bio-m2-independent",
+      "moduleId": "m2",
+      "title": "自由组合的适用前提",
+      "keywords": [
+        "自由组合",
+        "独立遗传",
+        "非同源染色体",
+        "两对等位基因"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "位于非同源染色体上的非等位基因，在形成配子时可发生自由组合。",
+          "keyTerms": [
+            "非同源染色体",
+            "非等位基因"
+          ]
+        },
+        {
+          "statement": "应用两对基因独立遗传模型时，应先确认题目给定的遗传前提。",
+          "keyTerms": [
+            "独立遗传"
+          ]
+        }
+      ],
+      "misconception": "不能见到两对基因就默认符合独立遗传；连锁、致死和选择会改变观察比例。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 20,
+          "question": "24"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 10,
+          "question": "24"
+        }
+      ]
+    },
+    {
+      "id": "bio-m2-crossing-over",
+      "moduleId": "m2",
+      "title": "同源染色体与互换",
+      "keywords": [
+        "交叉互换",
+        "同源染色体",
+        "非姐妹染色单体",
+        "减数分裂I",
+        "联会"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "同源染色体的非姐妹染色单体之间发生互换，可增加配子基因组合的多样性。",
+          "keyTerms": [
+            "非姐妹染色单体"
+          ]
+        },
+        {
+          "statement": "解释互换图像时，应先区分同源染色体与姐妹染色单体。",
+          "keyTerms": [
+            "同源染色体",
+            "姐妹染色单体"
+          ]
+        }
+      ],
+      "misconception": "不能将同源染色体之间的互换一律写成姐妹染色单体之间的交换。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 15,
+          "question": "17"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 4,
+          "question": "14"
+        }
+      ]
+    },
+    {
+      "id": "bio-m2-meiosis",
+      "moduleId": "m2",
+      "title": "减数分裂的两次分离",
+      "keywords": [
+        "减数分裂",
+        "减数第一次",
+        "减数第二次",
+        "同源染色体",
+        "姐妹染色单体",
+        "2n配子"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "正常减数第一次分裂分离同源染色体，正常减数第二次分裂分离姐妹染色单体。",
+          "keyTerms": [
+            "同源染色体",
+            "姐妹染色单体"
+          ]
+        },
+        {
+          "statement": "异常配子的形成原因需要结合染色体分离和细胞分裂过程判断。",
+          "keyTerms": [
+            "染色体分离"
+          ]
+        }
+      ],
+      "misconception": "不能仅看到二倍体配子就断言一定是减数第一次分裂异常。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 15,
+          "question": "17"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 4,
+          "question": "14"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "14"
+        }
+      ]
+    },
+    {
+      "id": "bio-m2-cross-types",
+      "moduleId": "m2",
+      "title": "自交、随机交配和测交",
+      "keywords": [
+        "自交",
+        "随机交配",
+        "随机传粉",
+        "测交",
+        "纯合子",
+        "杂合子"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "自交的雌雄配子来自同一个体；随机交配需综合群体中不同个体产生的配子。",
+          "keyTerms": [
+            "随机交配",
+            "配子"
+          ]
+        },
+        {
+          "statement": "利用测交推断基因型时，需要结合待测性状的显隐性及基因作用规则。",
+          "keyTerms": [
+            "测交",
+            "基因型"
+          ]
+        }
+      ],
+      "misconception": "筛选一类表型后再随机交配，必须先计算筛选群体的基因型组成，不能沿用原群体比例。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 20,
+          "question": "24"
+        },
+        {
+          "sourceId": "js2024",
+          "page": 21,
+          "question": "24"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 14,
+          "question": "24"
+        }
+      ]
+    },
+    {
+      "id": "bio-m2-conditional-probability",
+      "moduleId": "m2",
+      "title": "筛选和致死后的概率分母",
+      "keywords": [
+        "致死",
+        "存活",
+        "筛选",
+        "概率",
+        "分母",
+        "后代比例",
+        "纯合黑眼"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "求筛选后或存活后代中的比例时，应以满足筛选条件或存活条件的个体总量为分母。",
+          "keyTerms": [
+            "分母"
+          ]
+        },
+        {
+          "statement": "可先列出全部受精组合，再剔除不满足条件的组合，最后重新归一化。",
+          "keyTerms": [
+            "归一化"
+          ]
+        }
+      ],
+      "misconception": "受精卵中的比例、存活个体中的比例和特定表型个体中的比例不是同一事件。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 21,
+          "question": "24"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 11,
+          "question": "24"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 14,
+          "question": "24"
+        }
+      ]
+    },
+    {
+      "id": "bio-m2-sex-linked",
+      "moduleId": "m2",
+      "title": "伴性遗传与性别条件",
+      "keywords": [
+        "伴性遗传",
+        "XY",
+        "XO",
+        "性染色体",
+        "男孩",
+        "儿子",
+        "雌性",
+        "雄性"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "伴性遗传计算需要先明确性别决定方式，再确定等位基因在性染色体上的位置。",
+          "keyTerms": [
+            "性别决定方式",
+            "性染色体"
+          ]
+        },
+        {
+          "statement": "已知为某一性别时的条件概率，与在全部后代中出现该性别且患病的联合概率不同。",
+          "keyTerms": [
+            "条件概率",
+            "联合概率"
+          ]
+        }
+      ],
+      "misconception": "不能把XY型的公式直接套到XO型，也不能遗漏题设的性别限定。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 21,
+          "question": "24"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 11,
+          "question": "24"
+        }
+      ]
+    },
+    {
+      "id": "bio-m2-gene-interaction",
+      "moduleId": "m2",
+      "title": "基因互作与表型规则",
+      "keywords": [
+        "抑制基因",
+        "基因互作",
+        "花色",
+        "眼色",
+        "表型",
+        "13:3",
+        "12:3:1"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "多对基因共同影响性状时，应先建立基因型到表型的对应关系，再合并后代比例。",
+          "keyTerms": [
+            "基因型",
+            "表型"
+          ]
+        },
+        {
+          "statement": "同一类分离比可以由特定基因作用模型产生，不能脱离题设反推唯一机制。",
+          "keyTerms": [
+            "基因作用模型"
+          ]
+        }
+      ],
+      "misconception": "显性抑制、显性上位等模型的表型规则不同；不能只记数字比例而忽略基因作用条件。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 20,
+          "question": "24"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 10,
+          "question": "24"
+        }
+      ]
+    },
+    {
+      "id": "bio-m2-nucleic-acid",
+      "moduleId": "m2",
+      "title": "DNA、RNA与合成原料",
+      "keywords": [
+        "DNA",
+        "RNA",
+        "核酸",
+        "嘌呤",
+        "脱氧核苷酸",
+        "核糖核苷酸"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "DNA和RNA都含有腺嘌呤和鸟嘌呤，但两者的糖和部分碱基种类不同。",
+          "keyTerms": [
+            "腺嘌呤",
+            "鸟嘌呤"
+          ]
+        },
+        {
+          "statement": "DNA的合成使用脱氧核苷酸，RNA的合成使用核糖核苷酸。",
+          "keyTerms": [
+            "脱氧核苷酸",
+            "核糖核苷酸"
+          ]
+        }
+      ],
+      "misconception": "不能把DNA扩增的原料写成核糖核苷酸，也不能把含有RNA理解为不能遗传。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 14,
+          "question": "12"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 7,
+          "question": "20"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 14,
+          "question": "23"
+        }
+      ]
+    },
+    {
+      "id": "bio-m2-transcription-translation",
+      "moduleId": "m2",
+      "title": "转录、翻译与真核空间分隔",
+      "keywords": [
+        "转录",
+        "翻译",
+        "核膜",
+        "RNA聚合酶",
+        "启动子",
+        "核糖体"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "RNA聚合酶参与转录，核糖体参与翻译。",
+          "keyTerms": [
+            "RNA聚合酶",
+            "核糖体"
+          ]
+        },
+        {
+          "statement": "核膜使真核细胞中基因的转录和翻译在空间上分隔。",
+          "keyTerms": [
+            "转录",
+            "翻译"
+          ]
+        }
+      ],
+      "misconception": "不能将复制、转录、翻译的模板、原料、场所和产物混用。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 20,
+          "question": "23"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 7,
+          "question": "20"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "20"
+        }
+      ]
+    },
+    {
+      "id": "bio-m2-rna-types",
+      "moduleId": "m2",
+      "title": "参与蛋白质合成的RNA",
+      "keywords": [
+        "mRNA",
+        "tRNA",
+        "rRNA",
+        "信使RNA",
+        "转运RNA",
+        "核糖体RNA"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "mRNA为翻译提供模板，tRNA参与转运氨基酸，rRNA参与组成核糖体。",
+          "keyTerms": [
+            "mRNA",
+            "tRNA",
+            "rRNA"
+          ]
+        }
+      ],
+      "misconception": "RNA不都充当翻译模板；不能把转运氨基酸的分子写成mRNA。",
+      "sources": [
+        {
+          "sourceId": "js2025",
+          "page": 7,
+          "question": "20"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "20"
+        }
+      ]
+    },
+    {
+      "id": "bio-m2-gene-expression-levels",
+      "moduleId": "m2",
+      "title": "基因表达的多个调节层次",
+      "keywords": [
+        "基因表达",
+        "mRNA含量",
+        "翻译水平",
+        "转录水平",
+        "沉默复合蛋白",
+        "lncRNA",
+        "miRNA"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "基因表达可以在转录及转录后的多个环节受到调节。",
+          "keyTerms": [
+            "转录"
+          ]
+        },
+        {
+          "statement": "mRNA含量不变并不必然意味着蛋白质含量或功能不变。",
+          "keyTerms": [
+            "mRNA",
+            "蛋白质"
+          ]
+        }
+      ],
+      "misconception": "图示lncRNA、miRNA的具体作用必须按题设路径理解，不能将一个案例推广为所有RNA的共同功能。",
+      "sources": [
+        {
+          "sourceId": "js2025",
+          "page": 7,
+          "question": "20"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 9,
+          "question": "22"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "22"
+        }
+      ]
+    },
+    {
+      "id": "bio-m2-epigenetics",
+      "moduleId": "m2",
+      "title": "表观遗传与核酸修饰",
+      "keywords": [
+        "表观遗传",
+        "甲基化",
+        "组蛋白",
+        "染色质",
+        "基因沉默"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "表观遗传涉及DNA序列未改变时基因表达状态等发生的可遗传变化。",
+          "keyTerms": [
+            "DNA序列",
+            "基因表达"
+          ]
+        },
+        {
+          "statement": "DNA、组蛋白或RNA的修饰可能影响基因表达，但具体作用环节需要结合证据判断。",
+          "keyTerms": [
+            "修饰",
+            "基因表达"
+          ]
+        }
+      ],
+      "misconception": "不能将所有甲基化都解释成转录被抑制；RNA修饰和DNA修饰的作用环节不能混为一谈。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 15,
+          "question": "15"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 5,
+          "question": "15"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "15"
+        }
+      ]
+    },
+    {
+      "id": "bio-m2-mutation-detection",
+      "moduleId": "m2",
+      "title": "基因突变与酶切位点",
+      "keywords": [
+        "基因突变",
+        "限制酶",
+        "酶切位点",
+        "替换",
+        "碱基序列",
+        "片段长度"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "碱基序列的变化可能改变限制酶识别位点，从而改变酶切片段的组合。",
+          "keyTerms": [
+            "碱基序列",
+            "识别位点"
+          ]
+        },
+        {
+          "statement": "判断突变类型需要比较突变前后的序列，不能只凭片段长度变化认定是增加或缺失。",
+          "keyTerms": [
+            "序列"
+          ]
+        }
+      ],
+      "misconception": "酶切电泳结果用于推断时，须同时考虑所用酶、切点数和片段可区分性。",
+      "sources": [
+        {
+          "sourceId": "js2025",
+          "page": 6,
+          "question": "19"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "19"
+        }
+      ]
+    },
+    {
+      "id": "bio-m2-chromosome-variation",
+      "moduleId": "m2",
+      "title": "染色体变异与倍性",
+      "keywords": [
+        "染色体变异",
+        "染色体组",
+        "多倍体",
+        "单倍体",
+        "秋水仙素"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "染色体结构变异与染色体数目变异是两类不同的染色体变异。",
+          "keyTerms": [
+            "结构变异",
+            "数目变异"
+          ]
+        },
+        {
+          "statement": "确定倍性或染色体组数时，需要结合个体来源与染色体组成。",
+          "keyTerms": [
+            "染色体组"
+          ]
+        }
+      ],
+      "misconception": "不能只按染色体条数确定倍性，也不能把不同物种同号片段的表达视为必然相同。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 12,
+          "question": "8"
+        },
+        {
+          "sourceId": "js2024",
+          "page": 15,
+          "question": "16"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 6,
+          "question": "18"
+        }
+      ]
+    },
+    {
+      "id": "bio-m2-evolution",
+      "moduleId": "m2",
+      "title": "进化单位与进化证据",
+      "keywords": [
+        "进化",
+        "种群",
+        "物种",
+        "化石",
+        "生殖隔离",
+        "竹子"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "种群是生物进化的基本单位，不同物种不能合称一个进化基本单位。",
+          "keyTerms": [
+            "种群"
+          ]
+        },
+        {
+          "statement": "化石等资料可以为研究生物进化提供证据，证据类型与推断范围应对应。",
+          "keyTerms": [
+            "化石"
+          ]
+        }
+      ],
+      "misconception": "物种形成不能仅依据外观相近或名称不同判断；需结合生殖隔离等证据。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 12,
+          "question": "8"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 6,
+          "question": "18"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "18"
+        }
+      ]
+    },
+    {
+      "id": "bio-m3-homeostasis",
+      "moduleId": "m3",
+      "title": "内环境稳态与调节变量",
+      "keywords": [
+        "内环境",
+        "稳态",
+        "血浆",
+        "酸碱度",
+        "Na+",
+        "渗透压"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "内环境稳态依赖机体对理化性质及相关物质含量的动态调节。",
+          "keyTerms": [
+            "动态调节"
+          ]
+        },
+        {
+          "statement": "分析稳态调节时，应先明确被调节的变量及其偏离方向。",
+          "keyTerms": [
+            "变量",
+            "方向"
+          ]
+        }
+      ],
+      "misconception": "稳态不是各项数值完全固定不变，也不能把不同激素的调节对象混为一谈。",
+      "sources": [
+        {
+          "sourceId": "js2025",
+          "page": 4,
+          "question": "13"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 12,
+          "question": "13"
+        }
+      ]
+    },
+    {
+      "id": "bio-m3-water-balance",
+      "moduleId": "m3",
+      "title": "抗利尿激素与水重吸收",
+      "keywords": [
+        "抗利尿激素",
+        "失水",
+        "肾小管",
+        "集合管",
+        "水重吸收"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "机体失水引起相应调节时，抗利尿激素可促进肾小管和集合管对水的重吸收。",
+          "keyTerms": [
+            "抗利尿激素",
+            "重吸收"
+          ]
+        }
+      ],
+      "misconception": "调节途径需要结合渗透压变化，不能把水重吸收方向写反。",
+      "sources": [
+        {
+          "sourceId": "js2025",
+          "page": 4,
+          "question": "13"
+        }
+      ]
+    },
+    {
+      "id": "bio-m3-thyroid-axis",
+      "moduleId": "m3",
+      "title": "甲状腺激素的分级调节",
+      "keywords": [
+        "甲状腺",
+        "TRH",
+        "TSH",
+        "垂体",
+        "下丘脑",
+        "分级调节"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "促甲状腺激素释放激素作用于垂体，促进其分泌促甲状腺激素。",
+          "keyTerms": [
+            "垂体",
+            "促甲状腺激素"
+          ]
+        },
+        {
+          "statement": "促甲状腺激素作用于甲状腺，促进甲状腺激素的分泌。",
+          "keyTerms": [
+            "甲状腺"
+          ]
+        }
+      ],
+      "misconception": "释放激素、促激素及靶腺体激素的来源与作用对象不能互换。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 19,
+          "question": "22"
+        }
+      ]
+    },
+    {
+      "id": "bio-m3-hormone-receptor",
+      "moduleId": "m3",
+      "title": "激素运输与靶细胞识别",
+      "keywords": [
+        "激素",
+        "体液运输",
+        "受体",
+        "靶细胞",
+        "TRH受体",
+        "Leptin"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "激素可经体液运输，具有相应受体的靶细胞才能对该信号作出特异性反应。",
+          "keyTerms": [
+            "体液",
+            "受体"
+          ]
+        },
+        {
+          "statement": "判断信号分子的作用对象，应依据受体分布和实验结果，而不只看分子名称。",
+          "keyTerms": [
+            "受体分布"
+          ]
+        }
+      ],
+      "misconception": "能被运输到某处，不等于一定作用于该处所有细胞。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 19,
+          "question": "22"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 3,
+          "question": "10"
+        }
+      ]
+    },
+    {
+      "id": "bio-m3-glucose",
+      "moduleId": "m3",
+      "title": "血糖调节",
+      "keywords": [
+        "胰岛素",
+        "胰高血糖素",
+        "血糖",
+        "糖原",
+        "胰岛B细胞",
+        "胰岛A细胞"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "胰岛B细胞分泌的胰岛素通过促进组织摄取、利用和储存葡萄糖等途径降低血糖。",
+          "keyTerms": [
+            "胰岛素",
+            "葡萄糖"
+          ]
+        },
+        {
+          "statement": "胰岛素与胰高血糖素等共同参与维持血糖稳态。",
+          "keyTerms": [
+            "胰高血糖素"
+          ]
+        }
+      ],
+      "misconception": "胰岛素合成、分泌、受体响应和血糖降低是不同环节。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 13,
+          "question": "11"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 8,
+          "question": "22"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "22"
+        }
+      ]
+    },
+    {
+      "id": "bio-m3-membrane-potential",
+      "moduleId": "m3",
+      "title": "静息电位与动作电位",
+      "keywords": [
+        "静息电位",
+        "动作电位",
+        "K+",
+        "Na+",
+        "钠离子",
+        "钾离子",
+        "协助扩散"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "神经细胞静息时，钾离子外流与内负外正的膜电位有关。",
+          "keyTerms": [
+            "钾离子",
+            "内负外正"
+          ]
+        },
+        {
+          "statement": "动作电位产生时，钠离子经相应通道内流与膜电位变化有关。",
+          "keyTerms": [
+            "钠离子",
+            "内流"
+          ]
+        }
+      ],
+      "misconception": "动作电位期间的膜电位变化不意味着膜内外离子浓度立即完全倒转。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 16,
+          "question": "18"
+        }
+      ]
+    },
+    {
+      "id": "bio-m3-synapse",
+      "moduleId": "m3",
+      "title": "突触传递与信号形式",
+      "keywords": [
+        "突触",
+        "神经递质",
+        "兴奋",
+        "抑制",
+        "轴突末梢",
+        "突触前膜",
+        "突触后膜"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "化学突触传递中可发生电信号、化学信号、电信号的转换。",
+          "keyTerms": [
+            "电信号",
+            "化学信号"
+          ]
+        },
+        {
+          "statement": "神经递质作用于突触后膜后，可能引起兴奋，也可能产生抑制。",
+          "keyTerms": [
+            "兴奋",
+            "抑制"
+          ]
+        }
+      ],
+      "misconception": "不能将释放神经递质一律等同于突触后神经元一定产生动作电位。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 13,
+          "question": "10"
+        },
+        {
+          "sourceId": "js2024",
+          "page": 16,
+          "question": "18"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 3,
+          "question": "10"
+        }
+      ]
+    },
+    {
+      "id": "bio-m3-neural-humoral",
+      "moduleId": "m3",
+      "title": "神经调节与体液调节的联系",
+      "keywords": [
+        "神经调节",
+        "体液调节",
+        "Leptin",
+        "5-羟色胺",
+        "分泌蛋白"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "体液信号能够影响神经元的活动，神经调节和体液调节可以相互联系。",
+          "keyTerms": [
+            "神经调节",
+            "体液调节"
+          ]
+        }
+      ],
+      "misconception": "具体信号分子的作用需要题设或实验支持，不能据一个案例编造普遍分泌通路。",
+      "sources": [
+        {
+          "sourceId": "js2025",
+          "page": 3,
+          "question": "10"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 12,
+          "question": "10"
+        }
+      ]
+    },
+    {
+      "id": "bio-m3-cellular-immunity",
+      "moduleId": "m3",
+      "title": "细胞免疫的作用对象",
+      "keywords": [
+        "细胞免疫",
+        "细胞毒性T细胞",
+        "靶细胞",
+        "抗原呈递",
+        "裂解"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "细胞毒性T细胞识别并作用于相应靶细胞，使靶细胞裂解或死亡。",
+          "keyTerms": [
+            "细胞毒性T细胞",
+            "靶细胞"
+          ]
+        },
+        {
+          "statement": "细胞免疫与抗体发挥作用的对象和方式不同。",
+          "keyTerms": [
+            "细胞免疫",
+            "抗体"
+          ]
+        }
+      ],
+      "misconception": "不能把细胞毒性T细胞表面识别抗原的受体写成游离抗体。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 18,
+          "question": "22"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 8,
+          "question": "22"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "22"
+        }
+      ]
+    },
+    {
+      "id": "bio-m3-innate-specific",
+      "moduleId": "m3",
+      "title": "非特异性与特异性免疫的判断",
+      "keywords": [
+        "非特异性免疫",
+        "特异性免疫",
+        "干扰素",
+        "抗体",
+        "病毒"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "免疫方式应根据识别特异性、作用对象和反应过程判断，不能只凭某个分子名称分类。",
+          "keyTerms": [
+            "特异性",
+            "作用对象"
+          ]
+        },
+        {
+          "statement": "干扰素参与抗病毒反应，并不等同于抗体。",
+          "keyTerms": [
+            "干扰素",
+            "抗体"
+          ]
+        }
+      ],
+      "misconception": "题设中具体分子的信号路径不作为学生必须背诵的通用机制。",
+      "sources": [
+        {
+          "sourceId": "js2025",
+          "page": 8,
+          "question": "22"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "22"
+        }
+      ]
+    },
+    {
+      "id": "bio-m3-immune-surveillance",
+      "moduleId": "m3",
+      "title": "免疫监视与免疫逃逸",
+      "keywords": [
+        "免疫监视",
+        "免疫逃逸",
+        "免疫检查点",
+        "肿瘤细胞",
+        "T细胞"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "免疫系统能够识别和清除部分异常细胞，参与免疫监视。",
+          "keyTerms": [
+            "免疫监视"
+          ]
+        },
+        {
+          "statement": "异常细胞可能通过影响免疫识别或免疫应答而逃避免疫清除。",
+          "keyTerms": [
+            "免疫识别",
+            "免疫应答"
+          ]
+        }
+      ],
+      "misconception": "某药物与抗体联合有效，不足以单独证明其唯一作用通路。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 18,
+          "question": "22"
+        },
+        {
+          "sourceId": "js2024",
+          "page": 19,
+          "question": "22"
+        }
+      ]
+    },
+    {
+      "id": "bio-m3-auxin-experiment",
+      "moduleId": "m3",
+      "title": "生长调节剂促生根实验",
+      "keywords": [
+        "生长素",
+        "生长调节剂",
+        "扦插",
+        "生根",
+        "浓度",
+        "预实验"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "探究生长调节剂浓度对生根的影响时，枝条状态、芽的数量和扦插基质等应保持可比。",
+          "keyTerms": [
+            "浓度",
+            "基质"
+          ]
+        },
+        {
+          "statement": "不同浓度处理可能产生相近的生根效果，应结合浓度范围分析，而不能由单个结果直接确定最适浓度。",
+          "keyTerms": [
+            "最适浓度"
+          ]
+        }
+      ],
+      "misconception": "保留适宜且可比的枝条材料，避免无关变量掩盖浓度效应。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 11,
+          "question": "5"
+        }
+      ]
+    },
+    {
+      "id": "bio-m3-plant-signalling",
+      "moduleId": "m3",
+      "title": "植物信号与膜功能",
+      "keywords": [
+        "ABA",
+        "脱落酸",
+        "氯离子",
+        "植物激素",
+        "膜受体",
+        "信息交流"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "植物细胞膜既参与物质运输，也参与信息交流。",
+          "keyTerms": [
+            "物质运输",
+            "信息交流"
+          ]
+        },
+        {
+          "statement": "信号分子经相应受体引发的调节作用，与离子通过转运蛋白跨膜是不同环节。",
+          "keyTerms": [
+            "受体",
+            "转运蛋白"
+          ]
+        }
+      ],
+      "misconception": "不能把离子通过转运蛋白的过程写成自由扩散，也不能擅自更换题设中受体的位置。",
+      "sources": [
+        {
+          "sourceId": "js2025",
+          "page": 5,
+          "question": "16"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "16"
+        }
+      ]
+    },
+    {
+      "id": "bio-m4-population-survey",
+      "moduleId": "m4",
+      "title": "种群密度的调查方法",
+      "keywords": [
+        "种群密度",
+        "样方法",
+        "标记重捕",
+        "个体数",
+        "随机取样"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "调查种群密度时，应根据生物的活动特点和分布选择适宜方法。",
+          "keyTerms": [
+            "活动特点",
+            "分布"
+          ]
+        },
+        {
+          "statement": "抽样调查通常得到总体参数的估计值，不能不加说明地称为精确掌握所有个体。",
+          "keyTerms": [
+            "估计值"
+          ]
+        }
+      ],
+      "misconception": "活动能力较强的动物通常不宜直接照搬植物样方法；取样需具有代表性。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 18,
+          "question": "21"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 1,
+          "question": "3"
+        }
+      ]
+    },
+    {
+      "id": "bio-m4-soil-animals",
+      "moduleId": "m4",
+      "title": "土壤动物丰富度的调查",
+      "keywords": [
+        "土壤动物",
+        "丰富度",
+        "取样器",
+        "记名计算法",
+        "目测估计法",
+        "吸虫器"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "调查土壤动物类群丰富度时，应区分类群数量和各类群个体数量。",
+          "keyTerms": [
+            "类群数量",
+            "个体数量"
+          ]
+        },
+        {
+          "statement": "统计方法应与个体大小、数量及可识别程度相适应。",
+          "keyTerms": [
+            "统计方法"
+          ]
+        }
+      ],
+      "misconception": "不能把丰富度当种群密度，也不能对数量极多且很小的个体机械采用逐个记名计数。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 17,
+          "question": "21"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 1,
+          "question": "3"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 12,
+          "question": "3"
+        }
+      ]
+    },
+    {
+      "id": "bio-m4-age-structure",
+      "moduleId": "m4",
+      "title": "年龄组成与取样范围",
+      "keywords": [
+        "年龄组成",
+        "增长型",
+        "稳定型",
+        "衰退型",
+        "幼年",
+        "老年",
+        "生境"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "年龄组成描述种群中不同年龄个体的相对数量。",
+          "keyTerms": [
+            "相对数量"
+          ]
+        },
+        {
+          "statement": "依据多个生境的调查推断总体年龄组成时，应综合相应样本，避免只选其中一个生境。",
+          "keyTerms": [
+            "总体",
+            "样本"
+          ]
+        }
+      ],
+      "misconception": "年龄组成不等同于现时出生率；图表中的某一根柱子不能代表整个种群。",
+      "sources": [
+        {
+          "sourceId": "js2025",
+          "page": 6,
+          "question": "17"
+        }
+      ]
+    },
+    {
+      "id": "bio-m4-niche-relationships",
+      "moduleId": "m4",
+      "title": "生态位与种间关系",
+      "keywords": [
+        "生态位",
+        "竞争",
+        "捕食",
+        "互利共生",
+        "食物资源",
+        "栖息地"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "物种对同类资源的利用发生重叠时，可能形成种间竞争。",
+          "keyTerms": [
+            "种间竞争"
+          ]
+        },
+        {
+          "statement": "不同物种之间可具有捕食、竞争、寄生和互利共生等关系。",
+          "keyTerms": [
+            "捕食",
+            "竞争",
+            "互利共生"
+          ]
+        }
+      ],
+      "misconception": "不能把种内个体间关系归为不同物种之间的种间关系。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 11,
+          "question": "4"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 9,
+          "question": "23"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 14,
+          "question": "23"
+        }
+      ]
+    },
+    {
+      "id": "bio-m4-community-structure",
+      "moduleId": "m4",
+      "title": "群落水平结构与垂直结构",
+      "keywords": [
+        "群落结构",
+        "水平结构",
+        "垂直结构",
+        "镶嵌",
+        "分层",
+        "乔木",
+        "灌丛"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "群落水平结构常表现为镶嵌性分布，垂直结构常表现为分层。",
+          "keyTerms": [
+            "镶嵌性分布",
+            "分层"
+          ]
+        },
+        {
+          "statement": "同一种动物在不同水平生境中的分布，不能直接当作整个群落的垂直分层。",
+          "keyTerms": [
+            "水平生境"
+          ]
+        }
+      ],
+      "misconception": "需先确定空间方向、研究对象是种群还是群落，再解释结构。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 17,
+          "question": "21"
+        },
+        {
+          "sourceId": "js2024",
+          "page": 18,
+          "question": "21"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 6,
+          "question": "17"
+        }
+      ]
+    },
+    {
+      "id": "bio-m4-succession",
+      "moduleId": "m4",
+      "title": "初生演替与次生演替",
+      "keywords": [
+        "演替",
+        "次生演替",
+        "初生演替",
+        "火烧",
+        "土壤"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "原有群落受干扰后，在保留土壤等基础的条件下发生的演替通常属于次生演替。",
+          "keyTerms": [
+            "土壤",
+            "次生演替"
+          ]
+        }
+      ],
+      "misconception": "判断演替类型的关键是起始基础，不能只依据是否发生火灾命名。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 17,
+          "question": "21"
+        }
+      ]
+    },
+    {
+      "id": "bio-m4-ecosystem-components",
+      "moduleId": "m4",
+      "title": "生态系统成分与食物网",
+      "keywords": [
+        "生态系统成分",
+        "食物链",
+        "食物网",
+        "分解者",
+        "消费者",
+        "生产者"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "生态系统包括非生物的物质和能量、生产者、消费者和分解者。",
+          "keyTerms": [
+            "生产者",
+            "消费者",
+            "分解者"
+          ]
+        },
+        {
+          "statement": "捕食食物网通常不完整表示生态系统的全部成分。",
+          "keyTerms": [
+            "全部成分"
+          ]
+        }
+      ],
+      "misconception": "食物网中未画出某成分，不意味着生态系统没有该成分。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 18,
+          "question": "21"
+        }
+      ]
+    },
+    {
+      "id": "bio-m4-energy",
+      "moduleId": "m4",
+      "title": "能量流动与营养级",
+      "keywords": [
+        "能量流动",
+        "营养级",
+        "能量传递效率",
+        "同化量",
+        "迁徙",
+        "生物防治"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "消费者营养级的判断依赖其所在的具体食物链。",
+          "keyTerms": [
+            "食物链"
+          ]
+        },
+        {
+          "statement": "生态系统的能量可能随生物迁入、迁出而输入或输出。",
+          "keyTerms": [
+            "迁入",
+            "迁出"
+          ]
+        }
+      ],
+      "misconception": "生物防治提高产量，不等于已经证明相邻营养级的能量传递效率提高。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 11,
+          "question": "4"
+        },
+        {
+          "sourceId": "js2024",
+          "page": 18,
+          "question": "21"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 6,
+          "question": "17"
+        }
+      ]
+    },
+    {
+      "id": "bio-m4-information",
+      "moduleId": "m4",
+      "title": "生态系统的信息传递",
+      "keywords": [
+        "信息传递",
+        "物理信息",
+        "化学信息",
+        "行为信息",
+        "警戒",
+        "川金丝猴"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "生物可利用物理信息、化学信息和行为信息调节自身活动及个体间关系。",
+          "keyTerms": [
+            "物理信息",
+            "化学信息",
+            "行为信息"
+          ]
+        },
+        {
+          "statement": "信息传递与能量流动、物质循环有关联，但不是同一个过程。",
+          "keyTerms": [
+            "信息传递"
+          ]
+        }
+      ],
+      "misconception": "根据行为现象识别信息类型时，应说明信息载体及接收者。",
+      "sources": [
+        {
+          "sourceId": "js2025",
+          "page": 9,
+          "question": "23"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 14,
+          "question": "23"
+        }
+      ]
+    },
+    {
+      "id": "bio-m4-biodiversity-value",
+      "moduleId": "m4",
+      "title": "生物多样性的价值",
+      "keywords": [
+        "生物多样性",
+        "直接价值",
+        "间接价值",
+        "药用",
+        "生态功能",
+        "湿地"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "药用、食用和观赏等通常体现生物多样性的直接价值。",
+          "keyTerms": [
+            "直接价值"
+          ]
+        },
+        {
+          "statement": "维持生态平衡、涵养水源和净化水体等生态功能通常体现间接价值。",
+          "keyTerms": [
+            "间接价值"
+          ]
+        }
+      ],
+      "misconception": "不能把生态系统的所有效益都归为直接价值。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 17,
+          "question": "21"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 2,
+          "question": "5"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 12,
+          "question": "5"
+        }
+      ]
+    },
+    {
+      "id": "bio-m4-protection",
+      "moduleId": "m4",
+      "title": "栖息地保护与生态廊道",
+      "keywords": [
+        "就地保护",
+        "迁地保护",
+        "生态廊道",
+        "基因交流",
+        "栖息地",
+        "生态修复"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "保护物种需要维护其栖息地及相关食物资源。",
+          "keyTerms": [
+            "栖息地",
+            "食物资源"
+          ]
+        },
+        {
+          "statement": "生态廊道有助于连通栖息地，促进种群间的个体迁移和基因交流。",
+          "keyTerms": [
+            "生态廊道",
+            "基因交流"
+          ]
+        }
+      ],
+      "misconception": "不能把迁地保护当作所有物种保护的唯一或主要通用方案。",
+      "sources": [
+        {
+          "sourceId": "js2025",
+          "page": 10,
+          "question": "23"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 14,
+          "question": "23"
+        }
+      ]
+    },
+    {
+      "id": "bio-m5-sterility",
+      "moduleId": "m5",
+      "title": "培养基与无菌操作",
+      "keywords": [
+        "无菌操作",
+        "灭菌",
+        "培养基",
+        "接种",
+        "火焰",
+        "微生物"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "培养基等材料使用前应按实验要求进行适宜的灭菌处理，防止杂菌污染。",
+          "keyTerms": [
+            "灭菌",
+            "污染"
+          ]
+        },
+        {
+          "statement": "无菌操作贯穿接种和培养过程，不能认为目标菌是真菌就可保留其他真菌。",
+          "keyTerms": [
+            "无菌操作"
+          ]
+        }
+      ],
+      "misconception": "紫外线表面照射不能不加条件地替代培养基常规灭菌。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 10,
+          "question": "3"
+        },
+        {
+          "sourceId": "js2024",
+          "page": 13,
+          "question": "9"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 3,
+          "question": "11"
+        }
+      ]
+    },
+    {
+      "id": "bio-m5-microbe-count",
+      "moduleId": "m5",
+      "title": "梯度稀释与涂布计数",
+      "keywords": [
+        "稀释涂布",
+        "梯度稀释",
+        "菌落",
+        "活菌",
+        "计数",
+        "酵母菌"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "稀释涂布平板法通过适当稀释后形成的菌落数估算样品中可培养活菌数量。",
+          "keyTerms": [
+            "菌落数",
+            "活菌"
+          ]
+        },
+        {
+          "statement": "换算原样品中的微生物数量时，应考虑稀释倍数和涂布体积。",
+          "keyTerms": [
+            "稀释倍数",
+            "涂布体积"
+          ]
+        }
+      ],
+      "misconception": "一个菌落不一定严格等于一个原始细胞，计数结果是方法条件下的估计。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 13,
+          "question": "9"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 3,
+          "question": "11"
+        }
+      ]
+    },
+    {
+      "id": "bio-m5-microbe-isolation",
+      "moduleId": "m5",
+      "title": "微生物分离与纯化",
+      "keywords": [
+        "平板划线",
+        "单菌落",
+        "分离",
+        "纯化",
+        "接种环"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "平板划线等方法可使混合微生物逐步分散，经培养得到相对独立的单菌落。",
+          "keyTerms": [
+            "单菌落"
+          ]
+        },
+        {
+          "statement": "分离纯化和定量计数的实验目的不同，应选择相应方法。",
+          "keyTerms": [
+            "分离纯化",
+            "定量计数"
+          ]
+        }
+      ],
+      "misconception": "不能把平板划线所得菌落数直接当成原样品中活菌总数。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 12,
+          "question": "9"
+        },
+        {
+          "sourceId": "js2024",
+          "page": 13,
+          "question": "9"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 3,
+          "question": "11"
+        }
+      ]
+    },
+    {
+      "id": "bio-m5-wine-vinegar",
+      "moduleId": "m5",
+      "title": "果酒与果醋制作的条件",
+      "keywords": [
+        "果酒",
+        "果醋",
+        "酵母菌",
+        "醋酸菌",
+        "果胶酶",
+        "发酵"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "果酒和果醋制作利用的主要微生物及其需氧条件不同。",
+          "keyTerms": [
+            "需氧条件"
+          ]
+        },
+        {
+          "statement": "加工果汁时，适量果胶酶有助于破坏果胶结构、提高出汁率。",
+          "keyTerms": [
+            "果胶酶"
+          ]
+        }
+      ],
+      "misconception": "不能将果酒和果醋发酵的供氧、温度及产物变化混为一谈。",
+      "sources": [
+        {
+          "sourceId": "js2025",
+          "page": 2,
+          "question": "6"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 12,
+          "question": "6"
+        }
+      ]
+    },
+    {
+      "id": "bio-m5-lactic-fermentation",
+      "moduleId": "m5",
+      "title": "乳酸发酵与品质控制",
+      "keywords": [
+        "乳酸菌",
+        "酸奶",
+        "泡菜",
+        "乳酸",
+        "无氧呼吸",
+        "发酵时间"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "乳酸菌在适宜条件下通过乳酸发酵形成乳酸。",
+          "keyTerms": [
+            "乳酸"
+          ]
+        },
+        {
+          "statement": "发酵时间和酸度等条件需要适宜，过量乳酸可能影响发酵食品的口味和品质。",
+          "keyTerms": [
+            "发酵时间",
+            "酸度"
+          ]
+        }
+      ],
+      "misconception": "材料预处理、容器装料和发酵条件应按具体工艺判断，不盲目套用全部装满。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 14,
+          "question": "14"
+        }
+      ]
+    },
+    {
+      "id": "bio-m5-protoplast",
+      "moduleId": "m5",
+      "title": "原生质体制备与活性检测",
+      "keywords": [
+        "原生质体",
+        "纤维素酶",
+        "果胶酶",
+        "台盼蓝",
+        "植物细胞壁",
+        "等渗"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "制备植物原生质体时，可利用纤维素酶和果胶酶等去除细胞壁。",
+          "keyTerms": [
+            "纤维素酶",
+            "果胶酶"
+          ]
+        },
+        {
+          "statement": "原生质体缺少细胞壁保护，处理时应注意适宜渗透条件。",
+          "keyTerms": [
+            "细胞壁",
+            "渗透条件"
+          ]
+        },
+        {
+          "statement": "台盼蓝等活性检测的结果应结合细胞膜完整性解释。",
+          "keyTerms": [
+            "细胞膜"
+          ]
+        }
+      ],
+      "misconception": "不能把盐酸去壁、无菌水冲洗和染蓝细胞存活等错误选项当知识。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 14,
+          "question": "13"
+        }
+      ]
+    },
+    {
+      "id": "bio-m5-tissue-culture",
+      "moduleId": "m5",
+      "title": "植物组织培养的过程",
+      "keywords": [
+        "组织培养",
+        "脱分化",
+        "再分化",
+        "愈伤组织",
+        "胚状体",
+        "生长素",
+        "细胞分裂素"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "植物组织培养可经历脱分化形成愈伤组织、再分化形成不同组织或器官等过程。",
+          "keyTerms": [
+            "脱分化",
+            "再分化"
+          ]
+        },
+        {
+          "statement": "生长素与细胞分裂素等的配比会影响培养组织的分化方向。",
+          "keyTerms": [
+            "生长素",
+            "细胞分裂素"
+          ]
+        }
+      ],
+      "misconception": "不同培养阶段的培养基成分及浓度可能不同，不能认为只要属于同一次培养就完全相同。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 15,
+          "question": "16"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 1,
+          "question": "4"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 12,
+          "question": "4"
+        }
+      ]
+    },
+    {
+      "id": "bio-m5-haploid-breeding",
+      "moduleId": "m5",
+      "title": "单倍体育种与染色体加倍",
+      "keywords": [
+        "花药",
+        "花粉",
+        "单倍体育种",
+        "秋水仙素",
+        "纯系",
+        "染色体加倍"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "花药离体培养及后续染色体加倍可用于缩短获得纯合材料的育种进程。",
+          "keyTerms": [
+            "花药离体培养",
+            "染色体加倍"
+          ]
+        },
+        {
+          "statement": "药剂处理后应检查实际染色体状态，不能假定所有细胞必然同步加倍。",
+          "keyTerms": [
+            "染色体"
+          ]
+        }
+      ],
+      "misconception": "应区分配子来源组织与花药壁等体细胞来源，不能只凭培养材料名称认定倍性。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 15,
+          "question": "16"
+        }
+      ]
+    },
+    {
+      "id": "bio-m5-embryo-engineering",
+      "moduleId": "m5",
+      "title": "胚胎工程的生理基础",
+      "keywords": [
+        "胚胎移植",
+        "超数排卵",
+        "促性腺激素",
+        "人工授精",
+        "精子获能"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "超数排卵处理常使用相应的促性腺激素制剂。",
+          "keyTerms": [
+            "促性腺激素"
+          ]
+        },
+        {
+          "statement": "精子获能、受精和胚胎移植属于不同处理环节，不能相互替代。",
+          "keyTerms": [
+            "精子获能",
+            "胚胎移植"
+          ]
+        }
+      ],
+      "misconception": "处理名称、处理对象及所需生理状态应对应，不因目标是提高繁殖率就混用操作。",
+      "sources": [
+        {
+          "sourceId": "js2025",
+          "page": 2,
+          "question": "7"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 12,
+          "question": "7"
+        }
+      ]
+    },
+    {
+      "id": "bio-m5-cell-culture",
+      "moduleId": "m5",
+      "title": "动物细胞培养与热敏成分",
+      "keywords": [
+        "动物细胞培养",
+        "卵母细胞",
+        "血清",
+        "滤菌",
+        "高温",
+        "成熟率"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "动物细胞培养中的热敏成分不能直接照搬高温灭菌方式处理。",
+          "keyTerms": [
+            "热敏成分"
+          ]
+        },
+        {
+          "statement": "卵母细胞成熟培养与可连续增殖体细胞的传代培养不同。",
+          "keyTerms": [
+            "成熟培养",
+            "传代培养"
+          ]
+        }
+      ],
+      "misconception": "实验材料的发育状态和检测指标需一致；不能把成熟率变化写成增殖倍数。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 16,
+          "question": "19"
+        }
+      ]
+    },
+    {
+      "id": "bio-m5-restriction",
+      "moduleId": "m5",
+      "title": "限制酶的识别与切割",
+      "keywords": [
+        "限制酶",
+        "酶切",
+        "识别序列",
+        "黏性末端",
+        "平末端",
+        "磷酸二酯键"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "限制酶识别特定DNA序列，并在相应位置切割DNA骨架中的磷酸二酯键。",
+          "keyTerms": [
+            "特定DNA序列",
+            "磷酸二酯键"
+          ]
+        },
+        {
+          "statement": "不同限制酶形成的末端类型可能不同，应根据识别序列及切点判断。",
+          "keyTerms": [
+            "切点",
+            "末端"
+          ]
+        }
+      ],
+      "misconception": "特异识别不等于任何限制酶都识别同一序列或都产生相同末端。",
+      "sources": [
+        {
+          "sourceId": "js2025",
+          "page": 6,
+          "question": "19"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "19"
+        },
+        {
+          "sourceId": "js2024",
+          "page": 19,
+          "question": "23"
+        }
+      ]
+    },
+    {
+      "id": "bio-m5-ligation",
+      "moduleId": "m5",
+      "title": "DNA连接与重组",
+      "keywords": [
+        "DNA连接酶",
+        "重组DNA",
+        "黏性末端",
+        "平末端",
+        "磷酸二酯键"
+      ],
+      "scope": "依据基因工程流程整理的基础概括",
+      "facts": [
+        {
+          "statement": "DNA连接酶可连接适宜DNA片段之间的磷酸二酯键。",
+          "keyTerms": [
+            "磷酸二酯键"
+          ]
+        },
+        {
+          "statement": "DNA片段能否连接，需要结合末端是否相容及所用连接酶的特性判断。",
+          "keyTerms": [
+            "末端",
+            "连接酶"
+          ]
+        }
+      ],
+      "misconception": "不能将连接DNA骨架的酶与形成互补碱基配对的过程混为一谈。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 19,
+          "question": "23"
+        },
+        {
+          "sourceId": "js2024",
+          "page": 20,
+          "question": "23"
+        }
+      ]
+    },
+    {
+      "id": "bio-m5-vector",
+      "moduleId": "m5",
+      "title": "表达载体的必要元件",
+      "keywords": [
+        "表达载体",
+        "启动子",
+        "终止子",
+        "标记基因",
+        "质粒",
+        "RNA聚合酶"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "表达载体通常需要与目的基因表达相适应的启动子等调控元件。",
+          "keyTerms": [
+            "启动子"
+          ]
+        },
+        {
+          "statement": "标记基因可用于辅助筛选，但筛选结果还需与后续鉴定结合。",
+          "keyTerms": [
+            "标记基因",
+            "鉴定"
+          ]
+        }
+      ],
+      "misconception": "抗性筛选、PCR鉴定和目的蛋白表达检测是不同层次的证据。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 19,
+          "question": "23"
+        },
+        {
+          "sourceId": "js2024",
+          "page": 20,
+          "question": "23"
+        }
+      ]
+    },
+    {
+      "id": "bio-m5-transformation",
+      "moduleId": "m5",
+      "title": "感受态与筛选",
+      "keywords": [
+        "感受态",
+        "CaCl2",
+        "大肠杆菌",
+        "转化",
+        "卡那霉素",
+        "抗性"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "基因工程中可用氯化钙等适宜处理使大肠杆菌处于便于导入外源DNA的感受态。",
+          "keyTerms": [
+            "氯化钙",
+            "感受态"
+          ]
+        },
+        {
+          "statement": "筛选培养基应与载体上的相应标记基因配合使用。",
+          "keyTerms": [
+            "标记基因"
+          ]
+        }
+      ],
+      "misconception": "带有抗性并不单独证明插入方向、序列和表达功能全部正确。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 20,
+          "question": "23"
+        }
+      ]
+    },
+    {
+      "id": "bio-m5-pcr",
+      "moduleId": "m5",
+      "title": "PCR的组成与作用",
+      "keywords": [
+        "PCR",
+        "引物",
+        "耐高温DNA聚合酶",
+        "脱氧核苷酸",
+        "Mg2+",
+        "模板DNA"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "PCR体系通常需要模板DNA、引物、耐高温DNA聚合酶及脱氧核苷酸等。",
+          "keyTerms": [
+            "引物",
+            "耐高温DNA聚合酶",
+            "脱氧核苷酸"
+          ]
+        },
+        {
+          "statement": "PCR扩增的特异性与引物同模板相应位置的碱基互补配对有关。",
+          "keyTerms": [
+            "互补配对"
+          ]
+        }
+      ],
+      "misconception": "不能将RNA扩增直接等同于常规PCR，也不能省略模板与引物定位的关系。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 20,
+          "question": "23"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 10,
+          "question": "23"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 14,
+          "question": "23"
+        }
+      ]
+    },
+    {
+      "id": "bio-m5-primer-design",
+      "moduleId": "m5",
+      "title": "引物定位与扩增片段",
+      "keywords": [
+        "引物设计",
+        "F引物",
+        "R引物",
+        "扩增长度",
+        "保守序列",
+        "PCR鉴定"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "分析PCR产物时，需要根据两条引物在模板上的结合位置和延伸方向确定扩增范围。",
+          "keyTerms": [
+            "结合位置",
+            "延伸方向"
+          ]
+        },
+        {
+          "statement": "保守序列适合作为跨样品设计引物的依据，但物种鉴定还需要可区分的序列信息。",
+          "keyTerms": [
+            "保守序列",
+            "序列信息"
+          ]
+        }
+      ],
+      "misconception": "同样长度的扩增产物不等于碱基序列完全相同。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 20,
+          "question": "23"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 10,
+          "question": "23"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 14,
+          "question": "23"
+        }
+      ]
+    },
+    {
+      "id": "bio-m5-detection",
+      "moduleId": "m5",
+      "title": "基因、RNA、蛋白质和功能的检测",
+      "keywords": [
+        "基因检测",
+        "RNA检测",
+        "蛋白质",
+        "抗原抗体杂交",
+        "表达量",
+        "功能检测"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "检测到目的DNA不等于已经证明目的蛋白正常表达并发挥功能。",
+          "keyTerms": [
+            "目的DNA",
+            "目的蛋白"
+          ]
+        },
+        {
+          "statement": "核酸检测、蛋白质检测和功能检测分别提供不同层次的证据。",
+          "keyTerms": [
+            "核酸检测",
+            "蛋白质检测",
+            "功能检测"
+          ]
+        }
+      ],
+      "misconception": "转录量相同而分泌量不同，不能仅凭这一现象认定具体唯一调控环节。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 20,
+          "question": "23"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 9,
+          "question": "22"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "22"
+        }
+      ]
+    },
+    {
+      "id": "bio-m5-protein-purification",
+      "moduleId": "m5",
+      "title": "蛋白质纯化与变性",
+      "keywords": [
+        "蛋白质纯化",
+        "盐析",
+        "NaCl",
+        "温度",
+        "沉淀",
+        "变性",
+        "SOD"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "蛋白质纯化应兼顾分离效果与目标蛋白的结构和活性。",
+          "keyTerms": [
+            "活性"
+          ]
+        },
+        {
+          "statement": "高温可能使蛋白质变性；沉淀现象本身不能不加条件地证明可逆盐析。",
+          "keyTerms": [
+            "变性",
+            "盐析"
+          ]
+        }
+      ],
+      "misconception": "不能以沉淀多就认定目的蛋白纯度高，还要看目标与杂蛋白的相对含量。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 19,
+          "question": "23"
+        },
+        {
+          "sourceId": "js2024",
+          "page": 20,
+          "question": "23"
+        }
+      ]
+    },
+    {
+      "id": "bio-m5-dna-extraction",
+      "moduleId": "m5",
+      "title": "DNA提取步骤与分离对象",
+      "keywords": [
+        "DNA提取",
+        "裂解液",
+        "离心",
+        "上清液",
+        "乙醇",
+        "沉淀",
+        "溶解DNA"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "DNA提取中应根据当前分离步骤确定目标DNA主要位于上清液还是沉淀物。",
+          "keyTerms": [
+            "上清液",
+            "沉淀物"
+          ]
+        },
+        {
+          "statement": "加入乙醇析出DNA与用适宜溶液重新溶解DNA属于不同步骤。",
+          "keyTerms": [
+            "析出",
+            "溶解"
+          ]
+        }
+      ],
+      "misconception": "不能记忆成所有离心步骤一律取上清或一律取沉淀。",
+      "sources": [
+        {
+          "sourceId": "js2025",
+          "page": 9,
+          "question": "23"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 14,
+          "question": "23"
+        }
+      ]
+    },
+    {
+      "id": "bio-exp-variables",
+      "moduleId": "exp",
+      "title": "实验设计中的变量与对照",
+      "keywords": [
+        "实验设计",
+        "对照组",
+        "自变量",
+        "因变量",
+        "无关变量",
+        "缓冲液"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "实验比较应明确处理因素、检测指标和需要控制的无关变量。",
+          "keyTerms": [
+            "处理因素",
+            "检测指标",
+            "无关变量"
+          ]
+        },
+        {
+          "statement": "设置相应对照有助于区分处理因素的作用与其他因素的影响。",
+          "keyTerms": [
+            "对照"
+          ]
+        }
+      ],
+      "misconception": "只写一个对照组名称而不说明比较关系，不能完成对因果结论的论证。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 10,
+          "question": "3"
+        },
+        {
+          "sourceId": "js2024",
+          "page": 19,
+          "question": "22"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 2,
+          "question": "8"
+        }
+      ]
+    },
+    {
+      "id": "bio-exp-pretreatment",
+      "moduleId": "exp",
+      "title": "预处理、反应和检测的区分",
+      "keywords": [
+        "预处理",
+        "反应条件",
+        "检测条件",
+        "水浴",
+        "斐林试剂",
+        "温度"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "预处理、反应和检测可能具有不同目的，应按实验顺序分别说明。",
+          "keyTerms": [
+            "预处理",
+            "反应",
+            "检测"
+          ]
+        },
+        {
+          "statement": "为了检测产物而设置的加热条件，不等同于酶反应的最适温度条件。",
+          "keyTerms": [
+            "检测产物",
+            "最适温度"
+          ]
+        }
+      ],
+      "misconception": "两次水浴温度相同，也不能据此断言两次操作的主要目的相同。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 10,
+          "question": "3"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 2,
+          "question": "8"
+        }
+      ]
+    },
+    {
+      "id": "bio-exp-dilution",
+      "moduleId": "exp",
+      "title": "稀释与浓度换算",
+      "keywords": [
+        "稀释倍数",
+        "浓度",
+        "体积",
+        "原液",
+        "计数板",
+        "叶绿素"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "由稀释液浓度反推原液浓度时，应乘以相应稀释倍数。",
+          "keyTerms": [
+            "稀释倍数"
+          ]
+        },
+        {
+          "statement": "浓度计算应统一体积单位，并明确测量值对应的样品层级。",
+          "keyTerms": [
+            "体积单位"
+          ]
+        }
+      ],
+      "misconception": "加液体积和最终总体积不同，不能机械套一个倍数而不审题。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 17,
+          "question": "20"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 7,
+          "question": "21"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "21"
+        }
+      ]
+    },
+    {
+      "id": "bio-exp-graphs",
+      "moduleId": "exp",
+      "title": "图表数据到结论的路径",
+      "keywords": [
+        "图表",
+        "曲线",
+        "横坐标",
+        "纵坐标",
+        "相对含量",
+        "实验结果",
+        "数据"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "读取图表时，应先识别坐标含义、单位、分组和对照，再进行比较。",
+          "keyTerms": [
+            "单位",
+            "对照"
+          ]
+        },
+        {
+          "statement": "相对含量、绝对数量和比例不能直接互换。",
+          "keyTerms": [
+            "相对含量",
+            "绝对数量",
+            "比例"
+          ]
+        }
+      ],
+      "misconception": "图表缺失时可复习有关基础概念，但不能编造本题曲线趋势、数值或条带结果。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 5,
+          "question": "20"
+        },
+        {
+          "sourceId": "js2024",
+          "page": 9,
+          "question": "23"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 9,
+          "question": "22"
+        }
+      ]
+    },
+    {
+      "id": "bio-exp-evidence",
+      "moduleId": "exp",
+      "title": "证据层级与结论边界",
+      "keywords": [
+        "因果",
+        "相关",
+        "敲除",
+        "功能",
+        "证明",
+        "支持",
+        "表达量",
+        "必要性"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "观察到两个变量同时变化，可以提供相关证据，但不足以单独证明唯一因果机制。",
+          "keyTerms": [
+            "相关",
+            "因果"
+          ]
+        },
+        {
+          "statement": "基因敲除、补回和相应对照等不同设计，可以从不同方向检验提出的假设。",
+          "keyTerms": [
+            "假设",
+            "对照"
+          ]
+        }
+      ],
+      "misconception": "缺失处理有效并不自动证明该因子是唯一途径；结论须限定于实验条件与检测指标。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 19,
+          "question": "22"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 9,
+          "question": "22"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "22"
+        }
+      ]
+    },
+    {
+      "id": "bio-exp-expression",
+      "moduleId": "exp",
+      "title": "表达差异研究的流程",
+      "keywords": [
+        "差异表达",
+        "RNA",
+        "cDNA",
+        "逆转录",
+        "测序",
+        "基因敲除"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "研究转录水平的表达差异时，可比较相应样本的RNA，并结合逆转录和测序等分析。",
+          "keyTerms": [
+            "RNA",
+            "逆转录"
+          ]
+        },
+        {
+          "statement": "筛选出的候选差异基因还需要实验验证其作用。",
+          "keyTerms": [
+            "实验验证"
+          ]
+        }
+      ],
+      "misconception": "不能把比较基因组DNA序列直接等同于比较某时刻的转录表达量。",
+      "sources": [
+        {
+          "sourceId": "js2025",
+          "page": 9,
+          "question": "22"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 13,
+          "question": "22"
+        }
+      ]
+    },
+    {
+      "id": "bio-exp-genetic-route",
+      "moduleId": "exp",
+      "title": "遗传题的规范解题顺序",
+      "keywords": [
+        "遗传计算",
+        "表型规则",
+        "基因型",
+        "配子",
+        "随机交配",
+        "筛选"
+      ],
+      "scope": "通用基础概括",
+      "facts": [
+        {
+          "statement": "遗传计算可按题设规则、亲本基因型、配子、受精组合、筛选条件的顺序进行。",
+          "keyTerms": [
+            "配子",
+            "筛选条件"
+          ]
+        },
+        {
+          "statement": "把不同基因座的概率相乘前，应先确认所用独立性前提。",
+          "keyTerms": [
+            "独立性"
+          ]
+        }
+      ],
+      "misconception": "不能先记答案比例再反套情境；自交与群体随机交配的计算路径不同。",
+      "sources": [
+        {
+          "sourceId": "js2024",
+          "page": 20,
+          "question": "24"
+        },
+        {
+          "sourceId": "js2024",
+          "page": 21,
+          "question": "24"
+        },
+        {
+          "sourceId": "js2025",
+          "page": 14,
+          "question": "24"
+        }
+      ]
+    }
+  ],
+  "sourceIssues": [
+    {
+      "sourceId": "js2024",
+      "page": 10,
+      "question": "3",
+      "issue": "附带解析的高倍镜调焦操作表述可疑，未按该句制作知识卡。",
+      "handling": "排除该操作表述，不把网络详解当教材原文。"
+    },
+    {
+      "sourceId": "js2024",
+      "page": 13,
+      "question": "10",
+      "issue": "附带解析将轴突分支说成多个轴突，未采纳此表述。",
+      "handling": "仅保留突触传递与兴奋/抑制等清晰概念。"
+    },
+    {
+      "sourceId": "js2024",
+      "page": 18,
+      "question": "21",
+      "issue": "稳定同位素营养级推断的解释与难降解物质生物富集混杂。",
+      "handling": "不据此建立稳定同位素机理卡，也不复制该泛化。"
+    },
+    {
+      "sourceId": "js2024",
+      "page": 19,
+      "question": "22",
+      "issue": "Tal、TRH、TSH、受体和DC细胞的部分机制描述前后不一致。",
+      "handling": "仅保留标准激素分级调节及证据分析，不导入专有机制作为通用事实。"
+    },
+    {
+      "sourceId": "js2024",
+      "page": 20,
+      "question": "23",
+      "issue": "重复序列长度与氨基酸数的换算解释可疑。",
+      "handling": "不收录其具体计算值，保留需按序列和图示逐步计算的方法。"
+    }
+  ],
+  "uncoveredTopics": [
+    "水和无机盐的系统知识",
+    "完整的物质运输分类与动力学",
+    "细胞呼吸和光合作用全部数量关系",
+    "人类遗传病的完整分类与系谱专题",
+    "种群数量模型与生态系统物质循环全套内容",
+    "植物激素的完整种类和作用网络",
+    "生物技术安全与伦理的系统专题"
+  ],
+  "method": [
+    "先按课程模块定位题目实际考查的概念和能力，不把情境名词当知识点。",
+    "先检索标准知识卡，再根据本题条件选择适用命题；基础知识不必在题干中逐字出现。",
+    "区分通用知识、题设模型和本次观察，保存来源与适用条件，不把干扰项或网络解析原样当真。",
+    "把一个复习目标写成对象清楚、条件充分、关系完整的原子命题；保留数量、时期、方向和概率分母。",
+    "从完整命题选核心术语或因果节点制作自足短问答，必要条件留在可见文本；不靠删光上下文制造唯一答案。",
+    "变式题改变有效条件或证据任务，先定目标和评分点再选情境，不只换物种和数字。",
+    "核查科学含义、来源适用性及任务映射，允许规范同义术语；不以两次文字相同替代科学依据。"
+  ]
+}

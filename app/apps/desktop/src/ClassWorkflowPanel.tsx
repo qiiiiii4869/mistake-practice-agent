@@ -5,6 +5,7 @@ import {analyze,type Workspace} from '../../../packages/core/src';
 import {freezeInput,runWorkflow,SqliteWorkflowStore,type GenerationMode,type StoredTask,type TaskSummary} from '../../../packages/agent/src/workflow';
 import {cloudWorkflowPorts,type CloudModelStatus} from '../../../packages/agent/src/workflow/live';
 import type {KnowledgeLibrary} from '../../../packages/knowledge/src';
+import {knowledgeVersion} from '../../../packages/knowledge/src/biology';
 import {failureMessages,validationMessages} from '../../../packages/agent/src/workflow/diagnostics';
 import {partitionValidationAttempts} from '../../../packages/agent/src/workflow/teachingAdvice';
 import {recheckSavedRecognition} from '../../../packages/agent/src/workflow/recognition';
@@ -57,17 +58,17 @@ export function ClassWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
   const status=await invoke<CloudModelStatus>('workflow_model_status');if(!status.configured)throw new Error('model_unconfigured');
   const library=await invoke<KnowledgeLibrary>('list_knowledge');let input;
   if(resuming){
-   if(!task?.run||task.input.testScope||task.context.workspaceRevision!==revision||task.input.knowledgeRevision!==String(library.revision))throw new Error('workflow_stale_run');
+   if(!task?.run||task.input.testScope||task.context.workspaceRevision!==revision||task.input.knowledgeRevision!==knowledgeVersion(library.revision,workspace.exam.subjectName))throw new Error('workflow_stale_run');
    input=task.input;
   }else{
    if(!workspace.paper?.pages.length)throw new Error('paper_required');
    setMessage('正在本机准备整份试卷…');
    const paper=await renderPaperFiles(workspace.paper,analyze(workspace).audit.questionNumbers,setMessage,controller.current!.signal);
-   input=await freezeInput({ownerId:account.user.id,workspace:{...workspace,paper:{pages:paper.pages,questions:[]}},mode,knowledgeRevision:String(library.revision),settings:{maxItems,difficulty}});
+   input=await freezeInput({ownerId:account.user.id,workspace:{...workspace,paper:{pages:paper.pages,questions:[]}},mode,knowledgeRevision:knowledgeVersion(library.revision,workspace.exam.subjectName),settings:{maxItems,difficulty}});
   }
   const runId=resuming?task!.run!.runId:crypto.randomUUID();activeRun.current=runId;
   const labels:Record<string,string>={preflight:'检查生成条件',authorizing:'连接生成服务',recognizing:'读取整份试卷',aligning:'核对原题',extracting:'提炼知识点',retrieving:'检索可选资料',verifyingFacts:'核对知识句',clozing:'生成听写',validatingCloze:'独立盲填检查',generatingExercises:'生成补练题',solving:'独立解题',validatingExercise:'核对题目',assembling:'分配个人练习',aggregatingEvidence:'计算全班统计',writingGuidance:'生成独立教师报告',validatingGuidance:'检查教师报告'};
-  const ports=cloudWorkflowPorts({invoke,requestKey:runId,revision,modelConfigVersion:status.modelConfigVersion??'unknown',store,exportLayout:layout,
+  const ports=cloudWorkflowPorts({invoke,requestKey:runId,revision,modelConfigVersion:status.modelConfigVersion??'unknown',subject:workspace.exam.subjectName,store,exportLayout:layout,
    resumeCloud:resuming?task?.run?.cloud:undefined,onProgress:stage=>setMessage(`正在${labels[stage]??'处理生成任务'}…`)});
   const result=await runWorkflow({input,ports,runId,signal:controller.current!.signal,resume:resuming,retryUnknownCalls:resuming&&retryUnknown,taskContext:{workspaceRevision:revision}});
   await show(runId);setRetryUnknown(false);

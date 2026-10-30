@@ -57,6 +57,12 @@ def main():
             page.goto(f'http://127.0.0.1:{server.server_port}/')
             page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click()
             library=page.get_by_role('region',name='本机知识库',exact=True)
+            expect(library).to_contain_text('86 张内置卡')
+            library.get_by_label('知识库检索词',exact=True).fill('PCR引物')
+            library.get_by_role('button',name='检索知识库',exact=True).click()
+            expect(library.get_by_text('引物定位与扩增片段',exact=True)).to_be_visible()
+            expect(library.get_by_text('非教材原文或原题逐字摘录',exact=False).first).to_be_visible()
+            assert page.evaluate('testLibrary.documents.length')==0
             upload=library.get_by_label('导入知识库 PDF',exact=True)
             expect(upload).to_be_enabled()
             upload.set_input_files({'name':'synthetic-textbook.pdf','mimeType':'application/pdf','buffer':fixture()})

@@ -186,7 +186,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
     return { unitId, sourceNumbers: u.sourceNumbers, stem: u.stem, material: u.material, options: u.options };
   };
   const extract = async (unitId: string,repair?:{facts:FactCandidate[];checks:KnowledgeFact['factCheck'][]}): Promise<FactCandidate[]> => validateFacts(await invoke('extract',{
-    subject: input.workspace.exam.subjectName, original: modelUnit(unitId),...(repair?{repair}:{}) }));
+    subject: input.workspace.exam.subjectName, original: modelUnit(unitId),...(current.unitEvidence[unitId]?.length?{evidence:current.unitEvidence[unitId]}:{}),...(repair?{repair}:{}) }));
   try {
     await next('preflight'); await next('authorizing');
     if(!(options.resume&&ports.store.durable))await authorize();
@@ -204,9 +204,14 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
         current.skipped.push({ sourceNumbers: [number], reason: shape.hasTargets ? 'recognition_missing' : 'no_targets_no_model_calls' });
     });
     await next('extracting');
+    if(!cached&&ports.retrieveForOriginal)for(const unit of current.units.filter(u=>u.availability==='usable')){
+      await checkpoint(`source-evidence:${unit.unitId}`,async()=>{
+        current.unitEvidence[unit.unitId]=validateEvidence(await ports.retrieveForOriginal!(unit,signal??new AbortController().signal));
+      });
+    }
     if(batched&&!cached){
       await checkpoint('analysis-batch-plan',async()=>{
-        const size=(units:typeof current.units)=>new TextEncoder().encode(JSON.stringify(modelRequest('extract',{subject:input.workspace.exam.subjectName,contentId:'extract-batch-plan',groups:units.map(u=>({unitId:u.unitId,original:sourceData(u)}))}))).length;
+        const size=(units:typeof current.units)=>new TextEncoder().encode(JSON.stringify(modelRequest('extract',{subject:input.workspace.exam.subjectName,contentId:'extract-batch-plan',groups:units.map(u=>({unitId:u.unitId,original:sourceData(u),...(current.unitEvidence[u.unitId]?.length?{evidence:current.unitEvidence[u.unitId]}:{})}))}))).length;
         current.analysisBatches=planBatches(current.units.filter(u=>u.availability==='usable'),size,current.policy.maxInputBytes);
         const usable=current.units.filter(u=>u.availability==='usable').length;
         remainingFits(current,current.analysisBatches.length+3*Math.ceil(usable/2)+12*shape.units+2);
@@ -236,7 +241,9 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
         const facts = current.draftFacts[unit.unitId];
         if (!facts.length) { current.unitEvidence[unit.unitId] = []; return; }
         const query = facts.map(f => f.knowledgePoint).join(' ');
-        current.unitEvidence[unit.unitId] = validateEvidence(await ports.retrieve(query,signal ?? new AbortController().signal));
+        const retrieved=validateEvidence(await ports.retrieve(query,signal ?? new AbortController().signal));
+        const seen=new Set<string>();
+        current.unitEvidence[unit.unitId] = [...retrieved,...(current.unitEvidence[unit.unitId]??[])].filter(e=>{const key=`${e.documentId}:${e.page}:${e.text}`;if(seen.has(key))return false;seen.add(key);return true;}).slice(0,6);
       });
     }
     await next('verifyingFacts');

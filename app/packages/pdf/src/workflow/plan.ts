@@ -6,6 +6,7 @@ import { templateClassTeachingReport,validateClassTeachingReport } from '../../.
 import { validateCloze,validateExercise,factPassed,validateFacts,validateFactCheck,validateEvidence,validateUnits } from '../../../agent/src/workflow/validators.ts';
 import { typstContent } from '../math.ts';
 import {assertAnonymous} from '../../../agent/src/index.ts';
+import {biologySourceNames} from '../../../knowledge/src/biology.ts';
 
 export const PDF_TEMPLATE_VERSION='workflow-pdf-v1';
 export type PageRole='practice'|'answers'|'teacher';
@@ -80,6 +81,7 @@ const percentage=(v:number|null)=>v===null?'暂无有效数据':`${(v*100).toFix
 const number=(v:number|null)=>v===null?'暂无有效数据':Number(v.toFixed(2)).toString();
 
 export async function buildDocumentPlan(input:FrozenInput,run:WorkflowRun,profile:ExportProfile,options:{syntheticPreview?:boolean;revision?:number;sourceNames?:Record<string,string>}={}):Promise<DocumentPlan>{
+  options={...options,sourceNames:{...biologySourceNames,...options.sourceNames}};
   const assignments=await validateExportContent(input,run,profile,options.syntheticPreview),revision=options.revision??0;
   if(Object.values(options.sourceNames??{}).some(s=>typeof s!=='string'||s.length>256||/[\\/]/.test(s)))fail('pdf_invalid_source_name');
   assertAnonymous(options.sourceNames??{},input.workspace.students.map(s=>s.name));

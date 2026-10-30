@@ -25,7 +25,7 @@ function validFailure(error:unknown){return error instanceof Error&&error.messag
 export async function extractBatch(run:WorkflowRun,unitIds:string[],invoke:InvokeModel,subject:string):Promise<void>{
  const units=unitIds.map(id=>run.units.find(u=>u.unitId===id)!);
  let returned:Map<string,unknown>;
- try{returned=groupValues(await invoke('extract',{subject,contentId:`extract-batch-${unitIds.join('-')}`,groups:units.map(u=>({unitId:u.unitId,original:sourceData(u)}))}),unitIds);}
+ try{returned=groupValues(await invoke('extract',{subject,contentId:`extract-batch-${unitIds.join('-')}`,groups:units.map(u=>({unitId:u.unitId,original:sourceData(u),...(run.unitEvidence[u.unitId]?.length?{evidence:run.unitEvidence[u.unitId]}:{})}))}),unitIds);}
  catch(error){if(!validFailure(error))throw error;returned=new Map();}
  for(const u of units){
   try{const facts=validateFacts(returned.get(u.unitId));
@@ -59,7 +59,7 @@ export async function verifyBatch(run:WorkflowRun,unitIds:string[],invoke:Invoke
     else{failed.push(entry);failedChecks.push(checks[i]);
      if(!checks[i].accurate)report(p,entry.slot,attempt,'fact_inaccurate');if(!checks[i].supported)report(p,entry.slot,attempt,'fact_unsupported');if(!checks[i].inScope)report(p,entry.slot,attempt,'fact_context_incomplete');}
    }
-   if(failed.length){rejected.push({unit:p.unit,facts:failed});repairGroups.push({unitId:p.unit.unitId,original:sourceData(p.unit),repair:{facts:failed.map(f=>f.fact),checks:failedChecks}});}
+    if(failed.length){rejected.push({unit:p.unit,facts:failed});repairGroups.push({unitId:p.unit.unitId,original:sourceData(p.unit),...(run.unitEvidence[p.unit.unitId]?.length?{evidence:run.unitEvidence[p.unit.unitId]}:{}),repair:{facts:failed.map(f=>f.fact),checks:failedChecks}});}
   }
   pending=rejected;await save();if(!pending.length||attempt===2)break;
   let repairs:Map<string,unknown>;

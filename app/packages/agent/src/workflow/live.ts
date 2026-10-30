@@ -2,13 +2,14 @@ import { analyze } from '../../../core/src/index.ts';
 import { MemoryWorkflowStore } from './store.ts';
 import {workflowAudit} from './diagnostics.ts';
 import {recognizeWorkflowUnits} from './recognition.ts';
+import {biologyEvidence} from '../../../knowledge/src/biology.ts';
 export {recognizeWorkflowUnits} from './recognition.ts';
 import type { ModelResponse, WorkflowPorts, WorkflowState,WorkflowStore,WorkflowCloudBinding } from './types.ts';
 
 export interface CloudModelStatus { configured:boolean;model:string;modelConfigVersion:string|null;deliveryEnabled:boolean }
 export type NativeInvoke = <T>(command:string,args?:Record<string,unknown>)=>Promise<T>;
 
-export function cloudWorkflowPorts(options:{invoke:NativeInvoke;requestKey:string;revision:number;modelConfigVersion:string;
+export function cloudWorkflowPorts(options:{invoke:NativeInvoke;requestKey:string;revision:number;modelConfigVersion:string;subject?:string;
   keepFirstNumbers?:string[];store?:WorkflowStore;resumeCloud?:WorkflowCloudBinding;exportLayout?:'individual'|'combined';onProgress?:(state:WorkflowState)=>void}):WorkflowPorts{
   let jobId:string|null=null,stage:WorkflowState='idle',heartbeat:ReturnType<typeof setInterval>|undefined,beating=false;
   const native=options.invoke;
@@ -45,10 +46,18 @@ export function cloudWorkflowPorts(options:{invoke:NativeInvoke;requestKey:strin
     },
     async persistDiagnostics(run){await native('workflow_save_diagnostic',{report:workflowAudit(run)});},
     async prepareUnits(input,_signal,invoke,report){if(!invoke)throw new Error('workflow_authorization_required');return recognizeWorkflowUnits(input,invoke,input.recognitionPolicy?.keepFirstNumbers??options.keepFirstNumbers,report);},
+    ...( /生物|biology/i.test(options.subject??'')?{async retrieveForOriginal(unit:import('./types.ts').SourceUnit,signal:AbortSignal){
+      if(signal.aborted)throw new Error('workflow_cancelled');
+      return biologyEvidence([unit.stem,unit.material,...unit.options].join('\n'),3);
+    }}:{}),
     async retrieve(query,signal){
       if(signal.aborted)throw new Error('workflow_cancelled');
-      const hits=await native<{documentId:string;page:number;text:string}[]>('search_knowledge',{query});
-      return hits.slice(0,6).map(({documentId,page,text})=>({documentId,page,text}));
+      const builtIn=/生物|biology/i.test(options.subject??'')?biologyEvidence(query,4):[];
+      // Knowledge names are separate search concepts, not one exact long phrase.
+      const terms=[...new Set(query.split(/\s+/).map(t=>t.trim()).filter(t=>t&&[...t].length<=100&&!t.includes('\0')))].slice(0,3);
+      const hits:{documentId:string;page:number;text:string}[]=[];
+      for(const term of terms){if(signal.aborted)throw new Error('workflow_cancelled');hits.push(...await native<typeof hits>('search_knowledge',{query:term}));}
+      const seen=new Set<string>();return [...builtIn,...hits].filter(h=>{const key=`${h.documentId}:${h.page}:${h.text}`;if(seen.has(key))return false;seen.add(key);return true;}).slice(0,6).map(({documentId,page,text})=>({documentId,page,text}));
     },
     onProgress(value){stage=value;options.onProgress?.(value);},
   };
