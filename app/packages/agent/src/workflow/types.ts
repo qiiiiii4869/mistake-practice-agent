@@ -18,6 +18,7 @@ export interface FrozenInput {
   segmentationVersion?:'printed-headings-v1';
   authoringVersion?:string;
   assignmentVersion?:'personal-coverage-v1';
+  retrievalVersion?:'processed-library-v1';
   schemaVersion: 1; ownerId: string; workspace: Workspace; mode: GenerationMode;
   settings: ContentSettings; knowledgeRevision: string; workflowVersion: string; promptVersion: string; contentHash: string;
   testScope?: { questionNumbers: string[] };
@@ -174,7 +175,7 @@ export interface WorkflowPorts {
   persistDiagnostics?(run:WorkflowRun):Promise<void>;
   prepareUnits(input: FrozenInput, signal: AbortSignal, invoke?: InvokeModel,report?:(check:RecognitionCheck)=>void): Promise<SourceUnit[]>;
   retrieve(query: string, signal: AbortSignal): Promise<EvidenceRef[]>;
-  retrieveForOriginal?(unit: SourceUnit, signal: AbortSignal): Promise<EvidenceRef[]>;
+  retrieveForOriginal?(unit: SourceUnit, signal: AbortSignal,input?:FrozenInput): Promise<EvidenceRef[]>;
   now?: () => number; onProgress?: (state: WorkflowState) => void;
 }
 export interface ExportManifest {

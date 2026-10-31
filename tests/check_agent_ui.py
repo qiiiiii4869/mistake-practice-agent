@@ -25,6 +25,7 @@ const originalInvoke=window.__TAURI_INTERNALS__.invoke;
 window.__TAURI_INTERNALS__.invoke=async(command,args)=>{
  if(command==='list_knowledge')return {revision:0,documents:[]};
  if(command==='search_knowledge')return testNoEvidence?[]:[{documentId:'a'.repeat(64),name:'模拟课本.pdf',page:4,ordinal:1,text:'光合作用将光能转化为化学能。'}];
+ if(command==='search_knowledge_for_question')return [];
  return originalInvoke(command,args);
 };
 """

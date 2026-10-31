@@ -3,6 +3,7 @@ import { MemoryWorkflowStore } from './store.ts';
 import {workflowAudit} from './diagnostics.ts';
 import {recognizeWorkflowUnits} from './recognition.ts';
 import {biologyEvidence} from '../../../knowledge/src/biology.ts';
+import {KNOWLEDGE_RETRIEVAL_VERSION} from '../../../knowledge/src/index.ts';
 export {recognizeWorkflowUnits} from './recognition.ts';
 import type { ModelResponse, WorkflowPorts, WorkflowState,WorkflowStore,WorkflowCloudBinding } from './types.ts';
 
@@ -46,9 +47,19 @@ export function cloudWorkflowPorts(options:{invoke:NativeInvoke;requestKey:strin
     },
     async persistDiagnostics(run){await native('workflow_save_diagnostic',{report:workflowAudit(run)});},
     async prepareUnits(input,_signal,invoke,report){if(!invoke)throw new Error('workflow_authorization_required');return recognizeWorkflowUnits(input,invoke,input.recognitionPolicy?.keepFirstNumbers??options.keepFirstNumbers,report);},
-    ...( /生物|biology/i.test(options.subject??'')?{async retrieveForOriginal(unit:import('./types.ts').SourceUnit,signal:AbortSignal){
+    ...( /生物|biology/i.test(options.subject??'')?{async retrieveForOriginal(unit:import('./types.ts').SourceUnit,signal:AbortSignal,input?:import('./types.ts').FrozenInput){
       if(signal.aborted)throw new Error('workflow_cancelled');
-      return biologyEvidence([unit.stem,unit.material,...unit.options].join('\n'),3);
+      const query=[unit.stem,unit.material,...unit.options].join('\n').slice(0,19000),builtIn=biologyEvidence(query,3);
+      // Legacy frozen requests keep their old pre-extraction evidence boundary.
+      if(input&&input.retrievalVersion!==KNOWLEDGE_RETRIEVAL_VERSION)return builtIn;
+      const cached=await native<import('../../../knowledge/src/index.ts').KnowledgeHit[]>('search_knowledge_for_question',{query});
+      if(signal.aborted)throw new Error('workflow_cancelled');
+      // Interleave sources and budget their real UTF-8 bytes before extraction.
+      // Large banks must not push a single analysis unit over the native limit.
+      const ordered=[cached[0],builtIn[0],cached[1],builtIn[1],cached[2],builtIn[2]],evidence:{documentId:string;page:number;text:string}[]=[];
+      const encoder=new TextEncoder(),limit=Math.max(0,18000-encoder.encode(query).length);let used=0;
+      for(const value of ordered){if(!value)continue;const {documentId,page,text}=value,ref={documentId,page,text},bytes=encoder.encode(JSON.stringify(ref)).length;if(used+bytes>limit)continue;used+=bytes;evidence.push(ref);}
+      return evidence;
     }}:{}),
     async retrieve(query,signal){
       if(signal.aborted)throw new Error('workflow_cancelled');

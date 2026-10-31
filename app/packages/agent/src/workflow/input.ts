@@ -3,6 +3,7 @@ import { PROMPT_VERSION, WORKFLOW_VERSION, type ContentSettings, type ExportProf
 import {assertPaperExamMatch} from '../../../paper/src/examMatch.ts';
 import {BIOLOGY_AUTHORING_VERSION} from '../../../knowledge/src/biologyAuthoring.ts';
 import {isBiology} from '../../../knowledge/src/biology.ts';
+import {KNOWLEDGE_RETRIEVAL_VERSION} from '../../../knowledge/src/index.ts';
 
 export function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -37,6 +38,7 @@ export async function freezeInput(options: {
   const input = { schemaVersion: 1 as const, ownerId: options.ownerId, workspace, mode: options.mode,
     segmentationVersion:'printed-headings-v1' as const,
     assignmentVersion:'personal-coverage-v1' as const,
+    retrievalVersion:KNOWLEDGE_RETRIEVAL_VERSION,
     ...(isBiology(workspace.exam.subjectName)?{authoringVersion:BIOLOGY_AUTHORING_VERSION}:{}),
     ...(options.validationLevel?{validationLevel:options.validationLevel}:{}),
     ...(testScope?{testScope}:{}),
@@ -53,6 +55,7 @@ export async function assertFrozen(input: FrozenInput): Promise<void> {
   validateWorkspace(body.workspace);
   if(body.segmentationVersion!==undefined&&body.segmentationVersion!=='printed-headings-v1')throw new Error('workflow_invalid_settings');
   if(body.assignmentVersion!==undefined&&body.assignmentVersion!=='personal-coverage-v1')throw new Error('workflow_invalid_settings');
+  if(body.retrievalVersion!==undefined&&body.retrievalVersion!==KNOWLEDGE_RETRIEVAL_VERSION)throw new Error('workflow_invalid_settings');
   if(body.authoringVersion!==undefined&&(!isBiology(body.workspace.exam.subjectName)||body.authoringVersion!==BIOLOGY_AUTHORING_VERSION))throw new Error('workflow_invalid_settings');
   if(body.validationLevel!==undefined&&body.validationLevel!=='minimum')throw new Error('workflow_invalid_settings');
 }

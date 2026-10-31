@@ -7,6 +7,7 @@ import {modelRequest} from '../app/packages/agent/src/workflow/prompts.ts';
 import {setupWorkflow} from './workflow_fixture.mjs';
 import {validateEvidence} from '../app/packages/agent/src/workflow/validators.ts';
 import {BIOLOGY_AUTHORING_VERSION} from '../app/packages/knowledge/src/biologyAuthoring.ts';
+import {KNOWLEDGE_RETRIEVAL_VERSION} from '../app/packages/knowledge/src/index.ts';
 
 test('source-backed library spans five modules and methods without posing as full textbooks',()=>{
  assert.equal(biologyLibrary.cards.length,86);assert.equal(biologyLibrary.cards.flatMap(c=>c.facts).length,167);
@@ -27,15 +28,16 @@ for(const [query,expected]of [['以光合放氧和呼吸耗氧判断净光合速
 test('irrelevant topics do not manufacture knowledge hits; returned data cannot mutate the bundle',()=>{
  assert.deepEqual(searchBiology('交流电阻抗与洛伦兹力'),[]);assert.deepEqual(searchBiology(''),[]);
  const cards=searchBiology('PCR');cards[0].title='mutated';assert.notEqual(searchBiology('PCR')[0].title,'mutated');
- assert.equal(knowledgeVersion(0,'生物学'),`0:${BIOLOGY_LIBRARY_VERSION}:${BIOLOGY_AUTHORING_VERSION}`);assert.equal(knowledgeVersion(0,'物理'),'0');
+ assert.equal(knowledgeVersion(0,'生物学'),`0:${BIOLOGY_LIBRARY_VERSION}:${BIOLOGY_AUTHORING_VERSION}:${KNOWLEDGE_RETRIEVAL_VERSION}`);assert.equal(knowledgeVersion(0,'物理'),'0');
 });
 test('live ports retrieve standard cards before extraction and merge concept searches with local PDFs',async()=>{
- const searches=[],native=async(command,args)=>{assert.equal(command,'search_knowledge');searches.push(args.query);return [{documentId:'user-doc',page:2,text:'本机资料中的补充解释。'}];};
+ const searches=[],native=async(command,args)=>{assert(['search_knowledge','search_knowledge_for_question'].includes(command));searches.push({command,query:args.query});return [{documentId:'user-doc',page:2,text:'本机资料中的补充解释。'}];};
  const ports=cloudWorkflowPorts({invoke:native,subject:'生物',requestKey:'unused',revision:1,modelConfigVersion:'test'});
  const before=await ports.retrieveForOriginal({stem:'说明光合作用的光反应与碳反应联系。',material:'',options:[]},new AbortController().signal);
- assert(before.length);assert.equal(searches.length,0);
+ assert(before.length);assert(before.some(r=>r.documentId==='user-doc'));assert.equal(searches.length,1);assert.equal(searches[0].command,'search_knowledge_for_question');
  const after=await ports.retrieve('光反应 碳反应',new AbortController().signal);
- assert.deepEqual(searches,['光反应','碳反应']);assert(after.some(r=>r.documentId==='user-doc'));
+ assert.deepEqual(searches.slice(1).map(s=>s.query),['光反应','碳反应']);assert(after.some(r=>r.documentId==='user-doc'));
+ const previous=searches.length;await ports.retrieveForOriginal({stem:'光反应',material:'',options:[]},new AbortController().signal,{retrievalVersion:undefined});assert.equal(searches.length,previous);
  assert(!cloudWorkflowPorts({invoke:native,subject:'物理',requestKey:'x',revision:1,modelConfigVersion:'test'}).retrieveForOriginal);
 });
 test('source cards reach extraction and verification but never the blind solver answers',async()=>{

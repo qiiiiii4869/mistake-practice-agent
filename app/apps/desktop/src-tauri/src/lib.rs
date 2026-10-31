@@ -425,6 +425,23 @@ async fn search_knowledge(window: WebviewWindow, app: tauri::AppHandle, query: S
 }
 
 #[tauri::command]
+async fn read_knowledge_document(window:WebviewWindow,app:tauri::AppHandle,document_id:String)->Result<knowledge::Document,String>{
+    require_main(&window)?;with_knowledge(app,move|conn|knowledge::read_document(conn,&document_id)).await
+}
+#[tauri::command]
+async fn read_processed_knowledge(window:WebviewWindow,app:tauri::AppHandle,document_id:String)->Result<Option<knowledge::Processed>,String>{
+    require_main(&window)?;with_knowledge(app,move|conn|knowledge::load_processed(conn,&document_id)).await
+}
+#[tauri::command]
+async fn process_saved_knowledge(window:WebviewWindow,app:tauri::AppHandle,expected_revision:i64,document_id:String,processed:knowledge::Processed)->Result<knowledge::Library,String>{
+    require_main(&window)?;with_knowledge(app,move|conn|knowledge::process_existing(conn,expected_revision,&document_id,processed)).await
+}
+#[tauri::command]
+async fn search_knowledge_for_question(window:WebviewWindow,app:tauri::AppHandle,query:String)->Result<Vec<knowledge::Hit>,String>{
+    require_main(&window)?;with_knowledge(app,move|conn|knowledge::search_related(conn,&query)).await
+}
+
+#[tauri::command]
 async fn load_workspace(
     window: WebviewWindow,
     app: tauri::AppHandle,
@@ -602,6 +619,10 @@ pub fn run() {
             import_knowledge,
             remove_knowledge,
             search_knowledge,
+            read_knowledge_document,
+            read_processed_knowledge,
+            process_saved_knowledge,
+            search_knowledge_for_question,
             deepseek_status,
             configure_deepseek,
             call_deepseek,

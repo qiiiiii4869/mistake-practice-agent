@@ -79,6 +79,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
     validationLevel:input.validationLevel,
     segmentationVersion:input.segmentationVersion,
     authoringVersion:input.authoringVersion,
+    retrievalVersion:input.retrievalVersion,
     recognitionPolicy:input.recognitionPolicy,
     knowledgeRevision: input.knowledgeRevision, modelConfiguration: ports.model.cacheKey, executionMode: ports.model.executionMode,
     workflowVersion: input.workflowVersion, promptVersion: input.promptVersion }) : null;
@@ -212,7 +213,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
     await next('extracting');
     if(!cached&&ports.retrieveForOriginal)for(const unit of current.units.filter(u=>u.availability==='usable')){
       await checkpoint(`source-evidence:${unit.unitId}`,async()=>{
-        current.unitEvidence[unit.unitId]=validateEvidence(await ports.retrieveForOriginal!(unit,signal??new AbortController().signal));
+        current.unitEvidence[unit.unitId]=validateEvidence(await ports.retrieveForOriginal!(unit,signal??new AbortController().signal,input));
       });
     }
     if(batched&&!cached){
@@ -249,7 +250,10 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
         const query = facts.map(f => f.knowledgePoint).join(' ');
         const retrieved=validateEvidence(await ports.retrieve(query,signal ?? new AbortController().signal));
         const seen=new Set<string>();
-        current.unitEvidence[unit.unitId] = [...retrieved,...(current.unitEvidence[unit.unitId]??[])].filter(e=>{const key=`${e.documentId}:${e.page}:${e.text}`;if(seen.has(key))return false;seen.add(key);return true;}).slice(0,6);
+        const original=current.unitEvidence[unit.unitId]??[];
+        const ordered=input.retrievalVersion?[...original,...retrieved]:[...retrieved,...original];
+        const encoder=new TextEncoder(),limit=input.retrievalVersion?Math.max(0,18000-encoder.encode(JSON.stringify(sourceData(unit))).length):Infinity;let used=0;
+        current.unitEvidence[unit.unitId] = ordered.filter(e=>{const key=`${e.documentId}:${e.page}:${e.text}`;if(seen.has(key))return false;seen.add(key);const bytes=encoder.encode(JSON.stringify(e)).length;if(used+bytes>limit)return false;used+=bytes;return true;}).slice(0,6);
       });
     }
     await next('verifyingFacts');

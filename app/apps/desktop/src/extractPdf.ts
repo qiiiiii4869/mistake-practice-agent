@@ -7,7 +7,7 @@ GlobalWorkerOptions.workerSrc = workerUrl;
 const cMapUrl = new URL('./pdf-assets/cmaps/', document.baseURI).href;
 const standardFontDataUrl = new URL('./pdf-assets/standard_fonts/', document.baseURI).href;
 
-export async function extractPdf(file: File, progress: (page: number, total: number) => void): Promise<KnowledgeDocument> {
+export async function extractPdf(file: File, progress: (page: number, total: number) => void,knownIds:string[]=[]): Promise<KnowledgeDocument> {
   if (!file.name.toLowerCase().endsWith('.pdf') || file.size > 40 * 1024 * 1024 || !file.size) throw new Error('knowledge_pdf_limit');
   const bytes = new Uint8Array(await file.arrayBuffer());
   // Do not embed the PDF magic string in this module: Tauri's content-based
@@ -17,6 +17,9 @@ export async function extractPdf(file: File, progress: (page: number, total: num
     throw new Error('knowledge_pdf_failed');
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   const id = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+  // Fingerprint before opening PDF.js: renamed duplicate files do not repeat
+  // extraction or question processing. Normal use reads only the SQLite cache.
+  if(knownIds.includes(id))throw new Error('knowledge_duplicate');
   const task = getDocument({ data: bytes, cMapUrl, standardFontDataUrl, useWasm: false,
     enableXfa: false, stopAtErrors: true, disableFontFace: true, useSystemFonts: false });
   // Never display a password prompt or leave a pending encrypted-file load.

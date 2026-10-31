@@ -11,12 +11,16 @@ from check_desktop_ui import MOCK, QuietHandler, ROOT
 KNOWLEDGE_MOCK = r"""
 window.testLibrary = JSON.parse(sessionStorage.getItem('synthetic-library') ?? '{"revision":0,"documents":[]}');
 window.testKnowledgeFailure = false;
+window.testWorkerCount=0;const NativeKnowledgeWorker=window.Worker;
+window.Worker=class extends NativeKnowledgeWorker{constructor(...args){super(...args);window.testWorkerCount++;}};
 const originalInvoke = window.__TAURI_INTERNALS__.invoke;
 window.__TAURI_INTERNALS__.invoke = async (command,args) => {
-  if (!['list_knowledge','import_knowledge','remove_knowledge','search_knowledge'].includes(command)) return originalInvoke(command,args);
+  if (!['list_knowledge','import_knowledge','remove_knowledge','search_knowledge','read_knowledge_document','read_processed_knowledge','process_saved_knowledge'].includes(command)) return originalInvoke(command,args);
   window.testCommands.push(command);
   if(command === 'list_knowledge') return structuredClone(testLibrary);
   if(testKnowledgeFailure) throw 'storage_failed';
+  if(command==='read_knowledge_document')return structuredClone(testLibrary.content.find(d=>d.id===args.documentId));
+  if(command==='read_processed_knowledge')return structuredClone(testLibrary.content.find(d=>d.id===args.documentId)?.processed??null);
   if(command === 'search_knowledge') return (testLibrary.content ?? []).flatMap(doc => doc.pages.filter(p=>p.text.includes(args.query)).map(p=>({documentId:doc.id,name:doc.name,page:p.number,ordinal:1,text:p.text})));
   if(args.expectedRevision !== testLibrary.revision) throw 'knowledge_conflict';
   if(command === 'import_knowledge') {
@@ -24,10 +28,13 @@ window.__TAURI_INTERNALS__.invoke = async (command,args) => {
     testLibrary.content.push(args.document);
     const d=args.document;
     testLibrary.documents.push({id:d.id,name:d.name,pageCount:d.pages.length,chunkCount:d.pages.filter(p=>p.text).length,emptyPages:d.pages.filter(p=>!p.text).map(p=>p.number)});
+  } else if(command==='process_saved_knowledge') {
+    const d=testLibrary.content.find(d=>d.id===args.documentId);d.processed=args.processed;
   } else {
     testLibrary.documents = testLibrary.documents.filter(d=>d.id!==args.documentId);
     testLibrary.content = testLibrary.content.filter(d=>d.id!==args.documentId);
   }
+  for(const d of testLibrary.documents){const processed=testLibrary.content.find(v=>v.id===d.id)?.processed;d.processing=processed?{version:processed.version,kind:processed.kind,questionCount:processed.questions.length,answerCount:processed.questions.filter(q=>q.answer).length,explanationCount:processed.questions.filter(q=>q.explanation).length,warnings:processed.warnings}:null;}
   testLibrary.revision++;
   sessionStorage.setItem('synthetic-library',JSON.stringify(testLibrary));
   return structuredClone(testLibrary);
@@ -93,6 +100,10 @@ def main():
             expect(confirm).to_have_count(0)
             assert page.evaluate('testLibrary.content[0].pages[1].text')==''
             assert page.evaluate('testLibrary.documents[0].emptyPages')==[2]
+            assert page.evaluate('testLibrary.content[0].processed.version')=='knowledge-processor-v1'
+            library.get_by_role('button',name='查看处理结果',exact=True).click()
+            expect(library.get_by_role('region',name='已保存题库处理结果',exact=True)).to_be_visible()
+            library.get_by_role('button',name='关闭结果',exact=True).click()
             print('PASS: actual PDF parsing under CSP, page provenance, empty-page warning, cancel and failed import preservation.')
             page.reload()
             expect(library).to_contain_text('synthetic-textbook.pdf')
@@ -102,8 +113,10 @@ def main():
             expect(results).to_contain_text('第 1 页')
             expect(results).to_contain_text('Photosynthesis and DNA replication.')
             page.screenshot(path=str(ROOT/'tmp/desktop-knowledge-ui-mock.png'),full_page=True)
+            duplicate_workers=page.evaluate('testWorkerCount')
             upload.set_input_files({'name':'renamed.pdf','mimeType':'application/pdf','buffer':fixture()})
             expect(library).to_contain_text('相同 PDF 已在知识库中')
+            assert page.evaluate('testWorkerCount')==duplicate_workers
             assert page.evaluate('testLibrary.revision')==1
             upload.set_input_files({'name':'empty.pdf','mimeType':'application/pdf','buffer':fixture(True)})
             expect(library).to_contain_text('没有可提取的文字')
@@ -121,6 +134,18 @@ def main():
             assert page.evaluate('testLibrary.documents.length')==0
             page.reload()
             expect(library.get_by_role('button',name='检索知识库',exact=True)).to_be_disabled()
+            page.evaluate("""() => {const d={id:'f'.repeat(64),name:'已存题库.pdf',pages:[{number:1,text:'1. 下列光合作用说法正确的是？\\nA. 光反应产生ATP\\nB. 无关选项\\n【答案】A\\n【解析】光反应在类囊体膜上进行。'}]};testLibrary.content=[d];testLibrary.documents=[{id:d.id,name:d.name,pageCount:1,chunkCount:1,emptyPages:[]}];sessionStorage.setItem('synthetic-library',JSON.stringify(testLibrary));}""")
+            page.reload()
+            library.get_by_role('button',name='处理已存文字',exact=True).click()
+            expect(library).to_contain_text('已更新处理结果和索引')
+            expect(library).to_contain_text('参考答案：A')
+            assert page.evaluate('testLibrary.content[0].processed.questions.length')==1
+            page.reload()
+            cached_workers=page.evaluate('testWorkerCount')
+            library.get_by_role('button',name='查看处理结果',exact=True).click()
+            expect(library).to_contain_text('共 1 道题')
+            assert page.evaluate('testWorkerCount')==cached_workers
+            print('PASS: renamed duplicate skips PDF/processing workers; legacy saved text processes once, cached results survive restart without source PDF.')
             assert not errors,errors
             assert not remote,remote
             print('PASS: confirmed deletion and reopen, local-only PDF resources, no JavaScript errors.')
