@@ -17,6 +17,7 @@ export interface FrozenInput {
   validationLevel?:'minimum';
   segmentationVersion?:'printed-headings-v1';
   authoringVersion?:string;
+  assignmentVersion?:'personal-coverage-v1';
   schemaVersion: 1; ownerId: string; workspace: Workspace; mode: GenerationMode;
   settings: ContentSettings; knowledgeRevision: string; workflowVersion: string; promptVersion: string; contentHash: string;
   testScope?: { questionNumbers: string[] };
@@ -71,6 +72,7 @@ export interface ExerciseItem {
 export type ContentItem = ClozeItem | ExerciseItem;
 export interface StudentTargets {
   localStudentId: string; rawWeakNumbers: string[]; selectedTargets: string[]; excludedTargets: string[];
+  questionPriorities?:{number:string;lossStudents:number;eligibleStudents:number;lossRate:number}[];
   outOfScopeNumbers?: string[];
 }
 export interface StudentAssignment extends StudentTargets {

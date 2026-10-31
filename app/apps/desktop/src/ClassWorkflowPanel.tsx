@@ -90,6 +90,7 @@ export function ClassWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
    <label><input aria-label="全班附答案页" type="checkbox" disabled={disabled} checked={answers} onChange={e=>setAnswers(e.target.checked)}/>附独立答案页</label>
   </div>
   <p className="help">数量是上限，错题少就少安排；教师报告始终单独导出。当前生成消耗模型额度，次数结算尚未启用。</p>
+  <p className="help">个人推题先覆盖不同错题各一个考点，再补充同题考点。优先个人独有失分题，其次失分人数少的题；人数相同按本人失分比例，再按题号。只统计有效逐题成绩，数量上限或内容缺失造成的未覆盖会保留说明。</p>
   <label><input aria-label="宽松检查" type="checkbox" disabled={disabled} checked={minimum} onChange={e=>{setMinimum(e.target.checked);localStorage.setItem('workflow-minimum-checks',e.target.checked?'on':'off');}}/>宽松检查（临时）：跳过多次识题一致性、事实复核和独立作答，仅保留基本格式。导出为未经严格核验的草稿。</label>
   <div className="actions"><button disabled={disabled} onClick={()=>void generate()}>生成并导出 PDF</button><button className="secondary" disabled={!busy} onClick={()=>{controller.current?.abort();void invoke('workflow_pdf_cancel').catch(()=>{});}}>停止本次处理</button>
    {canExport&&<button className="secondary" disabled={disabled} onClick={()=>void withBusy(()=>exported(run!.runId))}>导出已有结果 PDF</button>}

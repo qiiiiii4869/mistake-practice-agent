@@ -111,8 +111,16 @@ export async function buildDocumentPlan(input:FrozenInput,run:WorkflowRun,profil
     if(assignment.status==='unavailable')prose(doc,student.id,'practice',`本场${student.availability==='not_scanned'?'没扫':student.availability==='no_original_paper'?'无原卷':'暂无有效逐题成绩'}，不作错题判断，不安排自动补练。`);
     else if(!items.length)prose(doc,student.id,'practice',input.validationLevel==='minimum'&&assignment.rawWeakNumbers.length?'本次暂无可用练习草稿，不能据此认定没有失分目标。':'本场没有纳入的失分知识目标。');
     if(input.validationLevel==='minimum'&&assignment.uncoveredNumbers.length)prose(doc,student.id,'practice',`尚无草稿对应的原题：${assignment.uncoveredNumbers.join('、')}。本份只列本次可用内容。`);
+    if(input.assignmentVersion==='personal-coverage-v1'&&items.length){
+      const covered=assignment.rawWeakNumbers.filter(n=>items.some(i=>run.facts.find(f=>f.factId===i.factId)?.sourceNumbers.includes(n)));
+      const unique=(assignment.questionPriorities??[]).filter(p=>p.lossStudents===1&&p.eligibleStudents>1&&covered.includes(p.number)).map(p=>p.number);
+      prose(doc,student.id,'practice',`本次已覆盖原题：${covered.join('、')}。先覆盖不同错题，再补充考点。`);
+      if(unique.length)prose(doc,student.id,'practice',`在有逐题成绩的学生中，仅本人失分且本次已安排的原题：${unique.join('、')}。`);
+      if(input.validationLevel!=='minimum'&&assignment.uncoveredNumbers.length)prose(doc,student.id,'practice',`本次尚未覆盖原题：${assignment.uncoveredNumbers.join('、')}（数量上限或可用内容限制）。`);
+    }
     items.forEach((item,index)=>{
-      block(doc,student.id,'practice','heading',`${index+1}. ${item.mode==='dictation'?'知识句':({single_choice:'单项选择',multiple_choice:'多项选择',short_answer:'简答',calculation:'计算'}[item.type])}`,{itemId:item.itemId,newPage:revision>=1&&index>0});
+      const source=input.assignmentVersion==='personal-coverage-v1'?` · 对应原题 ${run.facts.find(f=>f.factId===item.factId)!.sourceNumbers.filter(n=>assignment.rawWeakNumbers.includes(n)).join('、')}`:'';
+      block(doc,student.id,'practice','heading',`${index+1}. ${item.mode==='dictation'?'知识句':({single_choice:'单项选择',multiple_choice:'多项选择',short_answer:'简答',calculation:'计算'}[item.type])}${source}`,{itemId:item.itemId,newPage:revision>=1&&index>0});
       if(item.mode==='dictation'&&item.context)prose(doc,student.id,'practice',`背景：${item.context}`,{itemId:item.itemId});
       if(item.mode==='dictation'){
         let parts:({text:string}|{gap:number})[]=[],blankIds:string[]=[],length=0,partNumber=0;

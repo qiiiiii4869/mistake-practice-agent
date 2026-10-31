@@ -36,6 +36,7 @@ export async function freezeInput(options: {
   if(options.validationLevel!==undefined&&options.validationLevel!=='minimum')throw new Error('workflow_invalid_settings');
   const input = { schemaVersion: 1 as const, ownerId: options.ownerId, workspace, mode: options.mode,
     segmentationVersion:'printed-headings-v1' as const,
+    assignmentVersion:'personal-coverage-v1' as const,
     ...(isBiology(workspace.exam.subjectName)?{authoringVersion:BIOLOGY_AUTHORING_VERSION}:{}),
     ...(options.validationLevel?{validationLevel:options.validationLevel}:{}),
     ...(testScope?{testScope}:{}),
@@ -51,6 +52,7 @@ export async function assertFrozen(input: FrozenInput): Promise<void> {
     throw new Error('workflow_stale_input');
   validateWorkspace(body.workspace);
   if(body.segmentationVersion!==undefined&&body.segmentationVersion!=='printed-headings-v1')throw new Error('workflow_invalid_settings');
+  if(body.assignmentVersion!==undefined&&body.assignmentVersion!=='personal-coverage-v1')throw new Error('workflow_invalid_settings');
   if(body.authoringVersion!==undefined&&(!isBiology(body.workspace.exam.subjectName)||body.authoringVersion!==BIOLOGY_AUTHORING_VERSION))throw new Error('workflow_invalid_settings');
   if(body.validationLevel!==undefined&&body.validationLevel!=='minimum')throw new Error('workflow_invalid_settings');
 }
