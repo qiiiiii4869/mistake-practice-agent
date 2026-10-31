@@ -58,6 +58,13 @@ def main():
             page.get_by_role('navigation',name='功能入口').get_by_role('button',name='生成报告').click()
             library=page.get_by_role('region',name='本机知识库',exact=True)
             expect(library).to_contain_text('86 张内置卡')
+            library.get_by_text('基础填空与情景出题方法（12 条）',exact=True).click()
+            expect(library).to_contain_text('先定知识目标，再选情景')
+            expect(library).to_contain_text('原对话的每专题至少12空')
+            library.get_by_label('知识库检索词',exact=True).fill('遗传概率分母')
+            library.get_by_role('button',name='检索知识库',exact=True).click()
+            expect(library.get_by_label('生物出题方法检索结果',exact=True)).to_contain_text('遗传先建模型，再算分母')
+            assert page.evaluate('testLibrary.documents.length')==0
             library.get_by_label('知识库检索词',exact=True).fill('PCR引物')
             library.get_by_role('button',name='检索知识库',exact=True).click()
             expect(library.get_by_text('引物定位与扩增片段',exact=True)).to_be_visible()

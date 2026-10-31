@@ -2,6 +2,7 @@ import React from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { knowledgeError, type KnowledgeDocument, type KnowledgeLibrary, type KnowledgeHit } from '../../../packages/knowledge/src';
 import {biologyLibrary,searchBiology,formatBiologyCard} from '../../../packages/knowledge/src/biology';
+import {biologyAuthoring,searchBiologyAuthoring} from '../../../packages/knowledge/src/biologyAuthoring';
 
 export function KnowledgeWorkspace() {
   const [library, setLibrary] = React.useState<KnowledgeLibrary | null>(null);
@@ -13,6 +14,7 @@ export function KnowledgeWorkspace() {
   const [hits, setHits] = React.useState<KnowledgeHit[] | null>(null);
   const [searched, setSearched] = React.useState('');
   const [builtInHits,setBuiltInHits]=React.useState<ReturnType<typeof searchBiology>|null>(null);
+  const [methodHits,setMethodHits]=React.useState<ReturnType<typeof searchBiologyAuthoring>|null>(null);
   const mounted = React.useRef(true);
   const locked = busy || candidate !== null || deleting !== null;
   React.useEffect(() => { mounted.current = true; void refresh(); return () => { mounted.current = false; }; }, []);
@@ -55,7 +57,7 @@ export function KnowledgeWorkspace() {
     finally { setBusy(false); }
   }
   async function search(event: React.FormEvent) {
-    event.preventDefault(); setBusy(true); setHits(null);setBuiltInHits(searchBiology(query,10));
+    event.preventDefault(); setBusy(true); setHits(null);setBuiltInHits(searchBiology(query,10));setMethodHits(searchBiologyAuthoring(query));
     try {
       const result = await invoke<KnowledgeHit[]>('search_knowledge', { query });
       setHits(result); setSearched(query.trim()); setMessage(`检索完成，找到 ${result.length} 个片段（最多显示 20 个）。`);
@@ -70,6 +72,12 @@ export function KnowledgeWorkspace() {
      <ul>{biologyLibrary.modules.map(module=><li key={module.id}>{module.volume}《{module.name}》：{biologyLibrary.cards.filter(c=>c.moduleId===module.id).length} 张卡</li>)}</ul>
      <ol>{biologyLibrary.method.map(step=><li key={step}>{step}</li>)}</ol>
      <p className="help">来源为用户提供的江苏2024、2025真题及教材目录。卡片是原创概括，不是教材原文；目录尚无具体依据的专题仍待补充。</p>
+    </details>
+    <details aria-label="生物出题方法库"><summary>基础填空与情景出题方法（{biologyAuthoring.principles.length} 条）</summary>
+     <p className="help">参考对话“编写高中生物基础填空题”及本地命题研究笔记整理，已用于新任务的知识提炼、听写和补练生成。</p>
+     <ol>{biologyAuthoring.principles.map(p=><li key={p.id}><b>{p.title}</b>：{p.method}</li>)}</ol>
+     {biologyAuthoring.topicTemplates.map(t=><article key={t.id}><h3>{t.title}</h3><ol>{t.taskChain.map(s=><li key={s}>{s}</li>)}</ol><p>{t.textExample.stem}</p><p className="help">答案：{t.textExample.answer}；目标：{t.textExample.purpose}</p></article>)}
+     <p className="help">{biologyAuthoring.scope}</p>
     </details>
     <p className="help">课本与试卷可重复使用，知识库独立于当前考试。清除考试不会删除知识库。仅保存提取文字和来源页码，原 PDF 留在原位置。扫描页识别待接入。</p>
     <div className="actions"><label className="file-input">导入 PDF<input aria-label="导入知识库 PDF" type="file" accept=".pdf,application/pdf" disabled={locked || !library} onChange={e => void prepare(e)}/></label><button className="secondary small" disabled={locked} onClick={() => void refresh()}>刷新知识库</button></div>
@@ -86,7 +94,8 @@ export function KnowledgeWorkspace() {
       <button className="secondary small danger" disabled={locked} aria-label={`删除文档 ${doc.name}`} onClick={() => setDeleting(doc.id)}>删除</button>
     </li>)}</ul>}
     {deleting && <div className="confirm-panel" role="region" aria-label="确认删除知识库文档"><b>删除 {library?.documents.find(d => d.id === deleting)?.name}？</b><p>删除本机提取文字与索引，原 PDF 保留。</p><div className="actions"><button disabled={busy} onClick={() => void remove()}>确认删除文档</button><button className="secondary" disabled={busy} onClick={() => setDeleting(null)}>取消删除</button></div></div>}
-    <form onSubmit={e => void search(e)} className="knowledge-search"><label>检索关键词<input aria-label="知识库检索词" maxLength={100} value={query} disabled={locked} onChange={e => { setQuery(e.target.value); setHits(null);setBuiltInHits(null); }}/></label><button disabled={locked || !query.trim()}>检索知识库</button></form>
+    <form onSubmit={e => void search(e)} className="knowledge-search"><label>检索关键词<input aria-label="知识库检索词" maxLength={100} value={query} disabled={locked} onChange={e => { setQuery(e.target.value); setHits(null);setBuiltInHits(null);setMethodHits(null); }}/></label><button disabled={locked || !query.trim()}>检索知识库</button></form>
+    {methodHits!==null&&<div aria-label="生物出题方法检索结果"><p>出题方法：{methodHits.length} 条</p>{methodHits.map(p=><article className="knowledge-hit" key={p.id}><b>{p.title}</b><p>{p.method}</p></article>)}</div>}
     {builtInHits!==null&&<div aria-label="内置生物知识检索结果"><p>内置知识卡：{builtInHits.length} 条</p>{builtInHits.map(card=><article className="knowledge-hit" key={card.id}><b>{card.title}</b><pre>{formatBiologyCard(card)}</pre></article>)}</div>}
     {hits !== null && <div aria-label="知识库检索结果"><p>“{searched}” · {hits.length} 个片段</p>{hits.map(hit => <article className="knowledge-hit" key={`${hit.documentId}-${hit.page}-${hit.ordinal}`}><b>{hit.name} · 第 {hit.page} 页</b><pre>{hit.text}</pre></article>)}</div>}
   </section>;

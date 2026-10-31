@@ -6,6 +6,7 @@ import {runWorkflow} from '../app/packages/agent/src/workflow/index.ts';
 import {modelRequest} from '../app/packages/agent/src/workflow/prompts.ts';
 import {setupWorkflow} from './workflow_fixture.mjs';
 import {validateEvidence} from '../app/packages/agent/src/workflow/validators.ts';
+import {BIOLOGY_AUTHORING_VERSION} from '../app/packages/knowledge/src/biologyAuthoring.ts';
 
 test('source-backed library spans five modules and methods without posing as full textbooks',()=>{
  assert.equal(biologyLibrary.cards.length,86);assert.equal(biologyLibrary.cards.flatMap(c=>c.facts).length,167);
@@ -26,7 +27,7 @@ for(const [query,expected]of [['以光合放氧和呼吸耗氧判断净光合速
 test('irrelevant topics do not manufacture knowledge hits; returned data cannot mutate the bundle',()=>{
  assert.deepEqual(searchBiology('交流电阻抗与洛伦兹力'),[]);assert.deepEqual(searchBiology(''),[]);
  const cards=searchBiology('PCR');cards[0].title='mutated';assert.notEqual(searchBiology('PCR')[0].title,'mutated');
- assert.equal(knowledgeVersion(0,'生物学'),`0:${BIOLOGY_LIBRARY_VERSION}`);assert.equal(knowledgeVersion(0,'物理'),'0');
+ assert.equal(knowledgeVersion(0,'生物学'),`0:${BIOLOGY_LIBRARY_VERSION}:${BIOLOGY_AUTHORING_VERSION}`);assert.equal(knowledgeVersion(0,'物理'),'0');
 });
 test('live ports retrieve standard cards before extraction and merge concept searches with local PDFs',async()=>{
  const searches=[],native=async(command,args)=>{assert.equal(command,'search_knowledge');searches.push(args.query);return [{documentId:'user-doc',page:2,text:'本机资料中的补充解释。'}];};

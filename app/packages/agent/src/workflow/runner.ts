@@ -78,6 +78,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
     scope: input.testScope,
     validationLevel:input.validationLevel,
     segmentationVersion:input.segmentationVersion,
+    authoringVersion:input.authoringVersion,
     recognitionPolicy:input.recognitionPolicy,
     knowledgeRevision: input.knowledgeRevision, modelConfiguration: ports.model.cacheKey, executionMode: ports.model.executionMode,
     workflowVersion: input.workflowVersion, promptVersion: input.promptVersion }) : null;
@@ -116,8 +117,8 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
   const names = input.workspace.students.map(s => s.name);
   let networkRetries = current.calls.filter(c => c.attempt > 1).length;
   const invoke: InvokeModel = async (stage,data) => {
-    const request = modelRequest(stage,['extract','verifyFact','cloze','blindFill','exercise','solve'].includes(stage)
-      ?{...data,subject:input.workspace.exam.subjectName}:data);
+    const requestData=['extract','verifyFact','cloze','blindFill','exercise','solve'].includes(stage)?{...data,subject:input.workspace.exam.subjectName}:data;
+    const request = modelRequest(stage,{...requestData,...(input.authoringVersion&&['extract','cloze','exercise'].includes(stage)?{authoringVersion:input.authoringVersion}:{})});
     assertAnonymous(request,names);
     const serialized = JSON.stringify(request), requestHash = await digest(request);
     const scopeId = typeof data.contentId === 'string' ? data.contentId
@@ -216,7 +217,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
     }
     if(batched&&!cached){
       await checkpoint('analysis-batch-plan',async()=>{
-        const size=(units:typeof current.units)=>new TextEncoder().encode(JSON.stringify(modelRequest('extract',{subject:input.workspace.exam.subjectName,contentId:'extract-batch-plan',groups:units.map(u=>({unitId:u.unitId,original:sourceData(u),...(current.unitEvidence[u.unitId]?.length?{evidence:current.unitEvidence[u.unitId]}:{})}))}))).length;
+        const size=(units:typeof current.units)=>new TextEncoder().encode(JSON.stringify(modelRequest('extract',{subject:input.workspace.exam.subjectName,...(input.authoringVersion?{authoringVersion:input.authoringVersion}:{}),contentId:'extract-batch-plan',groups:units.map(u=>({unitId:u.unitId,original:sourceData(u),...(current.unitEvidence[u.unitId]?.length?{evidence:current.unitEvidence[u.unitId]}:{})}))}))).length;
         current.analysisBatches=planBatches(current.units.filter(u=>u.availability==='usable'),size,current.policy.maxInputBytes);
         const usable=current.units.filter(u=>u.availability==='usable').length;
         remainingFits(current,current.analysisBatches.length+(minimum?3*usable:3*Math.ceil(usable/2)+12*shape.units)+2);

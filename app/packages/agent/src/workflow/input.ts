@@ -1,6 +1,8 @@
 import { analyze, validateWorkspace, type Workspace } from '../../../core/src/index.ts';
 import { PROMPT_VERSION, WORKFLOW_VERSION, type ContentSettings, type ExportProfile, type FrozenInput, type GenerationMode } from './types.ts';
 import {assertPaperExamMatch} from '../../../paper/src/examMatch.ts';
+import {BIOLOGY_AUTHORING_VERSION} from '../../../knowledge/src/biologyAuthoring.ts';
+import {isBiology} from '../../../knowledge/src/biology.ts';
 
 export function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -34,6 +36,7 @@ export async function freezeInput(options: {
   if(options.validationLevel!==undefined&&options.validationLevel!=='minimum')throw new Error('workflow_invalid_settings');
   const input = { schemaVersion: 1 as const, ownerId: options.ownerId, workspace, mode: options.mode,
     segmentationVersion:'printed-headings-v1' as const,
+    ...(isBiology(workspace.exam.subjectName)?{authoringVersion:BIOLOGY_AUTHORING_VERSION}:{}),
     ...(options.validationLevel?{validationLevel:options.validationLevel}:{}),
     ...(testScope?{testScope}:{}),
     ...(options.recognitionPolicy?{recognitionPolicy:structuredClone(options.recognitionPolicy)}:{}),
@@ -48,6 +51,7 @@ export async function assertFrozen(input: FrozenInput): Promise<void> {
     throw new Error('workflow_stale_input');
   validateWorkspace(body.workspace);
   if(body.segmentationVersion!==undefined&&body.segmentationVersion!=='printed-headings-v1')throw new Error('workflow_invalid_settings');
+  if(body.authoringVersion!==undefined&&(!isBiology(body.workspace.exam.subjectName)||body.authoringVersion!==BIOLOGY_AUTHORING_VERSION))throw new Error('workflow_invalid_settings');
   if(body.validationLevel!==undefined&&body.validationLevel!=='minimum')throw new Error('workflow_invalid_settings');
 }
 export async function exportProfile(input: FrozenInput, runId: string, layout: ExportProfile['layout'], includeAnswers = true): Promise<ExportProfile> {

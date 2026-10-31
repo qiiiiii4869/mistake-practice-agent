@@ -1,10 +1,11 @@
 import library from './biology-library.json' with {type:'json'};
+import {BIOLOGY_AUTHORING_VERSION} from './biologyAuthoring.ts';
 
 export const BIOLOGY_LIBRARY_VERSION=library.version;
 export const biologyLibrary=library;
 export type BiologyCard=typeof library.cards[number];
 export const isBiology=(subject:string)=>/生物|biology/i.test(subject);
-export const knowledgeVersion=(revision:string|number,subject:string)=>isBiology(subject)?`${revision}:${BIOLOGY_LIBRARY_VERSION}`:String(revision);
+export const knowledgeVersion=(revision:string|number,subject:string)=>isBiology(subject)?`${revision}:${BIOLOGY_LIBRARY_VERSION}:${BIOLOGY_AUTHORING_VERSION}`:String(revision);
 const normalize=(text:string)=>text.normalize('NFKC').replace(/\s+/g,'').toLocaleLowerCase('en-US');
 
 // Local lexical retrieval; an overlap proposes a topic, never proves that a
