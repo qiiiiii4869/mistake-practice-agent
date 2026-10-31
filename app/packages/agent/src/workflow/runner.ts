@@ -13,6 +13,7 @@ import { factPassed, invalid, list, normalize, object, validateEvidence, validat
 import {planBatches,remainingFits,sourceData,extractBatch,verificationData,verifyBatch} from './batchAnalysis.ts';
 import {workflowErrorCode} from './errors.ts';
 import {minimumFacts,minimumCloze,minimumExercise,minimumReport} from './minimumChecks.ts';
+import {ITEM_ATTEMPT_LIMIT,itemRetryEnabled,itemStage,retryableItemOutput,knownItemOutputFailure,unresolvedCalls} from './itemRetries.ts';
 
 export interface RunOptions {
   input: FrozenInput; ports: WorkflowPorts; runId?: string; signal?: AbortSignal;
@@ -56,9 +57,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
     if (run.state === 'contentReady' || run.state === 'partial') return run;
     if (!options.resume) throw new Error('workflow_resume_required');
     // Restored counters and original deadlines are retained, including unknown usage.
-    const resolvedRetry=(i:number)=>run!.calls[i].attempt===1&&run!.calls[i+1]?.attempt===2&&run!.calls[i+1].status==='completed'
-      &&run!.calls[i+1].requestHash===run!.calls[i].requestHash&&run!.calls[i+1].scopeId===run!.calls[i].scopeId;
-    if (run.calls.some((c,i) => c.status !== 'completed'&&!resolvedRetry(i)) && !options.retryUnknownCalls) throw new Error('workflow_unknown_call_requires_decision');
+    if (unresolvedCalls(input,run) && !options.retryUnknownCalls) throw new Error('workflow_unknown_call_requires_decision');
     run.calls.filter(c => c.status === 'pending').forEach(c => { c.status = 'unknown'; });
   } else {
     if (options.resume) throw new Error('workflow_run_not_found');
@@ -130,6 +129,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
       if(replayCursor!==null&&replayCursor<current.calls.length){
         const previous=current.calls[replayCursor++];
         if(previous.stage!==stage||previous.scopeId!==callScope||previous.requestHash!==requestHash||previous.attempt!==attempt)throw new Error('workflow_replay_mismatch');
+        if(knownItemOutputFailure(input,current,previous))throw new Error(previous.errorCode);
         if(previous.status==='completed'){
           const response=await ports.store.loadResponse?.(input.ownerId,runId,previous.callId);
           if(response){assertAnonymous(response.value,names);return structuredClone(response.value);}
@@ -137,15 +137,16 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
           throw new Error('workflow_result_missing');
         }
         const continuation=current.calls[replayCursor];
-        if(attempt===1&&continuation?.attempt===2&&continuation.status==='completed'&&continuation.requestHash===requestHash&&continuation.scopeId===callScope)continue;
+        if(attempt===1&&continuation?.attempt===2&&(continuation.status==='completed'||knownItemOutputFailure(input,current,continuation))&&continuation.requestHash===requestHash&&continuation.scopeId===callScope)continue;
         if(attempt===1&&options.retryUnknownCalls&&networkRetries<current.policy.maxNetworkRetries){networkRetries++;continue;}
         throw new Error('workflow_unknown_call_requires_decision');
       }
       if(now()-current.startedAt>=current.policy.maxRunMs)throw new Error('workflow_deadline');
+      if(itemRetryEnabled(input)&&itemStage(stage)&&current.calls.filter(c=>c.stage===stage&&c.scopeId===callScope).length>=ITEM_ATTEMPT_LIMIT)throw new Error('workflow_item_attempts_exhausted');
       await authorize();
       const images=stage==='recognize'?1:0;
       const call = reserveCall(current.policy,current.calls,stage,requestHash,new TextEncoder().encode(serialized).byteLength,now(),current.startedAt,attempt,
-        callScope,images);
+        callScope,images,itemRetryEnabled(input)&&itemStage(stage)?ITEM_ATTEMPT_LIMIT:stage==='recognize'?3:2);
       current.calls.push(call); await save();
       if(replayCursor!==null)replayCursor++;
       const controller = new AbortController();
@@ -173,8 +174,8 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
         return response.value;
       } catch (error) {
         if (call.status === 'pending'||(call.status==='completed'&&!receiptSaved&&!call.errorCode)) {
-          call.status = 'unknown'; call.finishedAt = now();const code=error instanceof Error?error.message:'';
-          call.errorCode=/^(workflow_|model_|paper_)[a-z_]+$/.test(code)?code:'workflow_failed';await save();
+          call.status = 'unknown'; call.finishedAt = now();
+          call.errorCode=workflowErrorCode(error);await save();
         }
         // Only explicitly classified network failures retry once; timeouts retain unknown status and pause.
         if (error instanceof Error && error.message === 'workflow_network_error' && attempt === 1 && networkRetries < current.policy.maxNetworkRetries) {
@@ -345,16 +346,29 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
     }
     for (const fact of current.facts.filter(f => targetIds.has(f.factId))) {
       await checkpoint(`item:${fact.factId}`,async () => {
-        const scopedInvoke: InvokeModel = (stage,data) => invoke(stage,{ ...data,contentId: fact.factId });
+        const consumed=(stage:string)=>current.calls.slice(0,replayCursor??current.calls.length).filter(c=>c.stage===stage&&c.scopeId===fact.factId).length;
+        const scopedInvoke: InvokeModel = async(stage,data) => {
+          for(let n=0;n<ITEM_ATTEMPT_LIMIT;n++){
+            try{return await invoke(stage,{...data,contentId:fact.factId});}
+            catch(error){if(!itemRetryEnabled(input)||!itemStage(stage)||!retryableItemOutput(error)||consumed(stage)>=ITEM_ATTEMPT_LIMIT)throw error;}
+          }throw new Error('workflow_item_attempts_exhausted');
+        };
         const report=(failure:WorkflowRun['validationAttempts'][number])=>{current.validationAttempts.push(failure);};
+        const exhausted=()=>{const call=current.calls.slice(0,replayCursor??current.calls.length).filter(c=>c.scopeId===fact.factId&&itemStage(c.stage)).at(-1);current.skipped.push({sourceNumbers:fact.sourceNumbers,reason:'item_generation_exhausted',...(call?{callId:call.callId}:{})});};
+        try{
         if(minimum){
           // TEMPORARILY DISABLED: exact restoration, content scope, candidate
-          // matching, blind filling / independent solving and content retries.
-          try{
+          // matching, blind filling / independent solving and scientific repair.
+          for(let contentAttempt=1;contentAttempt<=(itemRetryEnabled(input)?ITEM_ATTEMPT_LIMIT:1);contentAttempt++)try{
             const raw=input.mode==='dictation'?await scopedInvoke('cloze',{statement:fact.completeStatement,context:fact.context??'',conditions:fact.conditions,candidateAnswers:fact.candidateAnswers,attempt:1,repair:null})
               :await scopedInvoke('exercise',{fact:{knowledgePoint:fact.knowledgePoint,statement:fact.completeStatement,context:fact.context??'',conditions:fact.conditions},originals:current.units.filter(u=>fact.unitIds.includes(u.unitId)).map(u=>({stem:u.stem,material:u.material,options:u.options})),difficulty:input.settings.difficulty,attempt:1});
-            current.items.push(input.mode==='dictation'?minimumCloze(raw,fact,`cloze-${fact.factId}`,1):minimumExercise(raw,fact,`exercise-${fact.factId}`,1));
-          }catch(error){if(!(error instanceof Error)||error.message!=='workflow_invalid_output')throw error;current.skipped.push({sourceNumbers:fact.sourceNumbers,reason:'item_validation_failed'});}
+            const count=itemRetryEnabled(input)?consumed(input.mode==='dictation'?'cloze':'exercise'):1;
+            current.items.push(input.mode==='dictation'?minimumCloze(raw,fact,`cloze-${fact.factId}`,count):minimumExercise(raw,fact,`exercise-${fact.factId}`,count));return;
+          }catch(error){if(!(error instanceof Error)||error.message!=='workflow_invalid_output')throw error;
+            if(itemRetryEnabled(input)){if(consumed(input.mode==='dictation'?'cloze':'exercise')<ITEM_ATTEMPT_LIMIT)continue;exhausted();}
+            else current.skipped.push({sourceNumbers:fact.sourceNumbers,reason:'item_validation_failed'});
+            return;
+          }
           return;
         }
         const item = input.mode === 'dictation'
@@ -363,6 +377,9 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
             solving: () => next('solving'), validating: () => next('validatingExercise') },report);
         if (item) current.items.push(item);
         if (!item || item.status !== 'passed') current.skipped.push({ sourceNumbers: fact.sourceNumbers, reason: 'item_validation_failed' });
+        }catch(error){const last=current.calls.slice(0,replayCursor??current.calls.length).at(-1);
+          const failedGeneration=retryableItemOutput(error)&&last?.scopeId===fact.factId&&itemStage(last.stage)&&consumed(last.stage)>=ITEM_ATTEMPT_LIMIT;
+          if(itemRetryEnabled(input)&&(failedGeneration||error instanceof Error&&error.message==='workflow_item_attempts_exhausted')){exhausted();return;}throw error;}
       });
     }
     if (current.state === 'generatingExercises') { await next('solving'); await next('validatingExercise'); }

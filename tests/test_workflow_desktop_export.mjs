@@ -15,15 +15,19 @@ function native(config){return new Promise((resolve,reject)=>{
  child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>err+=b);child.on('error',reject);
  child.on('close',code=>{try{assert.equal(code,0,err);resolve(JSON.parse(out));}catch(e){reject(e);}});child.stdin.end(JSON.stringify(config)+'\n');
 });}
-async function saved(mode='dictation',{mock=false,minimum=false}={}){
+async function saved(mode='dictation',{mock=false,minimum=false,invalidGeneration=false}={}){
  const s=await setupWorkflow({mode});
  if(minimum)s.input=await freezeInput({ownerId:s.input.ownerId,workspace:s.input.workspace,mode,validationLevel:'minimum'});
+ if(invalidGeneration){const base=s.model.call.bind(s.model);s.model.call=async(r,signal)=>{
+  if(r.stage==='extract')return {value:{facts:['甲','乙'].map(label=>({knowledgePoint:`合成知识${r.data.original.sourceNumbers[0]}${label}`,completeStatement:`合成知识${r.data.original.sourceNumbers[0]}${label}的约定术语是标记${label}。`,candidateAnswers:[`标记${label}`],conditions:[]}))},usage:{totalTokens:20}};
+  if(r.stage==='exercise'&&r.data.contentId==='unit-2-fact-1')throw new Error('invalid_model_output');return base(r,signal);
+ };}
  // Metadata is deliberately real to exercise the production gate with synthetic
  // callbacks only. This is an integration contract test, never content acceptance.
  if(!mock)s.model.executionMode='real';
  const runId=randomUUID(),database=join(root,runId+'.sqlite'),transport=sqliteProbeTransport(database),store=new SqliteWorkflowStore(transport.invoke,s.input.ownerId);
  let run;try{run=await runWorkflow({input:s.input,ports:{...s.ports,store,...(!mock?{authorize:async()=>{},release:async()=>{}}:{})},runId});}finally{await transport.close();}assert.equal(run.state,'contentReady');
- return {database,runId,owner:s.input.ownerId,calls:s.model.calls.length};
+ return {database,runId,owner:s.input.ownerId,calls:run.calls.length};
 }
 for(const mode of ['dictation','exercise'])test(`native packaged export ${mode}: all students + separate teacher, layout changes and reopen without generation`,async()=>{
  const s=await saved(mode),request={type:'start',ownerId:s.owner,runId:s.runId,compiler,outputDir:join(root,s.runId),layout:'individual',includeAnswers:true};
@@ -33,6 +37,12 @@ for(const mode of ['dictation','exercise'])test(`native packaged export ${mode}:
  const repeated=await native({database:s.database,runtime,request:{type:'start',ownerId:s.owner,runId:s.runId,compiler,exportId:first.value.exportId}});assert.equal(repeated.error,undefined,JSON.stringify(repeated));assert.equal(repeated.value.folder,first.value.folder);
  const transport=sqliteProbeTransport(s.database),store=new SqliteWorkflowStore(transport.invoke,s.owner);
  try{const task=await store.task(s.runId);assert.equal(task.run.calls.length,s.calls);assert.equal((await store.listExports(s.runId)).length,2);}finally{await transport.close();}
+});
+test('native PDF export after three bad replies preserves unknown usage, delivers other drafts, and never restarts exhausted items',async()=>{
+ const s=await saved('exercise',{minimum:true,invalidGeneration:true}),result=await native({database:s.database,runtime,request:{type:'start',ownerId:s.owner,runId:s.runId,compiler,outputDir:join(root,s.runId),layout:'individual',includeAnswers:true}});
+ assert.equal(result.error,undefined,JSON.stringify(result));assert.equal(result.value.fileCount,4);assert.equal(result.value.settlementStatus,'not_requested');
+ const transport=sqliteProbeTransport(s.database),store=new SqliteWorkflowStore(transport.invoke,s.owner);
+ try{const task=await store.task(s.runId);assert.equal(task.run.calls.length,s.calls);const failed=task.run.calls.filter(c=>c.scopeId==='unit-2-fact-1');assert.equal(failed.length,3);assert(failed.every(c=>c.status==='unknown'&&c.usage===null));assert(task.run.items.length);assert(task.run.skipped.some(s=>s.reason==='item_generation_exhausted'));}finally{await transport.close();}
 });
 test('native export refuses synthetic workflow metadata before PDF delivery',async()=>{
  const s=await saved('dictation',{mock:true}),result=await native({database:s.database,runtime,request:{type:'start',ownerId:s.owner,runId:s.runId,compiler,outputDir:join(root,s.runId),layout:'individual',includeAnswers:true}});

@@ -18,3 +18,5 @@ mod pdf_export;
 mod workflow_storage;
 #[path = "../../../app/apps/desktop/src-tauri/src/workflow_export_process.rs"]
 mod workflow_export_process;
+#[path = "../../../app/apps/desktop/src-tauri/src/workflow_diagnostic_schema.rs"]
+mod workflow_diagnostic_schema;

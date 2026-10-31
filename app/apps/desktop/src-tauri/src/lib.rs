@@ -19,6 +19,7 @@ mod workflow_model;
 mod workflow_cloud;
 mod asset_checks;
 mod workflow_diagnostics;
+mod workflow_diagnostic_schema;
 mod workflow_storage;
 mod workflow_storage_commands;
 mod workflow_export;

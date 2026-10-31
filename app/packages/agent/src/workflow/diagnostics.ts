@@ -21,7 +21,7 @@ export const validationMessages:Record<ValidationReason,string>={
 };
 export const failureMessages:Record<string,string>={recognition_ambiguous:'卷面多次识别仍有歧义',recognition_missing:'所选页中未找到完整题干',
   no_targets_no_model_calls:'本次没有纳入的失分目标，未调用模型',text_evidence_insufficient:'仅凭题干和选项文字无法提炼可核验知识点，已跳过图示依赖内容',fact_extraction_failed:'知识句提炼未通过结构检查',fact_check_failed:'知识句事实或适用范围未通过核验',
-  item_validation_failed:'该知识点的候选内容未通过检查',duplicate_item:'与已通过的内容重复'};
+  item_validation_failed:'该知识点的候选内容未通过检查',item_generation_exhausted:'该考点生成已发起3次仍失败，已跳过并继续其他题',duplicate_item:'与已通过的内容重复'};
 export function workflowAudit(run:WorkflowRun){
   return {schemaVersion:1,runId:run.runId,mode:run.mode,state:run.state,startedAt:run.startedAt,
     callCount:run.calls.length,knownTokens:run.calls.reduce((n,c)=>n+(c.usage??0),0),unknownCalls:run.calls.filter(c=>c.usage===null).length,

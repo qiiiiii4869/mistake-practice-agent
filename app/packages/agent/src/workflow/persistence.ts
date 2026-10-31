@@ -8,6 +8,7 @@ import {templateClassTeachingReport,validateClassTeachingReport} from './teachin
 import {createWorkflowActor,actorState} from './machine.ts';
 import {sameStatistics} from './statisticsIntegrity.ts';
 import {MAX_WORKFLOW_CALLS} from './budget.ts';
+import {ITEM_ATTEMPT_LIMIT,itemRetryEnabled,itemStage} from './itemRetries.ts';
 import {minimumFacts,minimumCloze,minimumExercise,usableFact,validateMinimumReport} from './minimumChecks.ts';
 import type {WorkflowStore,WorkflowRun,FrozenInput,ModelResponse,AnalysisCache,WorkflowTaskContext,ExportProfile} from './types.ts';
 
@@ -41,6 +42,11 @@ export async function validateStoredTask(task:StoredTask,ownerId:string,runId:st
   }
   for(const refs of Object.values(r.unitEvidence))validateEvidence(refs);
   const factIds=new Set();for(const f of r.facts){if((minimum?minimumFacts:validateFacts)({facts:[f]}).length!==1)invalid();validateFactCheck(f.factCheck);validateEvidence(f.evidenceRefs);if(factIds.has(f.factId)||!usableFact(f,minimum)||minimum&&(f.reviewStatus!=='unchecked'||Object.values(f.factCheck).some(Boolean)))invalid();factIds.add(f.factId);}
+  if(itemRetryEnabled(task.input))for(const c of r.calls.filter(c=>itemStage(c.stage))){if(r.calls.filter(v=>v.stage===c.stage&&v.scopeId===c.scopeId).length>ITEM_ATTEMPT_LIMIT)invalid();}
+  for(const s of r.skipped.filter(s=>s.reason==='item_generation_exhausted')){
+    const call=r.calls.find(c=>c.callId===s.callId),fact=r.facts.find(f=>f.factId===call?.scopeId);
+    if(!itemRetryEnabled(task.input)||!call||!itemStage(call.stage)||!fact||!await same(s.sourceNumbers,fact.sourceNumbers)||r.calls.filter(c=>c.stage===call.stage&&c.scopeId===call.scopeId).length!==ITEM_ATTEMPT_LIMIT)invalid();
+  }
   const itemIds=new Set();for(const i of r.items){const f=r.facts.find(f=>f.factId===i.factId);if(!f||itemIds.has(i.itemId)||i.mode!==r.mode)invalid();itemIds.add(i.itemId);
     if(minimum){if(i.status!=='draft'||i.checks.independent||i.checks.scope)invalid();if(i.mode==='dictation')minimumCloze(i,f,i.itemId,i.attempts);else minimumExercise(i,f,i.itemId,i.attempts);}
     else {if(i.status==='draft')invalid();if(i.mode==='dictation')validateCloze(i,f,i.itemId,i.attempts);else validateExercise(i,f,r.units,i.itemId,i.attempts);}

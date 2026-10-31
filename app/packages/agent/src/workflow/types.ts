@@ -19,6 +19,7 @@ export interface FrozenInput {
   authoringVersion?:string;
   assignmentVersion?:'personal-coverage-v1';
   retrievalVersion?:'processed-library-v1';
+  itemFailurePolicy?:'retry-three-then-skip-v1';
   schemaVersion: 1; ownerId: string; workspace: Workspace; mode: GenerationMode;
   settings: ContentSettings; knowledgeRevision: string; workflowVersion: string; promptVersion: string; contentHash: string;
   testScope?: { questionNumbers: string[] };
@@ -135,7 +136,7 @@ export interface WorkflowRun {
   units: SourceUnit[]; facts: KnowledgeFact[]; items: ContentItem[];
   draftFacts: Record<string, FactCandidate[]>; unitEvidence: Record<string, EvidenceRef[]>;
   targets: StudentTargets[]; assignments: StudentAssignment[]; evidence: EvidenceSummary;
-  advice: TeachingAdvice[]; skipped: { sourceNumbers: string[]; reason: string }[];
+  advice: TeachingAdvice[]; skipped: { sourceNumbers: string[]; reason: string;callId?:string }[];
   teacherReport:ClassTeachingReport|null;
   checkpoints: string[]; errorCode?: string;errorStage?:WorkflowState;
   analysisBatches?:string[][];verificationBatches?:string[][];

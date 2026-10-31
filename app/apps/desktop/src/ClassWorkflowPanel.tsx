@@ -9,6 +9,7 @@ import {knowledgeVersion} from '../../../packages/knowledge/src/biology';
 import {failureMessages,validationMessages} from '../../../packages/agent/src/workflow/diagnostics';
 import {partitionValidationAttempts} from '../../../packages/agent/src/workflow/teachingAdvice';
 import {recheckSavedRecognition} from '../../../packages/agent/src/workflow/recognition';
+import {unresolvedCalls,knownItemOutputFailure} from '../../../packages/agent/src/workflow/itemRetries';
 import {paperExamMatch,assertPaperExamMatch} from '../../../packages/paper/src/examMatch';
 import {renderPaperFiles} from './renderPaperFiles';
 import {workflowMessage} from './CloudWorkflowPanel';
@@ -90,6 +91,7 @@ export function ClassWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
    <label><input aria-label="全班附答案页" type="checkbox" disabled={disabled} checked={answers} onChange={e=>setAnswers(e.target.checked)}/>附独立答案页</label>
   </div>
   <p className="help">数量是上限，错题少就少安排；教师报告始终单独导出。当前生成消耗模型额度，次数结算尚未启用。</p>
+  <p className="help">单个考点的听写或补练生成，回包无法读取或基本格式失败时最多发起3次（含首次），仍失败则跳过继续。每次调用都计入原上限，已完成内容保留。</p>
   <p className="help">个人推题先覆盖不同错题各一个考点，再补充同题考点。优先个人独有失分题，其次失分人数少的题；人数相同按本人失分比例，再按题号。只统计有效逐题成绩，数量上限或内容缺失造成的未覆盖会保留说明。</p>
   <label><input aria-label="宽松检查" type="checkbox" disabled={disabled} checked={minimum} onChange={e=>{setMinimum(e.target.checked);localStorage.setItem('workflow-minimum-checks',e.target.checked?'on':'off');}}/>宽松检查（临时）：跳过多次识题一致性、事实复核和独立作答，仅保留基本格式。导出为未经严格核验的草稿。</label>
   <div className="actions"><button disabled={disabled} onClick={()=>void generate()}>生成并导出 PDF</button><button className="secondary" disabled={!busy} onClick={()=>{controller.current?.abort();void invoke('workflow_pdf_cancel').catch(()=>{});}}>停止本次处理</button>
@@ -99,6 +101,7 @@ export function ClassWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
   {run&&<div aria-label="全班生成结果"><p>{task?.input.workspace.exam.name} · {task?.input.workspace.students.length} 人{task?.input.validationLevel==='minimum'?' · 宽松草稿（未经严格核验）':''}</p><p>状态：{({contentReady:'内容已就绪',partial:'部分完成',failed:'生成失败',cancelled:'已停止',recoverable:'待恢复'} as Record<string,string>)[run.state]??'处理中'}；{task?.input.validationLevel==='minimum'?'草稿':'有效'}条目 {run.items.filter(i=>i.status==='passed'||i.status==='draft').length} 个；未覆盖目标 {run.assignments.reduce((sum,a)=>sum+a.uncoveredTargets.length,0)} 个；未覆盖原题 {new Set(run.assignments.flatMap(a=>a.uncoveredNumbers)).size} 道。</p>
    {!!task?.input.testScope&&<p>此为单题测试结果，不能作为全班 PDF 导出。</p>}
    {run.items.length===0&&<p className="notice">本次没有生成有效练习。{run.facts.length===0?'知识点尚未建立，不能据此形成知识点讲评结论。':'候选内容未能通过检查。'}已保存的识题回包可先离线复核，无需立即重新调用模型。</p>}
+   {run.calls.some(c=>knownItemOutputFailure(task?.input,run,c))&&<p className="help">无可用回包的调用仍保留在账本中，未知用量仍保留预算预留。已完成或达到3次后跳过的考点不会重新累计次数。</p>}
    <p>教师报告：{run.teacherReport?run.facts.length===0?'仅有成绩统计兜底说明，尚无知识点讲评报告':'已生成，导出时独立保存':'尚未完成'}</p>
    {run.teacherReport&&<details><summary>查看已保存的教师报告</summary><section aria-label="已保存的教师报告">
     <p>{run.teacherReport.overview}</p>
@@ -117,7 +120,7 @@ export function ClassWorkflowPanel({workspace,revision,locked,onBusy}:{workspace
    {!!validationGroups.unresolved.length&&<details><summary>未通过项目的具体原因（{validationGroups.unresolved.length}条检查记录）</summary><ul>{validationGroups.unresolved.map((v,i)=><li key={i}>原第 {v.sourceNumbers.join('、')} 题 · {run.facts.find(f=>f.factId===v.factId)?.knowledgePoint??'知识点'} · 第 {v.attempt} 轮：{validationMessages[v.reason]??'此项未通过检查'}</li>)}</ul></details>}
    {!['contentReady','partial','failed'].includes(run.state)&&!task?.input.testScope&&<div>
     <label><input type="checkbox" aria-label="全班允许重试未知请求" checked={retryUnknown} onChange={e=>setRetryUnknown(e.target.checked)} disabled={disabled}/>允许重试未知请求（可能重复消耗模型额度）</label>
-    <button className="secondary" disabled={disabled||run.calls.some(c=>c.status!=='completed')&&!retryUnknown} onClick={()=>void generate(true)}>继续已保存任务</button>
+    <button className="secondary" disabled={disabled||unresolvedCalls(task?.input,run)&&!retryUnknown} onClick={()=>void generate(true)}>继续已保存任务</button>
    </div>}
   </div>}
   {delivery&&<p className="notice passed">保存位置：{delivery.folder}</p>}

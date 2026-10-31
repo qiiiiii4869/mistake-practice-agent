@@ -13,10 +13,11 @@ export function estimateBudget(mode: GenerationMode, pages: number, units: numbe
     maxRunMs: 45 * 60_000, requestTimeoutMs: 120_000, maxNetworkRetries: 8 };
 }
 export function reserveCall(policy: BudgetPolicy, calls: CallRecord[], stage: ModelStage, requestHash: string,
-  requestBytes: number, now: number, startedAt: number, attempt: number, scopeId = 'batch',imageCount=stage==='recognize'?1:0): CallRecord {
+  requestBytes: number, now: number, startedAt: number, attempt: number, scopeId = 'batch',imageCount=stage==='recognize'?1:0,repeatedStageLimit=stage==='recognize'?3:2): CallRecord {
+  if(!Number.isSafeInteger(repeatedStageLimit)||repeatedStageLimit<1||repeatedStageLimit>3)throw new Error('workflow_invalid_budget');
   if (now - startedAt >= policy.maxRunMs) throw new Error('workflow_deadline');
   if (calls.length >= policy.maxCalls || requestBytes > policy.maxInputBytes) throw new Error('workflow_budget_exceeded');
-  if (attempt === 1 && calls.filter(c => c.stage === stage && c.scopeId === scopeId && c.attempt === 1).length >= (stage==='recognize'?3:2))
+  if (attempt === 1 && calls.filter(c => c.stage === stage && c.scopeId === scopeId && c.attempt === 1).length >= repeatedStageLimit)
     throw new Error('workflow_stage_budget_exceeded');
   // UTF-8 bytes provide a conservative input reservation without a provider tokenizer.
   const reservedTokens = requestBytes + policy.maxOutputTokens + imageCount*32768;
