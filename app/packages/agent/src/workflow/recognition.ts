@@ -1,6 +1,7 @@
 import {analyze} from '../../../core/src/index.ts';
 import {invalid,list,object,sourceText,text} from './validators.ts';
 import type {FrozenInput,InvokeModel,RecognitionCheck,RecognitionReason,SourceUnit,WorkflowRun,ModelResponse} from './types.ts';
+import {recognizeMinimumSegments,segmentResponse} from './segmentation.ts';
 
 interface Question{number:string;stem:string;confidence:'high'|'low';warnings:string[]}
 interface Reading{questions:Question[];warnings:string[];valid:boolean;attempt:number}
@@ -85,6 +86,13 @@ function reason(readings:Reading[],number:string,keepFirst:string[]):Recognition
 export async function recognizeWorkflowUnits(input:FrozenInput,invoke:InvokeModel,keepFirst:string[]=[],report:(check:RecognitionCheck)=>void=()=>{}):Promise<SourceUnit[]>{
   const allNumbers=analyze(input.workspace).audit.questionNumbers,numbers=input.testScope?.questionNumbers??allNumbers;
   const records=new Map<string,{unit:SourceUnit;verified:boolean;conflict:boolean}>();
+  if(input.segmentationVersion){
+    if(input.validationLevel==='minimum')return recognizeMinimumSegments(input,numbers,invoke,absentTranscription);
+    // Preserve strict independent comparisons, but split each reading on its
+    // own printed headings before comparison. Legacy frozen calls stay intact.
+    const legacy={...input,segmentationVersion:undefined};
+    return recognizeWorkflowUnits(legacy,async(stage,data)=>segmentResponse(await invoke(stage,{...data,segmentation:input.segmentationVersion}),allNumbers),keepFirst,report);
+  }
   if(input.validationLevel==='minimum'){
     // TEMPORARILY DISABLED: two independent matching reads and confidence gates.
     for(const page of input.workspace.paper?.pages??[]){

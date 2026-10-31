@@ -77,6 +77,7 @@ async function execute(options: RunOptions & { runId: string }): Promise<Workflo
     paper: input.workspace.paper, numbers: [...new Set(input.workspace.students.flatMap(s => s.questions.map(q => q.number)))],
     scope: input.testScope,
     validationLevel:input.validationLevel,
+    segmentationVersion:input.segmentationVersion,
     recognitionPolicy:input.recognitionPolicy,
     knowledgeRevision: input.knowledgeRevision, modelConfiguration: ports.model.cacheKey, executionMode: ports.model.executionMode,
     workflowVersion: input.workflowVersion, promptVersion: input.promptVersion }) : null;

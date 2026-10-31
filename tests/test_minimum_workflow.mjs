@@ -26,7 +26,7 @@ for(const mode of ['dictation','exercise'])test(`original ${mode} workflow minim
 });
 test('single OCR read accepts low confidence without requiring independent agreement',async()=>{
  const input=await freezeInput({ownerId:'minimum',workspace:workflowWorkspace(),mode:'dictation',validationLevel:'minimum'});let calls=0;
- const units=await recognizeWorkflowUnits(input,async(stage,data)=>{assert.deepEqual(Object.keys(data),['pageId']);calls++;return {questions:[{number:1,paragraphs:['可读但未核验的题干'],confidence:'low',warnings:['不一致']},{number:'2',stem:'另一题正文'}]};});
+ const units=await recognizeWorkflowUnits(input,async(stage,data)=>{assert.deepEqual(Object.keys(data),['pageId','segmentation']);calls++;return {questions:[{number:1,paragraphs:['可读但未核验的题干'],confidence:'low',warnings:['不一致']},{number:'2',stem:'另一题正文'}]};});
  assert.equal(calls,1);assert.equal(units.length,2);assert(units.every(u=>u.availability==='usable'));
 });
 test('minimum content accepts optional fields and changed wording without marking it checked',()=>{

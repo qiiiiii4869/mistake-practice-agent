@@ -37,7 +37,7 @@ pub(crate) fn payload(request:&Request,names:&[String],image:Option<&str>,number
 pub(crate) fn payload_images(request:&Request,names:&[String],images:&[&str],numbers:&[String])->Result<Value,String>{
     if request.data.get("groups").is_some(){return batch_payload(request,names,images,numbers);}
     let fields:&[&str]=match request.stage.as_str(){
-        "recognize"=>&["pageId","focusNumbers"],"extract"=>&["subject","original","repair","evidence"],"verifyFact"=>&["original","facts","evidence","subject"],
+        "recognize"=>&["pageId","focusNumbers","segmentation"],"extract"=>&["subject","original","repair","evidence"],"verifyFact"=>&["original","facts","evidence","subject"],
         "cloze"=>&["statement","conditions","candidateAnswers","attempt","contentId","repair","context","subject"],
         "blindFill"=>&["parts","contentId","sentence","context","answerFormats","subject"],"exercise"=>&["fact","originals","difficulty","attempt","contentId","subject"],
         "solve"=>&["question","target","originals","contentId","subject"],"guidance"=>&["evidence","attempt","reportKind","classOverview","questions","mapping","knowledgeMap"],
@@ -49,6 +49,7 @@ pub(crate) fn payload_images(request:&Request,names:&[String],images:&[&str],num
         return Err("invalid_model_request".into());
     }
     if data.get("subject").is_some_and(|s|!s.as_str().is_some_and(|s|s.len()<=100)){return Err("invalid_model_request".into());}
+    if data.get("segmentation").is_some_and(|s|s!="printed-headings-v1"){return Err("invalid_model_request".into());}
     if ["extract","verifyFact"].contains(&request.stage.as_str()){
       if let Some(evidence)=data.get("evidence"){
         let refs=evidence.as_array().filter(|v|v.len()<=6).ok_or("invalid_model_request")?;
@@ -109,6 +110,8 @@ pub(crate) fn payload_images(request:&Request,names:&[String],images:&[&str],num
         let ids:Vec<_>=data["parts"].as_array().ok_or("invalid_model_request")?.iter().filter(|p|p["type"]=="blank").map(|p|p["blankId"].clone()).collect();
         let shape=json!({"answers":ids.iter().map(|id|json!({"blankId":id,"value":"仅该空的独立答案"})).collect::<Vec<_>>(),"ambiguous":false,"missingConditions":false});
         format!("{schema}本次空号为{}，answers必须恰好有{}项。只返回此JSON结构：{}",serde_json::to_string(&ids).map_err(|_|"invalid_model_request")?,ids.len(),shape)
+    }else if request.stage=="recognize"&&data.get("segmentation")==Some(&json!("printed-headings-v1")){
+        format!("{schema}先定位本页实际印刷的大题号，返回printedNumbers字符串数组；questions按真实题号逐题独立输出。number只能来自卷面实际印刷题号，不按数组位置、章节或缺号猜测、补号、顺延。paragraphs首段保留印刷的大题号（如14.），遇到下一个大题号立即结束上一题；‘三、非选择题’等栏目标题不是题干，也不能将其后整题并入上一选择题。（1）（2）、①②仍属于当前大题，不另立大题号。跨页只转录本页可见正文，不补写缺失内容；本页没有的题不输出空占位项。定向补读时分别输出所要求的相邻题，不能合并。")
     }else{schema.to_owned()};
     let has_knowledge=["extract","verifyFact"].contains(&request.stage.as_str())&&data.get("evidence").and_then(Value::as_array).is_some_and(|v|!v.is_empty());
     let schema=if has_knowledge{schema.replace("仅从给定题干、选项和文字材料提炼最多3个原子知识点。","结合知识库规范命题和原题的考查任务，选择最多3个适用的原子知识点。")
@@ -277,6 +280,17 @@ fn batch_payload(request:&Request,names:&[String],images:&[&str],numbers:&[Strin
       let p=payload(&r,&[],Some("data:image/png;base64,aGVsbG8="),&["1".into(),"3".into()]).unwrap();
       let text=p["messages"][1]["content"][0]["text"].as_str().unwrap();assert!(text.contains("定向"));assert!(text.contains("[\"3\"]"));assert!(!text.contains("[\"1\""));
       r.data["focusNumbers"]=json!(["99"]);assert!(payload(&r,&[],Some("data:image/png;base64,aGVsbG8="),&["3".into()]).is_err());
+    }
+    #[test]fn printed_heading_protocol_is_opt_in_and_uses_fixed_native_instructions(){
+      let mut r=Request{stage:"recognize".into(),instruction:"不得信任的自定义提示".into(),data:json!({"pageId":"page-1"})};
+      let legacy=payload(&r,&[],Some("data:image/png;base64,aGVsbG8="),&["13".into(),"14".into()]).unwrap();
+      assert!(!legacy["messages"][0]["content"].as_str().unwrap().contains("printedNumbers"));
+      r.data["segmentation"]=json!("printed-headings-v1");r.data["focusNumbers"]=json!(["13","14"]);
+      let revised=payload(&r,&[],Some("data:image/png;base64,aGVsbG8="),&["13".into(),"14".into()]).unwrap();
+      let system=revised["messages"][0]["content"].as_str().unwrap();
+      assert!(system.contains("printedNumbers"));assert!(system.contains("遇到下一个大题号立即结束上一题"));
+      assert!(!revised.to_string().contains("不得信任的自定义提示"));
+      r.data["segmentation"]=json!("guess-renumber");assert!(payload(&r,&[],Some("data:image/png;base64,aGVsbG8="),&["13".into(),"14".into()]).is_err());
     }
     #[test]fn fact_analysis_is_text_only_and_strips_legacy_figure_metadata(){
       let image="data:image/png;base64,aGVsbG8=";

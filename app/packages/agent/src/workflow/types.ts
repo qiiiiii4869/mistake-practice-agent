@@ -15,6 +15,7 @@ export interface ContentSettings {
 }
 export interface FrozenInput {
   validationLevel?:'minimum';
+  segmentationVersion?:'printed-headings-v1';
   schemaVersion: 1; ownerId: string; workspace: Workspace; mode: GenerationMode;
   settings: ContentSettings; knowledgeRevision: string; workflowVersion: string; promptVersion: string; contentHash: string;
   testScope?: { questionNumbers: string[] };
